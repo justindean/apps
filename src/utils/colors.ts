@@ -78,6 +78,14 @@ export const colorMap: Record<string, {
     badgeActive: 'bg-violet-600 text-white ring-violet-700 dark:bg-violet-500 dark:text-violet-950 dark:ring-violet-400',
     accent: 'bg-violet-600 text-white dark:bg-violet-500 dark:text-violet-950',
   },
+  lime: {
+    card: 'bg-lime-50 text-lime-950 dark:bg-lime-950/40 dark:text-lime-100',
+    ring: 'ring-lime-200 dark:ring-lime-800/50',
+    muted: 'text-lime-600 dark:text-lime-400',
+    badge: 'bg-lime-100 text-lime-700 ring-lime-200 dark:bg-lime-900/40 dark:text-lime-300 dark:ring-lime-700/50',
+    badgeActive: 'bg-lime-600 text-white ring-lime-700 dark:bg-lime-500 dark:text-lime-950 dark:ring-lime-400',
+    accent: 'bg-lime-600 text-white dark:bg-lime-500 dark:text-lime-950',
+  },
   slate: {
     card: 'bg-slate-50 text-slate-950 dark:bg-slate-800 dark:text-slate-100',
     ring: 'ring-slate-200 dark:ring-slate-700',
