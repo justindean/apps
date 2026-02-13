@@ -1,138 +1,624 @@
-export type ContextKey =
-  | 'bar'
-  | 'restaurant'
-  | 'cafe'
-  | 'taxiUber'
-  | 'shopping'
-  | 'pharmacy'
-  | 'smallTalk'
-
-export type Phrase = {
+export interface Phrase {
   spanish: string
-  hint?: string
+  english: string
+  pronunciation: string
+  isTemplate?: boolean
 }
 
-export type PhraseContext = {
-  key: ContextKey
+export interface SubContext {
+  key: string
   name: string
-  emoji: string
   phrases: Phrase[]
 }
 
-export const phraseContexts: PhraseContext[] = [
+export interface Category {
+  key: string
+  name: string
+  emoji: string
+  color: string
+  subContexts: SubContext[]
+}
+
+export type CategoryKey = Category["key"]
+export type SubContextKey = SubContext["key"]
+
+export const categories: Category[] = [
   {
-    key: 'bar',
-    name: 'Bar',
-    emoji: '🍻',
-    phrases: [
-      { spanish: 'Otra más, por favor.', hint: 'one more' },
-      { spanish: '¿Qué me recomiendas?', hint: 'what is good here' },
-      { spanish: '¿Me regalas una chela?', hint: 'a beer, please' },
-      { spanish: 'Sin hielo, por favor.', hint: 'no ice' },
-      { spanish: 'Buenísimo, gracias.', hint: 'awesome, thanks' },
-      { spanish: 'La cuenta, por favor.', hint: 'the check please' },
-      { spanish: '¿Puedo pagar con tarjeta?', hint: 'pay with card' },
-      { spanish: 'Disculpa', hint: 'excuse me' },
-      { spanish: 'Con permiso', hint: 'passing through' }
-    ]
-  },
-  {
-    key: 'restaurant',
-    name: 'Restaurant',
-    emoji: '🍽️',
-    phrases: [
-      { spanish: '¿Me recomiendas algo?', hint: 'your recommendation' },
-      { spanish: '¿Qué lleva este platillo?', hint: 'what is in this dish' },
-      { spanish: 'Sin picante, por favor.', hint: 'not spicy' },
-      { spanish: '¿Me traes agua natural?', hint: 'still water' },
-      { spanish: 'Está delicioso.', hint: 'it is delicious' },
-      { spanish: 'La cuenta, por favor.', hint: 'the check' },
-      { spanish: '¿Puedo pagar con tarjeta?', hint: 'pay with card' },
-      { spanish: 'Buenísimo, gracias.', hint: 'great, thanks' },
-      { spanish: 'Disculpa', hint: 'excuse me' }
-    ]
-  },
-  {
-    key: 'cafe',
-    name: 'Café',
-    emoji: '☕',
-    phrases: [
-      { spanish: 'Un latte chico, por favor.', hint: 'small latte' },
-      { spanish: '¿Tienes leche de avena?', hint: 'oat milk' },
-      { spanish: 'Para aquí, por favor.', hint: 'for here' },
-      { spanish: 'Para llevar, por favor.', hint: 'to go' },
-      { spanish: '¿Me recomiendas algo?', hint: 'what should I order' },
-      { spanish: 'Sin azúcar, por favor.', hint: 'no sugar' },
-      { spanish: '¿Puedo pagar con tarjeta?', hint: 'pay with card' },
-      { spanish: 'Buenísimo, gracias.', hint: 'great, thanks' },
-      { spanish: 'Con permiso', hint: 'excuse me passing' }
-    ]
-  },
-  {
-    key: 'taxiUber',
-    name: 'Taxi / Uber',
-    emoji: '🚕',
-    phrases: [
-      { spanish: 'Aquí está bien.', hint: 'stop here' },
-      { spanish: 'A la derecha.', hint: 'to the right' },
-      { spanish: 'A la izquierda.', hint: 'to the left' },
-      { spanish: '¿Cuánto es?', hint: 'how much is it' },
-      { spanish: '¿Me puede dejar aquí?', hint: 'drop me off here' },
-      { spanish: '¿Cuánto tiempo falta?', hint: 'how much longer' },
-      { spanish: 'Voy al centro, por favor.', hint: 'to downtown' },
-      { spanish: 'Gracias, buen día.', hint: 'thanks, have a good day' },
-      { spanish: 'Con permiso', hint: 'excuse me' }
-    ]
-  },
-  {
-    key: 'shopping',
-    name: 'Shopping',
-    emoji: '🛍️',
-    phrases: [
-      { spanish: '¿Cuánto cuesta?', hint: 'price' },
-      { spanish: '¿Tienes otra talla?', hint: 'another size' },
-      { spanish: 'Solo estoy viendo, gracias.', hint: 'just looking' },
-      { spanish: '¿Lo tienes en negro?', hint: 'in black' },
-      { spanish: '¿Puedo probármelo?', hint: 'can I try it on' },
-      { spanish: '¿Aceptan tarjeta?', hint: 'do you take card' },
-      { spanish: '¿Me haces descuento?', hint: 'discount?' },
-      { spanish: 'Me lo llevo.', hint: 'I will take it' },
-      { spanish: 'Buenísimo, gracias.', hint: 'awesome, thanks' }
-    ]
-  },
-  {
-    key: 'pharmacy',
-    name: 'Pharmacy',
-    emoji: '💊',
-    phrases: [
+    key: "bar",
+    name: "Bar",
+    emoji: "\uD83C\uDF7A",
+    color: "amber",
+    subContexts: [
       {
-        spanish: '¿Tienes algo para la diarrea o la congestión?',
-        hint: 'for diarrhea/congestion'
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "Una cerveza, por favor.", english: "A beer, please.", pronunciation: "OO-nah ser-VEH-sah, por fah-VOR" },
+          { spanish: "\u00BFQu\u00E9 cervezas tienen?", english: "What beers do you have?", pronunciation: "keh ser-VEH-sahs tee-EH-nen" },
+          { spanish: "\u00BFTienen algo sin alcohol?", english: "Do you have anything non-alcoholic?", pronunciation: "tee-EH-nen AHL-go seen ahl-koh-OL" },
+          { spanish: "Otra ronda, por favor.", english: "Another round, please.", pronunciation: "OH-trah ROHN-dah, por fah-VOR" },
+          { spanish: "\u00BFCu\u00E1nto cuesta?", english: "How much does it cost?", pronunciation: "KWAHN-toh KWEHS-tah" },
+          { spanish: "\u00BFD\u00F3nde est\u00E1 el ba\u00F1o?", english: "Where is the bathroom?", pronunciation: "DOHN-deh ehs-TAH el BAH-nyoh" },
+          { spanish: "\u00BFPuedo ver la carta de bebidas?", english: "Can I see the drinks menu?", pronunciation: "PWEH-doh vehr lah KAR-tah deh beh-BEE-dahs" },
+          { spanish: "\u00BFTienen m\u00FAsica en vivo?", english: "Do you have live music?", pronunciation: "tee-EH-nen MOO-see-kah en VEE-voh" },
+          { spanish: "Me gustar\u00EDa sentarme en la barra.", english: "I'd like to sit at the bar.", pronunciation: "meh goos-tah-REE-ah sen-TAR-meh en lah BAH-rah" },
+          { spanish: "\u00BFA qu\u00E9 hora cierran?", english: "What time do you close?", pronunciation: "ah keh OH-rah see-EH-rahn" },
+        ],
       },
-      { spanish: 'Sin receta, por favor.', hint: 'without prescription' },
-      { spanish: '¿Cada cuántas horas?', hint: 'how often' },
-      { spanish: '¿Cuánto cuesta?', hint: 'price' },
-      { spanish: '¿Esto da sueño?', hint: 'makes you sleepy?' },
-      { spanish: '¿Tienes algo para el dolor de cabeza?', hint: 'headache' },
-      { spanish: 'Solo necesito algo leve.', hint: 'something mild' },
-      { spanish: '¿Me explicas cómo tomarlo?', hint: 'how to take it' },
-      { spanish: 'Gracias, buen día.', hint: 'thanks, good day' }
-    ]
+      {
+        key: "ingredients",
+        name: "Ingredients",
+        phrases: [
+          { spanish: "\u00BFEste c\u00F3ctel lleva ___?", english: "Does this cocktail have ___?", pronunciation: "EHS-teh KOK-tel YEH-vah ___", isTemplate: true },
+          { spanish: "Soy al\u00E9rgico/a a ___.", english: "I'm allergic to ___.", pronunciation: "soy ah-LEHR-hee-koh/kah ah ___", isTemplate: true },
+          { spanish: "\u00BFTienen opciones veganas?", english: "Do you have vegan options?", pronunciation: "tee-EH-nen op-see-OH-nehs veh-GAH-nahs" },
+          { spanish: "Sin hielo, por favor.", english: "Without ice, please.", pronunciation: "seen YEH-loh, por fah-VOR" },
+          { spanish: "Con lim\u00F3n, por favor.", english: "With lemon, please.", pronunciation: "kohn lee-MOHN, por fah-VOR" },
+          { spanish: "\u00BFQu\u00E9 lleva este trago?", english: "What's in this drink?", pronunciation: "keh YEH-vah EHS-teh TRAH-goh" },
+          { spanish: "\u00BFTienen jugo de ___?", english: "Do you have ___ juice?", pronunciation: "tee-EH-nen HOO-goh deh ___", isTemplate: true },
+          { spanish: "Algo dulce, por favor.", english: "Something sweet, please.", pronunciation: "AHL-go DOOL-seh, por fah-VOR" },
+          { spanish: "Prefiero algo amargo.", english: "I prefer something bitter.", pronunciation: "preh-fee-EH-roh AHL-go ah-MAR-goh" },
+          { spanish: "\u00BFEs muy fuerte?", english: "Is it very strong?", pronunciation: "ehs mooy FWEHR-teh" },
+        ],
+      },
+      {
+        key: "ordering",
+        name: "Ordering",
+        phrases: [
+          { spanish: "Quisiera un/una ___.", english: "I'd like a ___.", pronunciation: "kee-see-EH-rah oon/OO-nah ___", isTemplate: true },
+          { spanish: "\u00BFCu\u00E1l es la especialidad de la casa?", english: "What's the house specialty?", pronunciation: "kwahl ehs lah ehs-peh-see-ah-lee-DAHD deh lah KAH-sah" },
+          { spanish: "Lo mismo otra vez.", english: "The same again.", pronunciation: "loh MEES-moh OH-trah vehs" },
+          { spanish: "Para m\u00ED y para \u00E9l/ella.", english: "For me and for him/her.", pronunciation: "PAH-rah mee ee PAH-rah ehl/EH-yah" },
+          { spanish: "\u00BFQu\u00E9 me recomienda?", english: "What do you recommend?", pronunciation: "keh meh reh-koh-mee-EHN-dah" },
+          { spanish: "Uno m\u00E1s peque\u00F1o, por favor.", english: "A smaller one, please.", pronunciation: "OO-noh mahs peh-KEH-nyoh, por fah-VOR" },
+          { spanish: "\u00BFPuedo probar ese?", english: "Can I try that one?", pronunciation: "PWEH-doh proh-BAR EH-seh" },
+          { spanish: "Solo agua, gracias.", english: "Just water, thanks.", pronunciation: "SOH-loh AH-gwah, GRAH-see-ahs" },
+        ],
+      },
+      {
+        key: "glassware",
+        name: "Glassware",
+        phrases: [
+          { spanish: "\u00BFMe puede dar un vaso limpio?", english: "Can you give me a clean glass?", pronunciation: "meh PWEH-deh dar oon VAH-soh LEEM-pee-oh" },
+          { spanish: "En copa, por favor.", english: "In a wine glass, please.", pronunciation: "en KOH-pah, por fah-VOR" },
+          { spanish: "\u00BFTienen vasos de chupito?", english: "Do you have shot glasses?", pronunciation: "tee-EH-nen VAH-sohs deh choo-PEE-toh" },
+          { spanish: "En jarra, por favor.", english: "In a pitcher, please.", pronunciation: "en HAH-rah, por fah-VOR" },
+          { spanish: "Necesito una pajita.", english: "I need a straw.", pronunciation: "neh-seh-SEE-toh OO-nah pah-HEE-tah" },
+          { spanish: "\u00BFMe trae un posavasos?", english: "Can you bring me a coaster?", pronunciation: "meh TRAH-eh oon poh-sah-VAH-sohs" },
+          { spanish: "En botella, por favor.", english: "In a bottle, please.", pronunciation: "en boh-TEH-yah, por fah-VOR" },
+          { spanish: "De barril, por favor.", english: "On draft, please.", pronunciation: "deh bah-REEL, por fah-VOR" },
+        ],
+      },
+      {
+        key: "payment",
+        name: "Payment",
+        phrases: [
+          { spanish: "La cuenta, por favor.", english: "The check, please.", pronunciation: "lah KWEHN-tah, por fah-VOR" },
+          { spanish: "\u00BFAceptan tarjeta?", english: "Do you accept cards?", pronunciation: "ah-SEHP-tahn tar-HEH-tah" },
+          { spanish: "Quiero pagar en efectivo.", english: "I want to pay in cash.", pronunciation: "kee-EH-roh pah-GAR en eh-fehk-TEE-voh" },
+          { spanish: "\u00BFPuedo pagar con el tel\u00E9fono?", english: "Can I pay with my phone?", pronunciation: "PWEH-doh pah-GAR kohn el teh-LEH-foh-noh" },
+          { spanish: "Cuentas separadas, por favor.", english: "Separate checks, please.", pronunciation: "KWEHN-tahs seh-pah-RAH-dahs, por fah-VOR" },
+          { spanish: "Qu\u00E9dese con el cambio.", english: "Keep the change.", pronunciation: "KEH-deh-seh kohn el KAHM-bee-oh" },
+          { spanish: "\u00BFEst\u00E1 incluida la propina?", english: "Is the tip included?", pronunciation: "ehs-TAH een-kloo-EE-dah lah proh-PEE-nah" },
+          { spanish: "Hay un error en la cuenta.", english: "There's an error on the bill.", pronunciation: "eye oon eh-ROHR en lah KWEHN-tah" },
+        ],
+      },
+      {
+        key: "conversation",
+        name: "Casual Chat",
+        phrases: [
+          { spanish: "\u00A1Salud!", english: "Cheers!", pronunciation: "sah-LOOD" },
+          { spanish: "\u00BFVienes aqu\u00ED seguido?", english: "Do you come here often?", pronunciation: "vee-EH-nehs ah-KEE seh-GEE-doh" },
+          { spanish: "\u00BFDe d\u00F3nde eres?", english: "Where are you from?", pronunciation: "deh DOHN-deh EH-rehs" },
+          { spanish: "Estoy de vacaciones.", english: "I'm on vacation.", pronunciation: "ehs-TOY deh vah-kah-see-OH-nehs" },
+          { spanish: "Este lugar es genial.", english: "This place is great.", pronunciation: "EHS-teh loo-GAR ehs heh-nee-AHL" },
+          { spanish: "\u00BFQu\u00E9 est\u00E1s tomando?", english: "What are you drinking?", pronunciation: "keh ehs-TAHS toh-MAHN-doh" },
+          { spanish: "\u00BFQuieres tomar algo?", english: "Want to have a drink?", pronunciation: "kee-EH-rehs toh-MAR AHL-goh" },
+          { spanish: "\u00A1La pas\u00E9 muy bien!", english: "I had a great time!", pronunciation: "lah pah-SEH mooy bee-EHN" },
+        ],
+      },
+    ],
   },
   {
-    key: 'smallTalk',
-    name: 'Small Talk',
-    emoji: '💬',
-    phrases: [
-      { spanish: 'Mucho gusto.', hint: 'nice to meet you' },
-      { spanish: '¿De dónde eres?', hint: 'where are you from' },
-      { spanish: 'Somos de Los Ángeles.', hint: 'we are from LA' },
-      { spanish: 'Todo bien.', hint: 'all good' },
-      { spanish: '¿Qué me recomiendas hacer por aquí?', hint: 'what to do nearby' },
-      { spanish: 'Está padrísimo aquí.', hint: 'this place is awesome' },
-      { spanish: 'Disculpa, mi español es básico.', hint: 'my Spanish is basic' },
-      { spanish: 'Buenísimo, gracias.', hint: 'great, thanks' },
-      { spanish: 'Con permiso', hint: 'excuse me' }
-    ]
-  }
+    key: "restaurant",
+    name: "Restaurant",
+    emoji: "\uD83C\uDF7D\uFE0F",
+    color: "rose",
+    subContexts: [
+      {
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "Una mesa para ___, por favor.", english: "A table for ___, please.", pronunciation: "OO-nah MEH-sah PAH-rah ___, por fah-VOR", isTemplate: true },
+          { spanish: "\u00BFTienen mesa disponible?", english: "Do you have a table available?", pronunciation: "tee-EH-nen MEH-sah dees-poh-NEE-bleh" },
+          { spanish: "El men\u00FA, por favor.", english: "The menu, please.", pronunciation: "el meh-NOO, por fah-VOR" },
+          { spanish: "\u00BFCu\u00E1l es el plato del d\u00EDa?", english: "What's today's special?", pronunciation: "kwahl ehs el PLAH-toh del DEE-ah" },
+          { spanish: "Estamos listos para pedir.", english: "We're ready to order.", pronunciation: "ehs-TAH-mohs LEES-tohs PAH-rah peh-DEER" },
+          { spanish: "\u00BFTienen men\u00FA en ingl\u00E9s?", english: "Do you have a menu in English?", pronunciation: "tee-EH-nen meh-NOO en een-GLEHS" },
+          { spanish: "\u00BFCu\u00E1nto tardan los platos?", english: "How long will the food take?", pronunciation: "KWAHN-toh TAR-dahn lohs PLAH-tohs" },
+          { spanish: "\u00BFPuedo reservar una mesa?", english: "Can I reserve a table?", pronunciation: "PWEH-doh reh-ser-VAR OO-nah MEH-sah" },
+          { spanish: "Tengo una reservaci\u00F3n a nombre de ___.", english: "I have a reservation under ___.", pronunciation: "TEHN-goh OO-nah reh-ser-vah-see-OHN ah NOHM-breh deh ___", isTemplate: true },
+          { spanish: "\u00BFSe puede comer afuera?", english: "Can we eat outside?", pronunciation: "seh PWEH-deh koh-MEHR ah-FWEH-rah" },
+        ],
+      },
+      {
+        key: "allergies",
+        name: "Allergies",
+        phrases: [
+          { spanish: "Soy al\u00E9rgico/a a ___.", english: "I'm allergic to ___.", pronunciation: "soy ah-LEHR-hee-koh/kah ah ___", isTemplate: true },
+          { spanish: "\u00BFEste platillo tiene ___?", english: "Does this dish have ___?", pronunciation: "EHS-teh plah-TEE-yoh tee-EH-neh ___", isTemplate: true },
+          { spanish: "No puedo comer gluten.", english: "I can't eat gluten.", pronunciation: "noh PWEH-doh koh-MEHR GLOO-ten" },
+          { spanish: "Soy intolerante a la lactosa.", english: "I'm lactose intolerant.", pronunciation: "soy een-toh-leh-RAHN-teh ah lah lahk-TOH-sah" },
+          { spanish: "\u00BFTienen opciones sin nueces?", english: "Do you have nut-free options?", pronunciation: "tee-EH-nen op-see-OH-nehs seen NWEH-sehs" },
+          { spanish: "Soy vegetariano/a.", english: "I'm vegetarian.", pronunciation: "soy veh-heh-tah-ree-AH-noh/nah" },
+          { spanish: "Soy vegano/a.", english: "I'm vegan.", pronunciation: "soy veh-GAH-noh/nah" },
+          { spanish: "No como mariscos.", english: "I don't eat seafood.", pronunciation: "noh KOH-moh mah-REES-kohs" },
+          { spanish: "\u00BFPuede prepararlo sin ___?", english: "Can you prepare it without ___?", pronunciation: "PWEH-deh preh-pah-RAR-loh seen ___", isTemplate: true },
+          { spanish: "Es una alergia grave.", english: "It's a serious allergy.", pronunciation: "ehs OO-nah ah-LEHR-hee-ah GRAH-veh" },
+        ],
+      },
+      {
+        key: "cooking",
+        name: "Cooking Pref.",
+        phrases: [
+          { spanish: "Bien cocido, por favor.", english: "Well done, please.", pronunciation: "bee-EHN koh-SEE-doh, por fah-VOR" },
+          { spanish: "T\u00E9rmino medio.", english: "Medium.", pronunciation: "TEHR-mee-noh MEH-dee-oh" },
+          { spanish: "Poco cocido / Casi crudo.", english: "Rare.", pronunciation: "POH-koh koh-SEE-doh / KAH-see KROO-doh" },
+          { spanish: "Sin sal, por favor.", english: "Without salt, please.", pronunciation: "seen sahl, por fah-VOR" },
+          { spanish: "\u00BFEs muy picante?", english: "Is it very spicy?", pronunciation: "ehs mooy pee-KAHN-teh" },
+          { spanish: "No muy picante, por favor.", english: "Not too spicy, please.", pronunciation: "noh mooy pee-KAHN-teh, por fah-VOR" },
+          { spanish: "Quisiera ___ sin ___.", english: "I'd like ___ without ___.", pronunciation: "kee-see-EH-rah ___ seen ___", isTemplate: true },
+          { spanish: "\u00BFViene con guarnici\u00F3n?", english: "Does it come with a side?", pronunciation: "vee-EH-neh kohn gwar-nee-see-OHN" },
+        ],
+      },
+      {
+        key: "utensils",
+        name: "Utensils",
+        phrases: [
+          { spanish: "\u00BFMe puede traer ___?", english: "Can you bring me ___?", pronunciation: "meh PWEH-deh trah-EHR ___", isTemplate: true },
+          { spanish: "Necesito un tenedor.", english: "I need a fork.", pronunciation: "neh-seh-SEE-toh oon teh-neh-DOR" },
+          { spanish: "Necesito un cuchillo.", english: "I need a knife.", pronunciation: "neh-seh-SEE-toh oon koo-CHEE-yoh" },
+          { spanish: "Necesito una cuchara.", english: "I need a spoon.", pronunciation: "neh-seh-SEE-toh OO-nah koo-CHAH-rah" },
+          { spanish: "\u00BFMe trae m\u00E1s servilletas?", english: "Can you bring more napkins?", pronunciation: "meh TRAH-eh mahs ser-vee-YEH-tahs" },
+          { spanish: "\u00BFTienen palillos?", english: "Do you have chopsticks?", pronunciation: "tee-EH-nen pah-LEE-yohs" },
+          { spanish: "Necesito un plato limpio.", english: "I need a clean plate.", pronunciation: "neh-seh-SEE-toh oon PLAH-toh LEEM-pee-oh" },
+          { spanish: "\u00BFMe puede traer m\u00E1s pan?", english: "Can you bring more bread?", pronunciation: "meh PWEH-deh trah-EHR mahs pahn" },
+        ],
+      },
+      {
+        key: "payment",
+        name: "Payment",
+        phrases: [
+          { spanish: "La cuenta, por favor.", english: "The check, please.", pronunciation: "lah KWEHN-tah, por fah-VOR" },
+          { spanish: "\u00BFAceptan tarjeta?", english: "Do you accept cards?", pronunciation: "ah-SEHP-tahn tar-HEH-tah" },
+          { spanish: "Cuentas separadas, por favor.", english: "Separate checks, please.", pronunciation: "KWEHN-tahs seh-pah-RAH-dahs, por fah-VOR" },
+          { spanish: "\u00BFEst\u00E1 incluida la propina?", english: "Is the tip included?", pronunciation: "ehs-TAH een-kloo-EE-dah lah proh-PEE-nah" },
+          { spanish: "Quiero pagar en efectivo.", english: "I want to pay cash.", pronunciation: "kee-EH-roh pah-GAR en eh-fehk-TEE-voh" },
+          { spanish: "\u00BFPuedo pagar con el tel\u00E9fono?", english: "Can I pay with my phone?", pronunciation: "PWEH-doh pah-GAR kohn el teh-LEH-foh-noh" },
+          { spanish: "Hay un error en la cuenta.", english: "There's an error on the bill.", pronunciation: "eye oon eh-ROHR en lah KWEHN-tah" },
+          { spanish: "Qu\u00E9dese con el cambio.", english: "Keep the change.", pronunciation: "KEH-deh-seh kohn el KAHM-bee-oh" },
+        ],
+      },
+      {
+        key: "compliments",
+        name: "Compliments",
+        phrases: [
+          { spanish: "\u00A1Estuvo delicioso!", english: "It was delicious!", pronunciation: "ehs-TOO-voh deh-lee-see-OH-soh" },
+          { spanish: "Mis felicitaciones al chef.", english: "My compliments to the chef.", pronunciation: "mees feh-lee-see-tah-see-OH-nehs ahl chef" },
+          { spanish: "El servicio fue excelente.", english: "The service was excellent.", pronunciation: "el ser-VEE-see-oh fweh ehk-seh-LEHN-teh" },
+          { spanish: "Volveremos pronto.", english: "We'll be back soon.", pronunciation: "vol-veh-REH-mohs PROHN-toh" },
+          { spanish: "El mejor restaurante de la zona.", english: "The best restaurant in the area.", pronunciation: "el meh-HOR rehs-tow-RAHN-teh deh lah SOH-nah" },
+          { spanish: "La comida estuvo incre\u00EDble.", english: "The food was incredible.", pronunciation: "lah koh-MEE-dah ehs-TOO-voh een-kreh-EE-bleh" },
+          { spanish: "Muchas gracias por todo.", english: "Thank you for everything.", pronunciation: "MOO-chahs GRAH-see-ahs por TOH-doh" },
+          { spanish: "\u00BFPuedo dejar una rese\u00F1a?", english: "Can I leave a review?", pronunciation: "PWEH-doh deh-HAR OO-nah reh-SEH-nyah" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "taxi",
+    name: "Taxi",
+    emoji: "\uD83D\uDE95",
+    color: "sky",
+    subContexts: [
+      {
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "\u00BFEst\u00E1 libre?", english: "Are you available?", pronunciation: "ehs-TAH LEE-breh" },
+          { spanish: "Ll\u00E9veme a ___, por favor.", english: "Take me to ___, please.", pronunciation: "YEH-veh-meh ah ___, por fah-VOR", isTemplate: true },
+          { spanish: "\u00BFCu\u00E1nto cuesta ir a ___?", english: "How much to go to ___?", pronunciation: "KWAHN-toh KWEHS-tah eer ah ___", isTemplate: true },
+          { spanish: "Al aeropuerto, por favor.", english: "To the airport, please.", pronunciation: "ahl ah-eh-roh-PWEHR-toh, por fah-VOR" },
+          { spanish: "Al hotel ___, por favor.", english: "To the ___ hotel, please.", pronunciation: "ahl oh-TEL ___, por fah-VOR", isTemplate: true },
+          { spanish: "\u00BFPuede ir m\u00E1s r\u00E1pido?", english: "Can you go faster?", pronunciation: "PWEH-deh eer mahs RAH-pee-doh" },
+          { spanish: "Pare aqu\u00ED, por favor.", english: "Stop here, please.", pronunciation: "PAH-reh ah-KEE, por fah-VOR" },
+          { spanish: "\u00BFCu\u00E1nto tiempo tarda?", english: "How long will it take?", pronunciation: "KWAHN-toh tee-EHM-poh TAR-dah" },
+          { spanish: "\u00BFPuede encender el tax\u00EDmetro?", english: "Can you turn on the meter?", pronunciation: "PWEH-deh ehn-sehn-DEHR el tahk-SEE-meh-troh" },
+          { spanish: "Necesito un taxi.", english: "I need a taxi.", pronunciation: "neh-seh-SEE-toh oon TAHK-see" },
+        ],
+      },
+      {
+        key: "directions",
+        name: "Directions",
+        phrases: [
+          { spanish: "A la derecha, por favor.", english: "To the right, please.", pronunciation: "ah lah deh-REH-chah, por fah-VOR" },
+          { spanish: "A la izquierda, por favor.", english: "To the left, please.", pronunciation: "ah lah ees-kee-EHR-dah, por fah-VOR" },
+          { spanish: "Derecho / Recto.", english: "Straight ahead.", pronunciation: "deh-REH-choh / REHK-toh" },
+          { spanish: "En la siguiente esquina.", english: "At the next corner.", pronunciation: "en lah see-gee-EHN-teh ehs-KEE-nah" },
+          { spanish: "D\u00E9 la vuelta en U.", english: "Make a U-turn.", pronunciation: "deh lah VWEHL-tah en oo" },
+          { spanish: "Aqu\u00ED est\u00E1 bien.", english: "Here is fine.", pronunciation: "ah-KEE ehs-TAH bee-EHN" },
+          { spanish: "Un poco m\u00E1s adelante.", english: "A little further ahead.", pronunciation: "oon POH-koh mahs ah-deh-LAHN-teh" },
+          { spanish: "Justo despu\u00E9s del semáforo.", english: "Just after the traffic light.", pronunciation: "HOOS-toh dehs-PWEHS del seh-MAH-foh-roh" },
+        ],
+      },
+      {
+        key: "payment",
+        name: "Payment",
+        phrases: [
+          { spanish: "\u00BFCu\u00E1nto le debo?", english: "How much do I owe you?", pronunciation: "KWAHN-toh leh DEH-boh" },
+          { spanish: "\u00BFAceptan tarjeta?", english: "Do you accept cards?", pronunciation: "ah-SEHP-tahn tar-HEH-tah" },
+          { spanish: "Quiero pagar en efectivo.", english: "I want to pay cash.", pronunciation: "kee-EH-roh pah-GAR en eh-fehk-TEE-voh" },
+          { spanish: "Qu\u00E9dese con el cambio.", english: "Keep the change.", pronunciation: "KEH-deh-seh kohn el KAHM-bee-oh" },
+          { spanish: "\u00BFMe da un recibo?", english: "Can I get a receipt?", pronunciation: "meh dah oon reh-SEE-boh" },
+          { spanish: "No tengo cambio.", english: "I don't have change.", pronunciation: "noh TEHN-goh KAHM-bee-oh" },
+          { spanish: "\u00BFPuedo pagar con d\u00F3lares?", english: "Can I pay with dollars?", pronunciation: "PWEH-doh pah-GAR kohn DOH-lah-rehs" },
+          { spanish: "Me est\u00E1 cobrando de m\u00E1s.", english: "You're overcharging me.", pronunciation: "meh ehs-TAH koh-BRAHN-doh deh mahs" },
+        ],
+      },
+      {
+        key: "timing",
+        name: "Timing",
+        phrases: [
+          { spanish: "Tengo prisa.", english: "I'm in a hurry.", pronunciation: "TEHN-goh PREE-sah" },
+          { spanish: "\u00BFPuede esperarme?", english: "Can you wait for me?", pronunciation: "PWEH-deh ehs-peh-RAR-meh" },
+          { spanish: "Espere cinco minutos.", english: "Wait five minutes.", pronunciation: "ehs-PEH-reh SEEN-koh mee-NOO-tohs" },
+          { spanish: "\u00BFA qu\u00E9 hora llega el taxi?", english: "What time does the taxi arrive?", pronunciation: "ah keh OH-rah YEH-gah el TAHK-see" },
+          { spanish: "Vuelvo en diez minutos.", english: "I'll be back in ten minutes.", pronunciation: "VWEHL-voh en dee-EHS mee-NOO-tohs" },
+          { spanish: "\u00BFHay mucho tr\u00E1fico?", english: "Is there a lot of traffic?", pronunciation: "eye MOO-choh TRAH-fee-koh" },
+          { spanish: "\u00BFCu\u00E1l es la ruta m\u00E1s r\u00E1pida?", english: "What's the fastest route?", pronunciation: "kwahl ehs lah ROO-tah mahs RAH-pee-dah" },
+          { spanish: "No hay prisa.", english: "No rush.", pronunciation: "noh eye PREE-sah" },
+        ],
+      },
+      {
+        key: "location",
+        name: "Location",
+        phrases: [
+          { spanish: "\u00BFSabe d\u00F3nde queda ___?", english: "Do you know where ___ is?", pronunciation: "SAH-beh DOHN-deh KEH-dah ___", isTemplate: true },
+          { spanish: "La direcci\u00F3n es ___.", english: "The address is ___.", pronunciation: "lah dee-rehk-see-OHN ehs ___", isTemplate: true },
+          { spanish: "Est\u00E1 cerca de ___.", english: "It's near ___.", pronunciation: "ehs-TAH SEHR-kah deh ___", isTemplate: true },
+          { spanish: "No s\u00E9 la direcci\u00F3n exacta.", english: "I don't know the exact address.", pronunciation: "noh seh lah dee-rehk-see-OHN ehk-SAHK-tah" },
+          { spanish: "Le muestro en el mapa.", english: "I'll show you on the map.", pronunciation: "leh MWEHS-troh en el MAH-pah" },
+          { spanish: "\u00BFEstamos cerca?", english: "Are we close?", pronunciation: "ehs-TAH-mohs SEHR-kah" },
+          { spanish: "\u00BFConoce esta zona?", english: "Do you know this area?", pronunciation: "koh-NOH-seh EHS-tah SOH-nah" },
+          { spanish: "Ll\u00E9veme al centro.", english: "Take me downtown.", pronunciation: "YEH-veh-meh ahl SEHN-troh" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "coffee",
+    name: "Coffee",
+    emoji: "\u2615",
+    color: "orange",
+    subContexts: [
+      {
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "Un caf\u00E9, por favor.", english: "A coffee, please.", pronunciation: "oon kah-FEH, por fah-VOR" },
+          { spanish: "Un caf\u00E9 con leche.", english: "A coffee with milk.", pronunciation: "oon kah-FEH kohn LEH-cheh" },
+          { spanish: "Un caf\u00E9 solo / negro.", english: "A black coffee.", pronunciation: "oon kah-FEH SOH-loh / NEH-groh" },
+          { spanish: "\u00BFTienen wifi?", english: "Do you have wifi?", pronunciation: "tee-EH-nen WAI-fai" },
+          { spanish: "\u00BFCu\u00E1l es la contrase\u00F1a del wifi?", english: "What's the wifi password?", pronunciation: "kwahl ehs lah kohn-trah-SEH-nyah del WAI-fai" },
+          { spanish: "Para llevar, por favor.", english: "To go, please.", pronunciation: "PAH-rah yeh-VAR, por fah-VOR" },
+          { spanish: "Para tomar aqu\u00ED.", english: "To have here.", pronunciation: "PAH-rah toh-MAR ah-KEE" },
+          { spanish: "\u00BFTienen enchufes?", english: "Do you have outlets?", pronunciation: "tee-EH-nen ehn-CHOO-fehs" },
+          { spanish: "Un t\u00E9, por favor.", english: "A tea, please.", pronunciation: "oon teh, por fah-VOR" },
+          { spanish: "\u00BFTienen leche de almendras?", english: "Do you have almond milk?", pronunciation: "tee-EH-nen LEH-cheh deh ahl-MEHN-drahs" },
+        ],
+      },
+      {
+        key: "ordering",
+        name: "Ordering",
+        phrases: [
+          { spanish: "Un ___ grande, por favor.", english: "A large ___, please.", pronunciation: "oon ___ GRAHN-deh, por fah-VOR", isTemplate: true },
+          { spanish: "Descafeinado, por favor.", english: "Decaf, please.", pronunciation: "dehs-kah-feh-ee-NAH-doh, por fah-VOR" },
+          { spanish: "Con az\u00FAcar.", english: "With sugar.", pronunciation: "kohn ah-SOO-kar" },
+          { spanish: "Sin az\u00FAcar.", english: "Without sugar.", pronunciation: "seen ah-SOO-kar" },
+          { spanish: "Con leche de avena.", english: "With oat milk.", pronunciation: "kohn LEH-cheh deh ah-VEH-nah" },
+          { spanish: "\u00BFTienen algo de comer?", english: "Do you have anything to eat?", pronunciation: "tee-EH-nen AHL-goh deh koh-MEHR" },
+          { spanish: "Un cappuccino, por favor.", english: "A cappuccino, please.", pronunciation: "oon kah-poo-CHEE-noh, por fah-VOR" },
+          { spanish: "Caf\u00E9 helado, por favor.", english: "Iced coffee, please.", pronunciation: "kah-FEH eh-LAH-doh, por fah-VOR" },
+          { spanish: "\u00BFQu\u00E9 pasteles tienen?", english: "What pastries do you have?", pronunciation: "keh pahs-TEH-lehs tee-EH-nen" },
+          { spanish: "Doble de espresso.", english: "Double espresso.", pronunciation: "DOH-bleh deh ehs-PREH-soh" },
+        ],
+      },
+      {
+        key: "payment",
+        name: "Payment",
+        phrases: [
+          { spanish: "\u00BFCu\u00E1nto es?", english: "How much is it?", pronunciation: "KWAHN-toh ehs" },
+          { spanish: "\u00BFAceptan tarjeta?", english: "Do you accept cards?", pronunciation: "ah-SEHP-tahn tar-HEH-tah" },
+          { spanish: "\u00BFPuedo pagar con el tel\u00E9fono?", english: "Can I pay with my phone?", pronunciation: "PWEH-doh pah-GAR kohn el teh-LEH-foh-noh" },
+          { spanish: "Qu\u00E9dese con el cambio.", english: "Keep the change.", pronunciation: "KEH-deh-seh kohn el KAHM-bee-oh" },
+          { spanish: "La cuenta, por favor.", english: "The check, please.", pronunciation: "lah KWEHN-tah, por fah-VOR" },
+          { spanish: "Quiero pagar en efectivo.", english: "I want to pay cash.", pronunciation: "kee-EH-roh pah-GAR en eh-fehk-TEE-voh" },
+          { spanish: "\u00BFCu\u00E1nto cuesta el caf\u00E9?", english: "How much is the coffee?", pronunciation: "KWAHN-toh KWEHS-tah el kah-FEH" },
+          { spanish: "Todo junto, por favor.", english: "All together, please.", pronunciation: "TOH-doh HOON-toh, por fah-VOR" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "shopping",
+    name: "Shopping",
+    emoji: "\uD83D\uDECD\uFE0F",
+    color: "emerald",
+    subContexts: [
+      {
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "\u00BFCu\u00E1nto cuesta esto?", english: "How much does this cost?", pronunciation: "KWAHN-toh KWEHS-tah EHS-toh" },
+          { spanish: "Solo estoy mirando.", english: "I'm just looking.", pronunciation: "SOH-loh ehs-TOY mee-RAHN-doh" },
+          { spanish: "\u00BFTienen esto en otra talla?", english: "Do you have this in another size?", pronunciation: "tee-EH-nen EHS-toh en OH-trah TAH-yah" },
+          { spanish: "\u00BFD\u00F3nde est\u00E1n los probadores?", english: "Where are the fitting rooms?", pronunciation: "DOHN-deh ehs-TAHN lohs proh-bah-DOH-rehs" },
+          { spanish: "Me lo llevo.", english: "I'll take it.", pronunciation: "meh loh YEH-voh" },
+          { spanish: "\u00BFTienen descuento?", english: "Do you have a discount?", pronunciation: "tee-EH-nen dehs-KWEHN-toh" },
+          { spanish: "\u00BFPuedo probármelo?", english: "Can I try it on?", pronunciation: "PWEH-doh proh-BAR-meh-loh" },
+          { spanish: "\u00BFTienen esto en otro color?", english: "Do you have this in another color?", pronunciation: "tee-EH-nen EHS-toh en OH-troh koh-LOR" },
+          { spanish: "\u00BFA qu\u00E9 hora cierran?", english: "What time do you close?", pronunciation: "ah keh OH-rah see-EH-rahn" },
+          { spanish: "\u00BFD\u00F3nde est\u00E1 la secci\u00F3n de ___?", english: "Where is the ___ section?", pronunciation: "DOHN-deh ehs-TAH lah sehk-see-OHN deh ___", isTemplate: true },
+        ],
+      },
+      {
+        key: "bargaining",
+        name: "Bargaining",
+        phrases: [
+          { spanish: "\u00BFMe puede hacer un descuento?", english: "Can you give me a discount?", pronunciation: "meh PWEH-deh ah-SEHR oon dehs-KWEHN-toh" },
+          { spanish: "Es muy caro.", english: "It's too expensive.", pronunciation: "ehs mooy KAH-roh" },
+          { spanish: "\u00BFCu\u00E1l es su mejor precio?", english: "What's your best price?", pronunciation: "kwahl ehs soo meh-HOR PREH-see-oh" },
+          { spanish: "Si compro dos, \u00BFme hace precio?", english: "If I buy two, will you give a discount?", pronunciation: "see KOHM-proh dohs, meh AH-seh PREH-see-oh" },
+          { spanish: "Voy a pensarlo.", english: "I'll think about it.", pronunciation: "voy ah pehn-SAR-loh" },
+          { spanish: "Lo vi m\u00E1s barato en otra tienda.", english: "I saw it cheaper at another store.", pronunciation: "loh vee mahs bah-RAH-toh en OH-trah tee-EHN-dah" },
+          { spanish: "\u00BFTiene algo m\u00E1s econ\u00F3mico?", english: "Do you have something cheaper?", pronunciation: "tee-EH-neh AHL-goh mahs eh-koh-NOH-mee-koh" },
+          { spanish: "\u00BFEst\u00E1 en oferta?", english: "Is it on sale?", pronunciation: "ehs-TAH en oh-FEHR-tah" },
+        ],
+      },
+      {
+        key: "payment",
+        name: "Payment",
+        phrases: [
+          { spanish: "\u00BFAceptan tarjeta?", english: "Do you accept cards?", pronunciation: "ah-SEHP-tahn tar-HEH-tah" },
+          { spanish: "\u00BFPuedo pagar en d\u00F3lares?", english: "Can I pay in dollars?", pronunciation: "PWEH-doh pah-GAR en DOH-lah-rehs" },
+          { spanish: "\u00BFMe da un recibo?", english: "Can I get a receipt?", pronunciation: "meh dah oon reh-SEE-boh" },
+          { spanish: "\u00BFTienen devoluci\u00F3n?", english: "Do you have returns?", pronunciation: "tee-EH-nen deh-voh-loo-see-OHN" },
+          { spanish: "Quiero devolver esto.", english: "I want to return this.", pronunciation: "kee-EH-roh deh-vol-VEHR EHS-toh" },
+          { spanish: "\u00BFPuedo pagar en cuotas?", english: "Can I pay in installments?", pronunciation: "PWEH-doh pah-GAR en KWOH-tahs" },
+          { spanish: "\u00BFHacen env\u00EDos?", english: "Do you do shipping?", pronunciation: "AH-sehn ehn-VEE-ohs" },
+          { spanish: "\u00BFMe puede envolver para regalo?", english: "Can you gift wrap it?", pronunciation: "meh PWEH-deh ehn-vol-VEHR PAH-rah reh-GAH-loh" },
+        ],
+      },
+      {
+        key: "sizes",
+        name: "Sizes",
+        phrases: [
+          { spanish: "\u00BFTienen talla ___?", english: "Do you have size ___?", pronunciation: "tee-EH-nen TAH-yah ___", isTemplate: true },
+          { spanish: "Necesito una talla m\u00E1s grande.", english: "I need a bigger size.", pronunciation: "neh-seh-SEE-toh OO-nah TAH-yah mahs GRAHN-deh" },
+          { spanish: "Necesito una talla m\u00E1s chica.", english: "I need a smaller size.", pronunciation: "neh-seh-SEE-toh OO-nah TAH-yah mahs CHEE-kah" },
+          { spanish: "\u00BFEs talla \u00FAnica?", english: "Is it one size?", pronunciation: "ehs TAH-yah OO-nee-kah" },
+          { spanish: "Me queda grande.", english: "It's too big on me.", pronunciation: "meh KEH-dah GRAHN-deh" },
+          { spanish: "Me queda chico/a.", english: "It's too small on me.", pronunciation: "meh KEH-dah CHEE-koh/kah" },
+          { spanish: "Me queda perfecto.", english: "It fits perfectly.", pronunciation: "meh KEH-dah per-FEHK-toh" },
+          { spanish: "\u00BFQu\u00E9 talla es esto?", english: "What size is this?", pronunciation: "keh TAH-yah ehs EHS-toh" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "hotel",
+    name: "Hotel",
+    emoji: "\uD83C\uDFE8",
+    color: "indigo",
+    subContexts: [
+      {
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "Tengo una reservaci\u00F3n.", english: "I have a reservation.", pronunciation: "TEHN-goh OO-nah reh-ser-vah-see-OHN" },
+          { spanish: "\u00BFTienen habitaciones disponibles?", english: "Do you have rooms available?", pronunciation: "tee-EH-nen ah-bee-tah-see-OH-nehs dees-poh-NEE-blehs" },
+          { spanish: "\u00BFCu\u00E1nto cuesta la noche?", english: "How much per night?", pronunciation: "KWAHN-toh KWEHS-tah lah NOH-cheh" },
+          { spanish: "\u00BFA qu\u00E9 hora es el check-in?", english: "What time is check-in?", pronunciation: "ah keh OH-rah ehs el check-een" },
+          { spanish: "\u00BFA qu\u00E9 hora es el check-out?", english: "What time is check-out?", pronunciation: "ah keh OH-rah ehs el check-owt" },
+          { spanish: "\u00BFIncluye desayuno?", english: "Does it include breakfast?", pronunciation: "een-KLOO-yeh deh-sah-YOO-noh" },
+          { spanish: "\u00BFD\u00F3nde est\u00E1 el elevador?", english: "Where is the elevator?", pronunciation: "DOHN-deh ehs-TAH el eh-leh-vah-DOR" },
+          { spanish: "Quisiera una habitaci\u00F3n con vista.", english: "I'd like a room with a view.", pronunciation: "kee-see-EH-rah OO-nah ah-bee-tah-see-OHN kohn VEES-tah" },
+          { spanish: "\u00BFTienen habitaci\u00F3n doble?", english: "Do you have a double room?", pronunciation: "tee-EH-nen ah-bee-tah-see-OHN DOH-bleh" },
+          { spanish: "\u00BFD\u00F3nde est\u00E1 la piscina?", english: "Where is the pool?", pronunciation: "DOHN-deh ehs-TAH lah pee-SEE-nah" },
+        ],
+      },
+      {
+        key: "issues",
+        name: "Room Issues",
+        phrases: [
+          { spanish: "El aire acondicionado no funciona.", english: "The AC doesn't work.", pronunciation: "el AH-ee-reh ah-kohn-dee-see-oh-NAH-doh noh foon-see-OH-nah" },
+          { spanish: "No hay agua caliente.", english: "There's no hot water.", pronunciation: "noh eye AH-gwah kah-lee-EHN-teh" },
+          { spanish: "La llave no funciona.", english: "The key doesn't work.", pronunciation: "lah YAH-veh noh foon-see-OH-nah" },
+          { spanish: "Necesito toallas limpias.", english: "I need clean towels.", pronunciation: "neh-seh-SEE-toh toh-AH-yahs LEEM-pee-ahs" },
+          { spanish: "Hay mucho ruido.", english: "It's very noisy.", pronunciation: "eye MOO-choh roo-EE-doh" },
+          { spanish: "\u00BFPuedo cambiar de habitaci\u00F3n?", english: "Can I change rooms?", pronunciation: "PWEH-doh kahm-bee-AR deh ah-bee-tah-see-OHN" },
+          { spanish: "El wifi no funciona.", english: "The wifi doesn't work.", pronunciation: "el WAI-fai noh foon-see-OH-nah" },
+          { spanish: "Falta una almohada.", english: "A pillow is missing.", pronunciation: "FAHL-tah OO-nah ahl-moh-AH-dah" },
+        ],
+      },
+      {
+        key: "services",
+        name: "Services",
+        phrases: [
+          { spanish: "\u00BFTienen servicio a la habitaci\u00F3n?", english: "Do you have room service?", pronunciation: "tee-EH-nen ser-VEE-see-oh ah lah ah-bee-tah-see-OHN" },
+          { spanish: "\u00BFPuede llamarme un taxi?", english: "Can you call me a taxi?", pronunciation: "PWEH-deh yah-MAR-meh oon TAHK-see" },
+          { spanish: "\u00BFD\u00F3nde puedo dejar las maletas?", english: "Where can I leave my bags?", pronunciation: "DOHN-deh PWEH-doh deh-HAR lahs mah-LEH-tahs" },
+          { spanish: "\u00BFTienen servicio de lavander\u00EDa?", english: "Do you have laundry service?", pronunciation: "tee-EH-nen ser-VEE-see-oh deh lah-vahn-deh-REE-ah" },
+          { spanish: "\u00BFPuede despertarme a las ___?", english: "Can you wake me at ___?", pronunciation: "PWEH-deh dehs-per-TAR-meh ah lahs ___", isTemplate: true },
+          { spanish: "\u00BFTienen estacionamiento?", english: "Do you have parking?", pronunciation: "tee-EH-nen ehs-tah-see-oh-nah-mee-EHN-toh" },
+          { spanish: "\u00BFHay gimnasio?", english: "Is there a gym?", pronunciation: "eye heem-NAH-see-oh" },
+          { spanish: "\u00BFMe pueden guardar esto en la caja fuerte?", english: "Can you keep this in the safe?", pronunciation: "meh PWEH-dehn gwar-DAR EHS-toh en lah KAH-hah FWEHR-teh" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "emergency",
+    name: "Emergency",
+    emoji: "\uD83D\uDEA8",
+    color: "red",
+    subContexts: [
+      {
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "\u00A1Ayuda!", english: "Help!", pronunciation: "ah-YOO-dah" },
+          { spanish: "Llame a la polic\u00EDa.", english: "Call the police.", pronunciation: "YAH-meh ah lah poh-lee-SEE-ah" },
+          { spanish: "Necesito un m\u00E9dico.", english: "I need a doctor.", pronunciation: "neh-seh-SEE-toh oon MEH-dee-koh" },
+          { spanish: "Llame a una ambulancia.", english: "Call an ambulance.", pronunciation: "YAH-meh ah OO-nah ahm-boo-LAHN-see-ah" },
+          { spanish: "\u00BFD\u00F3nde est\u00E1 el hospital m\u00E1s cercano?", english: "Where is the nearest hospital?", pronunciation: "DOHN-deh ehs-TAH el ohs-pee-TAHL mahs ser-KAH-noh" },
+          { spanish: "Me robaron.", english: "I was robbed.", pronunciation: "meh roh-BAH-rohn" },
+          { spanish: "Perd\u00ED mi pasaporte.", english: "I lost my passport.", pronunciation: "per-DEE mee pah-sah-POR-teh" },
+          { spanish: "No hablo mucho espa\u00F1ol.", english: "I don't speak much Spanish.", pronunciation: "noh AH-bloh MOO-choh ehs-pah-NYOL" },
+          { spanish: "\u00BFHabla ingl\u00E9s?", english: "Do you speak English?", pronunciation: "AH-blah een-GLEHS" },
+          { spanish: "Es una emergencia.", english: "It's an emergency.", pronunciation: "ehs OO-nah eh-mer-HEHN-see-ah" },
+        ],
+      },
+      {
+        key: "medical",
+        name: "Medical",
+        phrases: [
+          { spanish: "Me siento mal.", english: "I feel sick.", pronunciation: "meh see-EHN-toh mahl" },
+          { spanish: "Me duele ___.", english: "My ___ hurts.", pronunciation: "meh DWEH-leh ___", isTemplate: true },
+          { spanish: "Soy al\u00E9rgico/a a ___.", english: "I'm allergic to ___.", pronunciation: "soy ah-LEHR-hee-koh/kah ah ___", isTemplate: true },
+          { spanish: "Necesito mi medicina.", english: "I need my medicine.", pronunciation: "neh-seh-SEE-toh mee meh-dee-SEE-nah" },
+          { spanish: "\u00BFD\u00F3nde hay una farmacia?", english: "Where is a pharmacy?", pronunciation: "DOHN-deh eye OO-nah far-MAH-see-ah" },
+          { spanish: "Tengo dolor de cabeza.", english: "I have a headache.", pronunciation: "TEHN-goh doh-LOR deh kah-BEH-sah" },
+          { spanish: "Tengo fiebre.", english: "I have a fever.", pronunciation: "TEHN-goh fee-EH-breh" },
+          { spanish: "Necesito ir al hospital.", english: "I need to go to the hospital.", pronunciation: "neh-seh-SEE-toh eer ahl ohs-pee-TAHL" },
+        ],
+      },
+      {
+        key: "safety",
+        name: "Safety",
+        phrases: [
+          { spanish: "No me siento seguro/a.", english: "I don't feel safe.", pronunciation: "noh meh see-EHN-toh seh-GOO-roh/rah" },
+          { spanish: "D\u00E9jeme en paz.", english: "Leave me alone.", pronunciation: "DEH-heh-meh en pahs" },
+          { spanish: "\u00BFD\u00F3nde est\u00E1 la embajada de ___?", english: "Where is the ___ embassy?", pronunciation: "DOHN-deh ehs-TAH lah ehm-bah-HAH-dah deh ___", isTemplate: true },
+          { spanish: "Necesito contactar a mi embajada.", english: "I need to contact my embassy.", pronunciation: "neh-seh-SEE-toh kohn-tahk-TAR ah mee ehm-bah-HAH-dah" },
+          { spanish: "Quiero hablar con un abogado.", english: "I want to speak with a lawyer.", pronunciation: "kee-EH-roh ah-BLAR kohn oon ah-boh-GAH-doh" },
+          { spanish: "\u00BFPuede ayudarme?", english: "Can you help me?", pronunciation: "PWEH-deh ah-yoo-DAR-meh" },
+          { spanish: "Necesito hacer una llamada.", english: "I need to make a phone call.", pronunciation: "neh-seh-SEE-toh ah-SEHR OO-nah yah-MAH-dah" },
+          { spanish: "Estoy perdido/a.", english: "I'm lost.", pronunciation: "ehs-TOY per-DEE-doh/dah" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "greetings",
+    name: "Greetings",
+    emoji: "\uD83D\uDC4B",
+    color: "teal",
+    subContexts: [
+      {
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "\u00A1Hola!", english: "Hello!", pronunciation: "OH-lah" },
+          { spanish: "\u00A1Buenos d\u00EDas!", english: "Good morning!", pronunciation: "BWEH-nohs DEE-ahs" },
+          { spanish: "\u00A1Buenas tardes!", english: "Good afternoon!", pronunciation: "BWEH-nahs TAR-dehs" },
+          { spanish: "\u00A1Buenas noches!", english: "Good evening/night!", pronunciation: "BWEH-nahs NOH-chehs" },
+          { spanish: "\u00BFC\u00F3mo est\u00E1s?", english: "How are you?", pronunciation: "KOH-moh ehs-TAHS" },
+          { spanish: "Muy bien, gracias.", english: "Very well, thanks.", pronunciation: "mooy bee-EHN, GRAH-see-ahs" },
+          { spanish: "Mucho gusto.", english: "Nice to meet you.", pronunciation: "MOO-choh GOOS-toh" },
+          { spanish: "Me llamo ___.", english: "My name is ___.", pronunciation: "meh YAH-moh ___", isTemplate: true },
+          { spanish: "\u00A1Adi\u00F3s!", english: "Goodbye!", pronunciation: "ah-dee-OHS" },
+          { spanish: "\u00A1Hasta luego!", english: "See you later!", pronunciation: "AHS-tah LWEH-goh" },
+        ],
+      },
+      {
+        key: "polite",
+        name: "Polite",
+        phrases: [
+          { spanish: "Por favor.", english: "Please.", pronunciation: "por fah-VOR" },
+          { spanish: "Gracias.", english: "Thank you.", pronunciation: "GRAH-see-ahs" },
+          { spanish: "Muchas gracias.", english: "Thank you very much.", pronunciation: "MOO-chahs GRAH-see-ahs" },
+          { spanish: "De nada.", english: "You're welcome.", pronunciation: "deh NAH-dah" },
+          { spanish: "Disculpe.", english: "Excuse me.", pronunciation: "dees-KOOL-peh" },
+          { spanish: "Lo siento.", english: "I'm sorry.", pronunciation: "loh see-EHN-toh" },
+          { spanish: "Con permiso.", english: "Excuse me (passing by).", pronunciation: "kohn per-MEE-soh" },
+          { spanish: "Perd\u00F3n.", english: "Pardon.", pronunciation: "per-DOHN" },
+        ],
+      },
+      {
+        key: "smalltalk",
+        name: "Small Talk",
+        phrases: [
+          { spanish: "\u00BFDe d\u00F3nde eres?", english: "Where are you from?", pronunciation: "deh DOHN-deh EH-rehs" },
+          { spanish: "Soy de ___.", english: "I'm from ___.", pronunciation: "soy deh ___", isTemplate: true },
+          { spanish: "\u00BFQu\u00E9 haces aqu\u00ED?", english: "What are you doing here?", pronunciation: "keh AH-sehs ah-KEE" },
+          { spanish: "Estoy de vacaciones.", english: "I'm on vacation.", pronunciation: "ehs-TOY deh vah-kah-see-OH-nehs" },
+          { spanish: "Me encanta este lugar.", english: "I love this place.", pronunciation: "meh ehn-KAHN-tah EHS-teh loo-GAR" },
+          { spanish: "\u00BFQu\u00E9 me recomiendas visitar?", english: "What do you recommend visiting?", pronunciation: "keh meh reh-koh-mee-EHN-dahs vee-see-TAR" },
+          { spanish: "\u00BFHace buen tiempo hoy?", english: "Is the weather nice today?", pronunciation: "AH-seh bwehn tee-EHM-poh oy" },
+          { spanish: "Estoy aprendiendo espa\u00F1ol.", english: "I'm learning Spanish.", pronunciation: "ehs-TOY ah-prehn-dee-EHN-doh ehs-pah-NYOL" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "transport",
+    name: "Transport",
+    emoji: "\uD83D\uDE8C",
+    color: "violet",
+    subContexts: [
+      {
+        key: "common",
+        name: "Common",
+        phrases: [
+          { spanish: "\u00BFD\u00F3nde est\u00E1 la parada de autob\u00FAs?", english: "Where is the bus stop?", pronunciation: "DOHN-deh ehs-TAH lah pah-RAH-dah deh ow-toh-BOOS" },
+          { spanish: "\u00BFD\u00F3nde est\u00E1 la estaci\u00F3n de metro?", english: "Where is the metro station?", pronunciation: "DOHN-deh ehs-TAH lah ehs-tah-see-OHN deh MEH-troh" },
+          { spanish: "\u00BFQu\u00E9 autob\u00FAs va a ___?", english: "Which bus goes to ___?", pronunciation: "keh ow-toh-BOOS vah ah ___", isTemplate: true },
+          { spanish: "Un boleto a ___, por favor.", english: "A ticket to ___, please.", pronunciation: "oon boh-LEH-toh ah ___, por fah-VOR", isTemplate: true },
+          { spanish: "\u00BFCu\u00E1nto cuesta el boleto?", english: "How much is the ticket?", pronunciation: "KWAHN-toh KWEHS-tah el boh-LEH-toh" },
+          { spanish: "\u00BFA qu\u00E9 hora sale el pr\u00F3ximo?", english: "What time does the next one leave?", pronunciation: "ah keh OH-rah SAH-leh el PROHK-see-moh" },
+          { spanish: "\u00BFEsta es la l\u00EDnea correcta?", english: "Is this the right line?", pronunciation: "EHS-tah ehs lah LEE-neh-ah koh-REHK-tah" },
+          { spanish: "\u00BFD\u00F3nde bajo para ___?", english: "Where do I get off for ___?", pronunciation: "DOHN-deh BAH-hoh PAH-rah ___", isTemplate: true },
+        ],
+      },
+      {
+        key: "tickets",
+        name: "Tickets",
+        phrases: [
+          { spanish: "Un boleto de ida.", english: "A one-way ticket.", pronunciation: "oon boh-LEH-toh deh EE-dah" },
+          { spanish: "Un boleto de ida y vuelta.", english: "A round-trip ticket.", pronunciation: "oon boh-LEH-toh deh EE-dah ee VWEHL-tah" },
+          { spanish: "\u00BFHay descuento para estudiantes?", english: "Is there a student discount?", pronunciation: "eye dehs-KWEHN-toh PAH-rah ehs-too-dee-AHN-tehs" },
+          { spanish: "\u00BFD\u00F3nde compro el boleto?", english: "Where do I buy the ticket?", pronunciation: "DOHN-deh KOHM-proh el boh-LEH-toh" },
+          { spanish: "\u00BFAceptan tarjeta?", english: "Do you accept cards?", pronunciation: "ah-SEHP-tahn tar-HEH-tah" },
+          { spanish: "Dos boletos, por favor.", english: "Two tickets, please.", pronunciation: "dohs boh-LEH-tohs, por fah-VOR" },
+          { spanish: "\u00BFTienen pase de d\u00EDa?", english: "Do you have a day pass?", pronunciation: "tee-EH-nen PAH-seh deh DEE-ah" },
+          { spanish: "\u00BFPuedo cancelar el boleto?", english: "Can I cancel the ticket?", pronunciation: "PWEH-doh kahn-seh-LAR el boh-LEH-toh" },
+        ],
+      },
+      {
+        key: "navigation",
+        name: "Navigation",
+        phrases: [
+          { spanish: "\u00BFC\u00F3mo llego a ___?", english: "How do I get to ___?", pronunciation: "KOH-moh YEH-goh ah ___", isTemplate: true },
+          { spanish: "\u00BFEst\u00E1 lejos?", english: "Is it far?", pronunciation: "ehs-TAH LEH-hohs" },
+          { spanish: "\u00BFSe puede ir caminando?", english: "Can you walk there?", pronunciation: "seh PWEH-deh eer kah-mee-NAHN-doh" },
+          { spanish: "Estoy perdido/a.", english: "I'm lost.", pronunciation: "ehs-TOY per-DEE-doh/dah" },
+          { spanish: "\u00BFD\u00F3nde estoy?", english: "Where am I?", pronunciation: "DOHN-deh ehs-TOY" },
+          { spanish: "Busco la calle ___.", english: "I'm looking for ___ street.", pronunciation: "BOOS-koh lah KAH-yeh ___", isTemplate: true },
+          { spanish: "\u00BFHay un mapa?", english: "Is there a map?", pronunciation: "eye oon MAH-pah" },
+          { spanish: "\u00BFPuede indicarme en el mapa?", english: "Can you show me on the map?", pronunciation: "PWEH-deh een-dee-KAR-meh en el MAH-pah" },
+        ],
+      },
+    ],
+  },
 ]
