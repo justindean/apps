@@ -30,7 +30,7 @@ export const phraseContexts: PhraseContext[] = [
       { spanish: '¿Me regalas una chela?', hint: 'a beer, please' },
       { spanish: 'Sin hielo, por favor.', hint: 'no ice' },
       { spanish: 'Buenísimo, gracias.', hint: 'awesome, thanks' },
-      { spanish: 'La cuenta, por favor.', hint: 'the check' },
+      { spanish: 'La cuenta, por favor.', hint: 'the check please' },
       { spanish: '¿Puedo pagar con tarjeta?', hint: 'pay with card' },
       { spanish: 'Disculpa', hint: 'excuse me' },
       { spanish: 'Con permiso', hint: 'passing through' }
