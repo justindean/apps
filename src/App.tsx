@@ -11,6 +11,7 @@ import {
 import { CategoryGrid } from "./components/CategoryGrid";
 import { SubContextBar } from "./components/SubContextBar";
 import { PhraseList } from "./components/PhraseList";
+import { FlowNavigator } from "./components/FlowNavigator";
 import SpeechModeToggle from "./components/SpeechModeToggle";
 import RescueModal from "./components/RescueModal";
 
@@ -48,10 +49,14 @@ function App() {
     setActiveIntent("order");
   };
 
-  // Get active phrases based on scenario + intent + mode
-  const activePhrases: Phrase[] = scenario
-    ? scenario.intents[activeIntent]?.[mode] ?? scenario.intents[activeIntent]?.neutral ?? []
-    : [];
+  // Does the active scenario use a conversation flow?
+  const hasFlow = scenario?.flowStages && scenario.flowStages.length > 0;
+
+  // Get active phrases based on scenario + intent + mode (only for non-flow scenarios)
+  const activePhrases: Phrase[] =
+    scenario && !hasFlow
+      ? scenario.intents[activeIntent]?.[mode] ?? scenario.intents[activeIntent]?.neutral ?? []
+      : [];
 
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-900 dark:bg-slate-925 dark:text-slate-100">
@@ -86,7 +91,7 @@ function App() {
           )}
 
           <div className="flex items-center gap-2">
-            <SpeechModeToggle current={mode} onChange={setMode} />
+            {!hasFlow && <SpeechModeToggle current={mode} onChange={setMode} />}
             <button
               onClick={() => setShowRescue(true)}
               className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 active:scale-95"
@@ -97,8 +102,8 @@ function App() {
           </div>
         </div>
 
-        {/* Intent tabs when a scenario is selected */}
-        {scenario && (
+        {/* Intent tabs when a scenario is selected (not for flow-based) */}
+        {scenario && !hasFlow && (
           <SubContextBar
             items={intentKeys.map((k) => ({ key: k, name: intentMeta[k].label }))}
             activeKey={activeIntent}
@@ -128,6 +133,12 @@ function App() {
               {scenarios.length} scenarios
             </footer>
           </>
+        ) : hasFlow && scenario.flowStages ? (
+          <FlowNavigator
+            stages={scenario.flowStages}
+            color={scenario.color}
+            onCopy={copyPhrase}
+          />
         ) : (
           <PhraseList
             phrases={activePhrases}
