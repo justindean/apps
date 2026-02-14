@@ -21,7 +21,7 @@ export function CategoryGrid({ categories, onSelect }: CategoryGridProps) {
           <button
             key={cat.key}
             onClick={() => onSelect(cat.key)}
-            className={`flex h-24 flex-col items-center justify-center rounded-2xl px-2 text-center font-semibold shadow-sm ring-1 transition active:scale-[0.97] ${colors.card} ${colors.ring}`}
+            className={`flex h-24 flex-col items-center justify-center rounded-2xl px-2 text-center font-semibold shadow-card ring-1 transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97] active:shadow-card-press ${colors.card} ${colors.ring}`}
           >
             <span className="mb-1 text-2xl" aria-hidden>
               {cat.emoji}

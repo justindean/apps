@@ -11,21 +11,27 @@ interface FlowNavigatorProps {
 
 type ViewMode = "fast" | "full";
 
+/* ── Brand accent ── */
+const ACCENT = "bg-brand";
+const ACCENT_DARK = "dark:bg-brand-light";
+const ACCENT_TEXT = "text-brand";
+const ACCENT_TEXT_DARK = "dark:text-brand-light";
+
 /* ── Section color identities ── */
-const sectionColors: Record<string, { bar: string; barDark: string; bg: string; bgDark: string }> = {
-  arrival: { bar: "bg-sky-400", barDark: "dark:bg-sky-500", bg: "bg-sky-50", bgDark: "dark:bg-sky-950/20" },
-  drinks:  { bar: "bg-amber-400", barDark: "dark:bg-amber-500", bg: "bg-amber-50", bgDark: "dark:bg-amber-950/20" },
-  food:    { bar: "bg-orange-300", barDark: "dark:bg-orange-400", bg: "bg-orange-50", bgDark: "dark:bg-orange-950/20" },
-  during:  { bar: "bg-rose-300", barDark: "dark:bg-rose-400", bg: "bg-rose-50", bgDark: "dark:bg-rose-950/20" },
-  bill:    { bar: "bg-emerald-400", barDark: "dark:bg-emerald-500", bg: "bg-emerald-50", bgDark: "dark:bg-emerald-950/20" },
-  exit:    { bar: "bg-stone-300", barDark: "dark:bg-stone-500", bg: "bg-stone-50", bgDark: "dark:bg-stone-800/40" },
+const sectionColors: Record<string, { bar: string; bg: string; bgDark: string }> = {
+  arrival: { bar: "bg-sky-400 dark:bg-sky-500",       bg: "bg-sky-50/70",     bgDark: "dark:bg-sky-950/15" },
+  drinks:  { bar: "bg-amber-400 dark:bg-amber-500",   bg: "bg-amber-50/70",   bgDark: "dark:bg-amber-950/15" },
+  food:    { bar: "bg-orange-300 dark:bg-orange-400",  bg: "bg-orange-50/70",  bgDark: "dark:bg-orange-950/15" },
+  during:  { bar: "bg-rose-300 dark:bg-rose-400",      bg: "bg-rose-50/70",    bgDark: "dark:bg-rose-950/15" },
+  bill:    { bar: "bg-emerald-400 dark:bg-emerald-500",bg: "bg-emerald-50/70", bgDark: "dark:bg-emerald-950/15" },
+  exit:    { bar: "bg-stone-300 dark:bg-stone-500",    bg: "bg-stone-100/60",  bgDark: "dark:bg-stone-800/30" },
 };
 
-const sectionColorForLabel: Record<string, { bar: string; barDark: string }> = {
-  Arrival: { bar: "bg-sky-400", barDark: "dark:bg-sky-500" },
-  Drinks:  { bar: "bg-amber-400", barDark: "dark:bg-amber-500" },
-  Food:    { bar: "bg-orange-300", barDark: "dark:bg-orange-400" },
-  Bill:    { bar: "bg-emerald-400", barDark: "dark:bg-emerald-500" },
+const sectionColorForLabel: Record<string, string> = {
+  Arrival: "bg-sky-400 dark:bg-sky-500",
+  Drinks:  "bg-amber-400 dark:bg-amber-500",
+  Food:    "bg-orange-300 dark:bg-orange-400",
+  Bill:    "bg-emerald-400 dark:bg-emerald-500",
 };
 
 function getSectionColor(key: string) {
@@ -104,7 +110,7 @@ function renderHighlightedSpanish(
     <>
       {parts.map((part, i) =>
         regex.test(part) ? (
-          <span key={i} className="rounded bg-[#D94F2A]/10 px-0.5 text-[#D94F2A] dark:bg-[#D94F2A]/20 dark:text-[#E8734F]">{part.toUpperCase()}</span>
+          <span key={i} className={`rounded px-0.5 bg-brand/10 ${ACCENT_TEXT} dark:bg-brand-light/15 ${ACCENT_TEXT_DARK}`}>{part.toUpperCase()}</span>
         ) : (
           <span key={i}>{part}</span>
         ),
@@ -119,17 +125,17 @@ function renderHighlightedSpanish(
 function RecentStrip({ phrases, onCopy }: { phrases: Phrase[]; onCopy: (t: string) => void }) {
   if (phrases.length === 0) return null;
   return (
-    <div className="mb-1">
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/70">Recent</p>
+    <div className="mb-1 animate-fade-in">
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">Recent</p>
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
         {phrases.map((p) => (
           <button
             key={p.spanish}
             onClick={() => { speakPhrase(p.spanish); onCopy(p.spanish); }}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#D94F2A]/20 bg-[#D94F2A]/5 px-3 py-1.5 transition active:scale-[0.96] dark:border-[#E8734F]/20 dark:bg-[#E8734F]/5"
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand/15 bg-brand/5 px-3 py-1.5 transition active:scale-[0.96] dark:border-brand-light/15 dark:bg-brand-light/5`}
           >
             <VolumeIcon size={10} />
-            <span className="text-[11px] font-semibold text-[#D94F2A] dark:text-[#E8734F]">{p.spanish}</span>
+            <span className={`text-[11px] font-semibold ${ACCENT_TEXT} ${ACCENT_TEXT_DARK}`}>{p.spanish}</span>
           </button>
         ))}
       </div>
@@ -138,23 +144,24 @@ function RecentStrip({ phrases, onCopy }: { phrases: Phrase[]; onCopy: (t: strin
 }
 
 /* ═══════════════════════════════════════════════════════
-   Speak Pill Button — hero action with glow
+   Speak Pill Button — hero action with glow pulse
    ═══════════════════════════════════════════════════════ */
 function SpeakPill({ onClick }: { onClick: () => void }) {
   return (
     <button
-      onClick={onClick}
-      className="relative mt-2 inline-flex items-center gap-1.5 self-start rounded-full bg-[#D94F2A] px-3.5 py-1.5 text-[11px] font-bold text-white shadow-md shadow-[#D94F2A]/25 transition active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className={`relative mt-2.5 inline-flex items-center gap-1.5 self-start rounded-full ${ACCENT} ${ACCENT_DARK} px-4 py-1.5 text-[11px] font-bold text-white shadow-md shadow-brand/20 transition-all duration-150 active:scale-95 active:shadow-card-press dark:shadow-brand-light/15`}
     >
-      <span className="absolute inset-0 animate-ping rounded-full bg-[#D94F2A]/20 dark:bg-[#E8734F]/20" style={{ animationDuration: "2.5s" }} />
+      {/* Glow halo */}
+      <span className={`absolute inset-0 animate-glow-pulse rounded-full ${ACCENT} ${ACCENT_DARK} opacity-40`} />
       <WaveformIcon size={13} />
-      Speak
+      <span className="relative">Speak</span>
     </button>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
-   Fast Mode Card — section color bar + premium polish
+   Fast Mode Card — premium layered material
    ═══════════════════════════════════════════════════════ */
 function FastCard({
   phrase,
@@ -168,15 +175,15 @@ function FastCard({
   onSpeak: (p: Phrase) => void;
 }) {
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05),0_6px_16px_rgba(0,0,0,0.04)] transition-all duration-150 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.97] active:shadow-sm dark:border-stone-700/60 dark:bg-stone-800/90 dark:shadow-none dark:hover:border-stone-600/80">
+    <div className="group relative flex flex-col overflow-hidden rounded-[18px] border border-stone-200/70 bg-warm-50 shadow-card card-highlight transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-0 active:shadow-card-press dark:border-stone-700/50 dark:bg-stone-800/80">
       {/* Color identity bar */}
-      <div className={`h-1 w-full ${barColor}`} />
+      <div className={`h-[3px] w-full ${barColor}`} />
 
       <button
         onClick={() => { speakPhrase(phrase.spanish); onSpeak(phrase); }}
         className="flex w-full flex-col items-start p-4 text-left"
       >
-        <p className="text-[17px] font-extrabold leading-tight tracking-[0.02em] text-stone-900 dark:text-stone-50">
+        <p className="text-[17px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
           {phrase.spanish}
         </p>
         <p className="mt-1.5 text-[13px] leading-snug text-stone-400 dark:text-stone-500">
@@ -189,7 +196,7 @@ function FastCard({
       </button>
 
       {/* Copy */}
-      <div className="flex items-center justify-end border-t border-stone-100 px-3 py-1.5 dark:border-stone-700/50">
+      <div className="flex items-center justify-end border-t border-stone-100/80 px-3 py-1.5 dark:border-stone-700/40">
         <button
           onClick={(e) => { e.stopPropagation(); onCopy(phrase.spanish); }}
           className="rounded-md px-2 py-0.5 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 active:scale-95 dark:text-stone-500 dark:hover:text-stone-300"
@@ -203,7 +210,7 @@ function FastCard({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Fast Mode View — sections with color identity
+   Fast Mode View
    ═══════════════════════════════════════════════════════ */
 function FastModeView({
   mode,
@@ -219,22 +226,22 @@ function FastModeView({
   const sections = fastModePhrasesBySection[mode];
 
   return (
-    <div className="flex flex-col gap-5 pb-28 pt-3">
+    <div className="flex flex-col gap-6 pb-28 pt-3">
       {/* Header microcopy */}
-      <div className="flex flex-col gap-0.5">
-        <h2 className="text-xl font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Restaurant</h2>
-        <p className="text-[13px] text-stone-400 dark:text-stone-500">Speak instantly. No typing.</p>
+      <div className="flex flex-col gap-1">
+        <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Restaurant</h2>
+        <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Speak instantly. No typing.</p>
       </div>
 
       {/* Recent strip */}
       <RecentStrip phrases={recentPhrases} onCopy={onCopy} />
 
       {/* Sections */}
-      {sections.map((section) => {
-        const sc = sectionColorForLabel[section.label] ?? { bar: "bg-stone-300", barDark: "dark:bg-stone-500" };
+      {sections.map((section, si) => {
+        const barColor = sectionColorForLabel[section.label] ?? "bg-stone-300 dark:bg-stone-500";
         return (
-          <div key={section.label}>
-            <h3 className="mb-2.5 text-[11px] font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+          <div key={section.label} className="animate-fade-in" style={{ animationDelay: `${si * 40}ms`, animationFillMode: "both" }}>
+            <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
               {section.label}
             </h3>
             <div className="grid grid-cols-2 gap-3">
@@ -243,7 +250,7 @@ function FastModeView({
                   key={phrase.spanish}
                   phrase={phrase}
                   onCopy={onCopy}
-                  barColor={`${sc.bar} ${sc.barDark}`}
+                  barColor={barColor}
                   onSpeak={onSpeak}
                 />
               ))}
@@ -256,7 +263,7 @@ function FastModeView({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Action Card — full-mode with section color bar
+   Action Card — full-mode with premium elevation
    ═══════════════════════════════════════════════════════ */
 function ActionCard({
   phrase,
@@ -282,15 +289,15 @@ function ActionCard({
   }
 
   return (
-    <div className="group relative flex w-full flex-col overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05),0_6px_16px_rgba(0,0,0,0.04)] transition-all duration-150 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.97] active:shadow-sm dark:border-stone-700/60 dark:bg-stone-800/90 dark:shadow-none dark:hover:border-stone-600/80">
+    <div className="group relative flex w-full flex-col overflow-hidden rounded-[18px] border border-stone-200/70 bg-warm-50 shadow-card card-highlight transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-0 active:shadow-card-press dark:border-stone-700/50 dark:bg-stone-800/80">
       {/* Color identity bar */}
-      <div className={`h-1 w-full ${barColor}`} />
+      <div className={`h-[3px] w-full ${barColor}`} />
 
       <button
         onClick={() => { speakPhrase(displaySpanish); onSpeak(phrase); }}
         className="flex w-full flex-col items-start p-3.5 text-left"
       >
-        <p className="text-[15px] font-extrabold leading-tight tracking-[0.02em] text-stone-900 dark:text-stone-50">
+        <p className="text-[15px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
           {phrase.variables && phrase.variables.length > 0
             ? renderHighlightedSpanish(displaySpanish, phrase.variables, selections)
             : displaySpanish}
@@ -308,7 +315,7 @@ function ActionCard({
       </button>
 
       {/* Copy row */}
-      <div className="flex items-center justify-end border-t border-stone-100 px-3 py-1.5 dark:border-stone-700/50">
+      <div className="flex items-center justify-end border-t border-stone-100/80 px-3 py-1.5 dark:border-stone-700/40">
         <button
           onClick={(e) => { e.stopPropagation(); onCopy(displaySpanish); }}
           className="rounded-md px-2 py-0.5 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 active:scale-95 dark:text-stone-500 dark:hover:text-stone-300"
@@ -319,7 +326,7 @@ function ActionCard({
       </div>
 
       {phrase.variables && phrase.variables.length > 0 && (
-        <div className="flex items-center gap-1.5 border-t border-stone-100 px-3.5 py-2 dark:border-stone-700/60">
+        <div className="flex items-center gap-1.5 border-t border-stone-100/80 px-3.5 py-2 dark:border-stone-700/40">
           {phrase.variables.map((v) => (
             <div key={v.label} className="flex items-center gap-1 overflow-x-auto">
               {v.options.map((opt) => {
@@ -328,9 +335,9 @@ function ActionCard({
                   <button
                     key={opt}
                     onClick={() => setSelections((prev) => ({ ...prev, [v.label]: opt }))}
-                    className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition ${
+                    className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-semibold transition ${
                       isActive
-                        ? "bg-[#D94F2A] text-white"
+                        ? `${ACCENT} ${ACCENT_DARK} text-white`
                         : "bg-stone-100 text-stone-500 active:bg-stone-200 dark:bg-stone-700 dark:text-stone-400"
                     }`}
                   >
@@ -357,16 +364,16 @@ function StuckSection({ questions }: { questions: StuckQuestion[] }) {
     <div className="mt-4">
       <button
         onClick={() => setOpen((p) => !p)}
-        className="flex w-full items-center justify-between rounded-xl bg-amber-50/80 px-3.5 py-2.5 text-left transition active:scale-[0.99] dark:bg-amber-900/20"
+        className="flex w-full items-center justify-between rounded-2xl bg-amber-50/60 px-3.5 py-2.5 text-left transition active:scale-[0.99] dark:bg-amber-900/15"
         aria-expanded={open}
       >
-        <span className="text-xs font-medium text-amber-700/70 dark:text-amber-400/70">
+        <span className="text-xs font-medium text-amber-700/60 dark:text-amber-400/60">
           If they ask...
         </span>
         <ChevronIcon open={open} />
       </button>
       {open && (
-        <div className="mt-2.5 flex flex-col gap-3.5">
+        <div className="mt-2.5 flex flex-col gap-3.5 animate-fade-in">
           {questions.map((q) => (
             <div key={q.question}>
               <p className="mb-1.5 text-xs text-stone-500 dark:text-stone-400">
@@ -378,7 +385,7 @@ function StuckSection({ questions }: { questions: StuckQuestion[] }) {
                   <button
                     key={r.spanish}
                     onClick={() => speakPhrase(r.spanish)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-white px-3 py-1.5 text-left shadow-sm transition active:scale-[0.96] dark:border-amber-700/50 dark:bg-stone-800"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/80 bg-warm-50 px-3 py-1.5 text-left shadow-sm transition active:scale-[0.96] dark:border-amber-700/40 dark:bg-stone-800"
                   >
                     <VolumeIcon size={11} />
                     <span className="text-xs font-semibold text-stone-800 dark:text-stone-200">{r.spanish}</span>
@@ -421,18 +428,18 @@ function StageSection({
     <section ref={sectionRef} className="scroll-mt-28">
       <button
         onClick={onToggle}
-        className={`group flex w-full items-center justify-between rounded-2xl px-4 py-3.5 text-left transition active:scale-[0.99] ${sc.bg} ${sc.bgDark}`}
+        className={`group flex w-full items-center justify-between rounded-2xl px-4 py-3.5 text-left transition-all duration-150 active:scale-[0.99] ${sc.bg} ${sc.bgDark}`}
         aria-expanded={open}
       >
         <div className="flex items-center gap-3">
-          <div className={`h-8 w-1 rounded-full ${sc.bar} ${sc.barDark}`} />
+          <div className={`h-8 w-1 rounded-full ${sc.bar}`} />
           <div className="flex flex-col">
-            <h2 className="text-base font-bold text-stone-900 dark:text-stone-100">{stage.name}</h2>
-            <p className="text-xs text-stone-500 dark:text-stone-400">{stage.subtitle}</p>
+            <h2 className="text-[15px] font-bold text-stone-900 dark:text-stone-100">{stage.name}</h2>
+            <p className="text-[11px] text-stone-500 dark:text-stone-400">{stage.subtitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-white/60 px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-stone-700/60 dark:text-stone-400">
+          <span className="rounded-full bg-white/50 px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-stone-700/50 dark:text-stone-400">
             {phrases.length}
           </span>
           <ChevronIcon open={open} />
@@ -440,14 +447,14 @@ function StageSection({
       </button>
 
       {open && (
-        <div className="mt-3 flex flex-col">
+        <div className="mt-3 flex flex-col animate-fade-in">
           <div className="grid grid-cols-2 gap-3">
             {phrases.map((phrase) => (
               <ActionCard
                 key={phrase.spanish}
                 phrase={phrase}
                 onCopy={onCopy}
-                barColor={`${sc.bar} ${sc.barDark}`}
+                barColor={sc.bar}
                 onSpeak={onSpeak}
               />
             ))}
@@ -469,7 +476,7 @@ function QuickHelp() {
         <button
           key={p.spanish}
           onClick={() => speakPhrase(p.spanish)}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 shadow-sm transition active:scale-[0.96] dark:border-stone-700 dark:bg-stone-800"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-200/70 bg-warm-50 px-3 py-1.5 shadow-sm transition active:scale-[0.96] dark:border-stone-700/50 dark:bg-stone-800"
         >
           <VolumeIcon size={11} />
           <span className="text-[11px] font-semibold text-stone-700 dark:text-stone-300">{p.spanish}</span>
@@ -505,7 +512,7 @@ function SectionNav({
   }, [activeKey]);
 
   return (
-    <div ref={scrollRef} className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-hide">
+    <div ref={scrollRef} className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-hide">
       {stages.map((s) => {
         const isActive = s.key === activeKey;
         const sc = getSectionColor(s.key);
@@ -514,10 +521,10 @@ function SectionNav({
             key={s.key}
             ref={isActive ? activeRef : undefined}
             onClick={() => onSelect(s.key)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-150 ${
               isActive
-                ? `${sc.bar} ${sc.barDark} text-white shadow-sm`
-                : "bg-stone-100 text-stone-500 active:bg-stone-200 dark:bg-stone-800 dark:text-stone-400"
+                ? `${sc.bar} text-white shadow-sm`
+                : "bg-stone-100/80 text-stone-500 active:bg-stone-200 dark:bg-stone-800/80 dark:text-stone-400"
             }`}
           >
             {s.name}
@@ -534,13 +541,13 @@ function SectionNav({
 function ModeToggle({ viewMode, onToggle }: { viewMode: ViewMode; onToggle: (m: ViewMode) => void }) {
   return (
     <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
-      <div className="flex items-center gap-1 rounded-2xl border border-white/30 bg-white/80 p-1.5 shadow-xl shadow-stone-900/15 backdrop-blur-xl dark:border-stone-600/40 dark:bg-stone-900/80 dark:shadow-stone-950/40">
+      <div className="flex items-center gap-1 rounded-2xl border border-white/25 bg-white/75 p-1.5 shadow-glass backdrop-blur-xl dark:border-stone-600/30 dark:bg-stone-900/75">
         <button
           onClick={() => onToggle("fast")}
           className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-bold tracking-wide transition-all duration-200 ${
             viewMode === "fast"
-              ? "bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/30"
-              : "text-stone-400 hover:text-stone-600 active:bg-stone-100 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800"
+              ? `${ACCENT} ${ACCENT_DARK} text-white shadow-md shadow-brand/25`
+              : "text-stone-400 hover:text-stone-600 active:bg-stone-100/60 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800/60"
           }`}
         >
           <BoltIcon size={15} />
@@ -550,8 +557,8 @@ function ModeToggle({ viewMode, onToggle }: { viewMode: ViewMode; onToggle: (m: 
           onClick={() => onToggle("full")}
           className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-bold tracking-wide transition-all duration-200 ${
             viewMode === "full"
-              ? "bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/30"
-              : "text-stone-400 hover:text-stone-600 active:bg-stone-100 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800"
+              ? `${ACCENT} ${ACCENT_DARK} text-white shadow-md shadow-brand/25`
+              : "text-stone-400 hover:text-stone-600 active:bg-stone-100/60 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800/60"
           }`}
         >
           <ListIcon size={15} />
@@ -625,7 +632,7 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
   return (
     <div className="flex flex-col gap-0">
       {/* ── Pinned bar: Quick Help + Section Nav (Full Mode only) ── */}
-      <div className="sticky top-[57px] z-20 -mx-4 border-b border-stone-200/60 bg-[#FFFAF7]/95 px-4 pb-2 pt-2 backdrop-blur-md dark:border-stone-800/60 dark:bg-stone-950/95">
+      <div className="sticky top-[57px] z-20 -mx-4 border-b border-stone-200/50 bg-warm-50/90 px-4 pb-2 pt-2 backdrop-blur-xl dark:border-stone-800/50 dark:bg-warm-950/90">
         <QuickHelp />
         {viewMode === "full" && (
           <div className="mt-2">
@@ -640,9 +647,9 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
       ) : (
         <div className="mt-4 flex flex-col gap-6 pb-28">
           {/* Full mode header */}
-          <div className="flex flex-col gap-0.5">
-            <h2 className="text-xl font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Restaurant</h2>
-            <p className="text-[13px] text-stone-400 dark:text-stone-500">All phrases by stage</p>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Restaurant</h2>
+            <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">All phrases by stage</p>
           </div>
 
           <RecentStrip phrases={recentPhrases} onCopy={onCopy} />
