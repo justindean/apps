@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { FlowStage, Phrase, StuckQuestion, SpeechMode } from "../data/phrases";
-import { flowUtilityPhrases } from "../data/phrases";
+import { flowUtilityPhrases, fastModePhrases } from "../data/phrases";
 
 interface FlowNavigatorProps {
   stages: FlowStage[];
@@ -361,10 +361,62 @@ function SectionNav({
 }
 
 /* ═══════════════════════════════════════════════════════
+   Fast Mode Overlay — 8 most-used phrases, large tap targets
+   ═══════════════════════════════════════════════════════ */
+function FastModeOverlay({
+  mode,
+  onClose,
+}: {
+  mode: SpeechMode;
+  onClose: () => void;
+}) {
+  const phrases = fastModePhrases[mode];
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-stone-950/95 backdrop-blur-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pb-3 pt-[max(env(safe-area-inset-top),16px)]">
+        <h2 className="text-lg font-bold text-white">Fast Mode</h2>
+        <button
+          onClick={onClose}
+          className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold text-white transition active:scale-95"
+        >
+          Close
+        </button>
+      </div>
+
+      {/* Phrase grid — 2 col, large tap targets */}
+      <div className="flex-1 overflow-y-auto px-4 pb-8">
+        <div className="grid grid-cols-2 gap-3">
+          {phrases.map((p) => (
+            <button
+              key={p.spanish}
+              onClick={() => speakPhrase(p.spanish)}
+              className="flex flex-col items-start gap-2 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition active:scale-[0.96] active:bg-white/10"
+              style={{ minHeight: "100px" }}
+            >
+              <p className="text-base font-bold leading-tight text-white">
+                {p.spanish}
+              </p>
+              <p className="text-xs text-white/50">{p.english}</p>
+              <span className="mt-auto flex items-center gap-1 text-[11px] font-semibold text-[#E8734F]">
+                <VolumeIcon size={12} />
+                Tap to speak
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
    FlowNavigator — single-scroll dashboard
    ═══════════════════════════════════════════════════════ */
 export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavigatorProps) {
   const [activeKey, setActiveKey] = useState(stages[0]?.key ?? "");
+  const [fastMode, setFastMode] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const isScrollingTo = useRef(false);
 
@@ -417,7 +469,7 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
       </div>
 
       {/* ── All sections ── */}
-      <div className="mt-4 flex flex-col gap-6 pb-8">
+      <div className="mt-4 flex flex-col gap-6 pb-24">
         {stages.map((stage, i) => (
           <StageSection
             key={stage.key}
@@ -434,6 +486,24 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
           />
         ))}
       </div>
+
+      {/* ── Fast Mode floating button ── */}
+      <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
+        <button
+          onClick={() => setFastMode(true)}
+          className="flex items-center gap-2 rounded-full bg-[#D94F2A] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#D94F2A]/30 transition active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          FAST MODE
+        </button>
+      </div>
+
+      {/* ── Fast Mode overlay ── */}
+      {fastMode && (
+        <FastModeOverlay mode={mode} onClose={() => setFastMode(false)} />
+      )}
     </div>
   );
 }
