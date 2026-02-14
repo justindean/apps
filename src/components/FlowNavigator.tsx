@@ -39,6 +39,12 @@ function VolumeIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+/* ── Helper: replace placeholder in a string (case-insensitive, first match) ── */
+function replaceVariable(text: string, placeholder: string, value: string): string {
+  const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  return text.replace(regex, value);
+}
+
 /* ── Primary Action Card ── */
 function ActionCard({
   phrase,
@@ -47,42 +53,127 @@ function ActionCard({
   phrase: Phrase;
   onCopy: (t: string) => void;
 }) {
+  // Per-variable selection state: map of variable label -> selected option (or null for default)
+  const [selections, setSelections] = useState<Record<string, string>>({});
+
+  // Compute the displayed Spanish text with variable replacements applied
+  let displaySpanish = phrase.spanish;
+  if (phrase.variables) {
+    for (const v of phrase.variables) {
+      const selected = selections[v.label];
+      if (selected && selected.toLowerCase() !== v.placeholder.toLowerCase()) {
+        displaySpanish = replaceVariable(displaySpanish, v.placeholder, selected);
+      }
+    }
+  }
+
   return (
-    <button
-      onClick={() => speakPhrase(phrase.spanish)}
-      className="flex w-full flex-col items-start gap-1 rounded-2xl border border-stone-200 bg-white p-3.5 text-left shadow-sm transition active:scale-[0.97] active:shadow-none dark:border-stone-700 dark:bg-stone-800"
-    >
-      <p className="text-[15px] font-bold leading-tight text-stone-900 dark:text-stone-50">
-        {phrase.spanish}
-        {phrase.isTemplate && (
-          <span className="ml-1.5 inline-block rounded bg-stone-100 px-1 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-wide text-stone-400 dark:bg-stone-700 dark:text-stone-500">
-            fill-in
+    <div className="flex w-full flex-col rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
+      <button
+        onClick={() => speakPhrase(displaySpanish)}
+        className="flex w-full flex-col items-start gap-1 p-3.5 text-left transition active:scale-[0.97]"
+      >
+        <p className="text-[15px] font-bold leading-tight text-stone-900 dark:text-stone-50">
+          {phrase.variables && phrase.variables.length > 0
+            ? renderHighlightedSpanish(displaySpanish, phrase.variables, selections)
+            : displaySpanish}
+          {phrase.isTemplate && (
+            <span className="ml-1.5 inline-block rounded bg-stone-100 px-1 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-wide text-stone-400 dark:bg-stone-700 dark:text-stone-500">
+              fill-in
+            </span>
+          )}
+        </p>
+        <p className="text-xs leading-snug text-stone-500 dark:text-stone-400">
+          {phrase.english}
+        </p>
+        <p className="font-mono text-[10px] leading-snug text-stone-400 dark:text-stone-500">
+          {phrase.pronunciation}
+        </p>
+        <div className="mt-1 flex w-full items-center justify-between">
+          <span className="flex items-center gap-1 text-[11px] font-semibold text-[#D94F2A] dark:text-[#E8734F]">
+            <VolumeIcon size={12} />
+            Tap to speak
           </span>
-        )}
-      </p>
-      <p className="text-xs leading-snug text-stone-500 dark:text-stone-400">
-        {phrase.english}
-      </p>
-      <p className="font-mono text-[10px] leading-snug text-stone-400 dark:text-stone-500">
-        {phrase.pronunciation}
-      </p>
-      <div className="mt-1 flex w-full items-center justify-between">
-        <span className="flex items-center gap-1 text-[11px] font-semibold text-[#D94F2A] dark:text-[#E8734F]">
-          <VolumeIcon size={12} />
-          Tap to speak
-        </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onCopy(phrase.spanish);
-          }}
-          className="rounded-lg bg-stone-100 px-2 py-1 text-[10px] font-semibold text-stone-600 transition active:scale-95 dark:bg-stone-700 dark:text-stone-300"
-          aria-label={`Copy: ${phrase.spanish}`}
-        >
-          Copy
-        </button>
-      </div>
-    </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopy(displaySpanish);
+            }}
+            className="rounded-lg bg-stone-100 px-2 py-1 text-[10px] font-semibold text-stone-600 transition active:scale-95 dark:bg-stone-700 dark:text-stone-300"
+            aria-label={`Copy: ${displaySpanish}`}
+          >
+            Copy
+          </button>
+        </div>
+      </button>
+
+      {/* ── Variable chip row ── */}
+      {phrase.variables && phrase.variables.length > 0 && (
+        <div className="flex items-center gap-1.5 border-t border-stone-100 px-3.5 py-2 dark:border-stone-700/60">
+          {phrase.variables.map((v) => (
+            <div key={v.label} className="flex items-center gap-1 overflow-x-auto">
+              <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400 dark:text-stone-500">
+                {v.label}:
+              </span>
+              {v.options.map((opt) => {
+                const isActive = (selections[v.label] ?? v.placeholder).toLowerCase() === opt.toLowerCase();
+                return (
+                  <button
+                    key={opt}
+                    onClick={() =>
+                      setSelections((prev) => ({ ...prev, [v.label]: opt }))
+                    }
+                    className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition ${
+                      isActive
+                        ? "bg-[#D94F2A] text-white"
+                        : "bg-stone-100 text-stone-500 active:bg-stone-200 dark:bg-stone-700 dark:text-stone-400"
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Highlight the variable word in displayed Spanish ── */
+function renderHighlightedSpanish(
+  text: string,
+  variables: NonNullable<Phrase["variables"]>,
+  selections: Record<string, string>,
+) {
+  // Find the currently active variable word to highlight
+  const activeWords = variables.map(
+    (v) => selections[v.label] ?? v.placeholder,
+  );
+
+  // Build regex to match any active word (case-insensitive)
+  const pattern = activeWords
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const regex = new RegExp(`(${pattern})`, "i");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <span
+            key={i}
+            className="rounded bg-[#D94F2A]/10 px-0.5 text-[#D94F2A] dark:bg-[#D94F2A]/20 dark:text-[#E8734F]"
+          >
+            {part.toUpperCase()}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
   );
 }
 
