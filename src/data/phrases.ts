@@ -50,18 +50,6 @@ export const rescuePhrases: Phrase[] = [
   { spanish: "Estoy aprendiendo espanol.", english: "I'm learning Spanish.", pronunciation: "ehs-TOY ah-prehn-dee-EHN-doh ehs-pah-NYOL" },
 ]
 
-// ── Helper ─────────────────────────────────────────────────────────────
-
-function emptyIntents(): Record<IntentKey, IntentPhrases> {
-  return {
-    order:  { street: [], neutral: [], formal: [] },
-    react:  { street: [], neutral: [], formal: [] },
-    ask:    { street: [], neutral: [], formal: [] },
-    finish: { street: [], neutral: [], formal: [] },
-    social: { street: [], neutral: [], formal: [] },
-  }
-}
-
 // ── Scenarios ──────────────────────────────────────────────────────────
 
 export const scenarios: Scenario[] = [
