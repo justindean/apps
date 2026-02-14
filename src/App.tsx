@@ -150,6 +150,7 @@ function App() {
             stages={scenario.flowStages}
             color={scenario.color}
             onCopy={copyPhrase}
+            mode={mode}
           />
         ) : (
           <PhraseList

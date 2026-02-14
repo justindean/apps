@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { FlowStage, Phrase, StuckQuestion } from "../data/phrases";
+import type { FlowStage, Phrase, StuckQuestion, SpeechMode } from "../data/phrases";
 import { flowUtilityPhrases } from "../data/phrases";
 
 interface FlowNavigatorProps {
   stages: FlowStage[];
   color: string;
   onCopy: (text: string) => void;
+  mode: SpeechMode;
 }
 
 function speakPhrase(text: string) {
@@ -99,8 +100,8 @@ function StuckSection({ questions }: { questions: StuckQuestion[] }) {
         aria-expanded={open}
         aria-controls="stuck-section"
       >
-        <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-          If you get stuck (common questions)
+        <span className="text-xs font-medium text-amber-700/70 dark:text-amber-400/70">
+          They might reply... (optional)
         </span>
         <svg
           width="16"
@@ -173,7 +174,7 @@ function HelperPill({ phrase }: { phrase: Phrase }) {
   );
 }
 
-export function FlowNavigator({ stages, color: _color, onCopy }: FlowNavigatorProps) {
+export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavigatorProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const topRef = useRef<HTMLDivElement>(null);
 
@@ -264,7 +265,7 @@ export function FlowNavigator({ stages, color: _color, onCopy }: FlowNavigatorPr
 
       {/* ── 10-card Action Grid (2-col) ── */}
       <div className="grid grid-cols-2 gap-3">
-        {stage.primaryPhrases.map((phrase) => (
+        {stage.primaryPhrasesByTone[mode].map((phrase) => (
           <ActionCard key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
         ))}
       </div>
