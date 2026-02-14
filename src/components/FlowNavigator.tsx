@@ -239,23 +239,24 @@ function StageSection({
   stage,
   mode,
   onCopy,
-  defaultOpen,
+  open,
+  onToggle,
   sectionRef,
 }: {
   stage: FlowStage;
   mode: SpeechMode;
   onCopy: (t: string) => void;
-  defaultOpen: boolean;
+  open: boolean;
+  onToggle: () => void;
   sectionRef: (el: HTMLElement | null) => void;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
   const phrases = stage.primaryPhrasesByTone[mode];
 
   return (
     <section ref={sectionRef} className="scroll-mt-28">
       {/* Section header / toggle */}
       <button
-        onClick={() => setOpen((p) => !p)}
+        onClick={onToggle}
         className="group flex w-full items-center justify-between rounded-2xl bg-stone-50 px-4 py-3.5 text-left transition active:scale-[0.99] dark:bg-stone-800/60"
         aria-expanded={open}
       >
@@ -417,22 +418,35 @@ function FastModeOverlay({
 export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavigatorProps) {
   const [activeKey, setActiveKey] = useState(stages[0]?.key ?? "");
   const [fastMode, setFastMode] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    stages.forEach((s, i) => { init[s.key] = i === 0; });
+    return init;
+  });
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const isScrollingTo = useRef(false);
 
-  // Click a tab → scroll to section
+  const toggleSection = useCallback((key: string) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  // Click a tab → expand section + scroll to it
   const handleNavSelect = useCallback(
     (key: string) => {
       setActiveKey(key);
-      const el = sectionRefs.current[key];
-      if (el) {
-        isScrollingTo.current = true;
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-        // Re-enable scroll tracking after animation
-        setTimeout(() => {
-          isScrollingTo.current = false;
-        }, 600);
-      }
+      // Ensure the section is open
+      setOpenSections((prev) => ({ ...prev, [key]: true }));
+      // Scroll after a tick so the DOM expands first
+      requestAnimationFrame(() => {
+        const el = sectionRefs.current[key];
+        if (el) {
+          isScrollingTo.current = true;
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          setTimeout(() => {
+            isScrollingTo.current = false;
+          }, 600);
+        }
+      });
     },
     [],
   );
@@ -470,13 +484,14 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
 
       {/* ── All sections ── */}
       <div className="mt-4 flex flex-col gap-6 pb-24">
-        {stages.map((stage, i) => (
+        {stages.map((stage) => (
           <StageSection
             key={stage.key}
             stage={stage}
             mode={mode}
             onCopy={onCopy}
-            defaultOpen={i === 0}
+            open={!!openSections[stage.key]}
+            onToggle={() => toggleSection(stage.key)}
             sectionRef={(el) => {
               if (el) {
                 el.setAttribute("data-stage-key", stage.key);
