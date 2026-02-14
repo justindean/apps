@@ -78,7 +78,7 @@ function App() {
           {scenario ? (
             <button
               onClick={handleBack}
-              className="flex items-center gap-1.5 text-sm font-medium text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
               aria-label="Go back"
             >
               <svg
@@ -99,7 +99,7 @@ function App() {
               </span>
             </button>
           ) : (
-            <h1 className="text-lg font-bold tracking-tight">TapHabla</h1>
+            <h1 className="text-lg font-extrabold tracking-tight">TapHabla</h1>
           )}
 
           <div className="flex items-center gap-2">

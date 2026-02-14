@@ -65,7 +65,7 @@ export default function RescueModal({ phrases, onClose, onCopy }: RescueModalPro
               <button
                 key={p.spanish}
                 onClick={() => onCopy(p.spanish)}
-                className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-4 py-3 text-left ring-1 ring-stone-200/70 shadow-card transition-all duration-150 active:scale-[0.98] active:shadow-card-press dark:bg-stone-700/50 dark:ring-stone-600/50"
+                className="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-b from-white to-stone-50 px-4 py-3 text-left ring-1 ring-stone-200/60 shadow-card-elevated card-highlight transition-all duration-150 active:scale-[0.98] active:translate-y-px active:shadow-card-press dark:from-stone-700/60 dark:to-stone-700/40 dark:ring-stone-600/40"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-base font-bold text-stone-900 dark:text-stone-100">

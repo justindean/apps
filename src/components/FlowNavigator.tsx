@@ -146,15 +146,17 @@ function RecentStrip({ phrases, onCopy }: { phrases: Phrase[]; onCopy: (t: strin
 /* ═══════════════════════════════════════════════════════
    Speak Pill Button — hero action with glow pulse
    ═══════════════════════════════════════════════════════ */
-function SpeakPill({ onClick }: { onClick: () => void }) {
+function SpeakPill({ onClick, speaking = false }: { onClick: () => void; speaking?: boolean }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className={`relative mt-2.5 inline-flex items-center gap-1.5 self-start rounded-full ${ACCENT} ${ACCENT_DARK} px-4 py-1.5 text-[11px] font-bold text-white shadow-md shadow-brand/20 transition-all duration-150 active:scale-95 active:shadow-card-press dark:shadow-brand-light/15`}
+      className={`relative mt-2.5 inline-flex items-center gap-1.5 self-start rounded-full bg-[#D94F2A] px-4 py-1.5 text-[11px] font-extrabold tracking-wide text-white shadow-md shadow-[#D94F2A]/25 transition-all duration-150 active:scale-[0.93] active:shadow-sm active:brightness-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20`}
     >
-      {/* Glow halo */}
-      <span className={`absolute inset-0 animate-glow-pulse rounded-full ${ACCENT} ${ACCENT_DARK} opacity-40`} />
-      <WaveformIcon size={13} />
+      {/* Outer glow halo */}
+      <span className="absolute -inset-1 animate-glow-pulse rounded-full bg-[#D94F2A]/20 dark:bg-[#E8734F]/15" />
+      <span className={`relative ${speaking ? "animate-pulse" : ""}`}>
+        <WaveformIcon size={13} />
+      </span>
       <span className="relative">Speak</span>
     </button>
   );
@@ -175,7 +177,7 @@ function FastCard({
   onSpeak: (p: Phrase) => void;
 }) {
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-[18px] border border-stone-200/70 bg-warm-50 shadow-card card-highlight transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-0 active:shadow-card-press dark:border-stone-700/50 dark:bg-stone-800/80">
+    <div className="group relative flex flex-col overflow-hidden rounded-[18px] border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 shadow-card-elevated card-highlight transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-px active:shadow-card-press dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
       {/* Color identity bar */}
       <div className={`h-[3px] w-full ${barColor}`} />
 
@@ -196,7 +198,7 @@ function FastCard({
       </button>
 
       {/* Copy */}
-      <div className="flex items-center justify-end border-t border-stone-100/80 px-3 py-1.5 dark:border-stone-700/40">
+      <div className="flex items-center justify-end border-t border-stone-100/60 px-3 py-1.5 dark:border-stone-700/30">
         <button
           onClick={(e) => { e.stopPropagation(); onCopy(phrase.spanish); }}
           className="rounded-md px-2 py-0.5 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 active:scale-95 dark:text-stone-500 dark:hover:text-stone-300"
@@ -228,9 +230,10 @@ function FastModeView({
   return (
     <div className="flex flex-col gap-6 pb-28 pt-3">
       {/* Header microcopy */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-0.5">
         <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Restaurant</h2>
         <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Speak instantly. No typing.</p>
+        <p className="text-[11px] text-stone-300 dark:text-stone-600">Works offline.</p>
       </div>
 
       {/* Recent strip */}
@@ -289,7 +292,7 @@ function ActionCard({
   }
 
   return (
-    <div className="group relative flex w-full flex-col overflow-hidden rounded-[18px] border border-stone-200/70 bg-warm-50 shadow-card card-highlight transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-0 active:shadow-card-press dark:border-stone-700/50 dark:bg-stone-800/80">
+    <div className="group relative flex w-full flex-col overflow-hidden rounded-[18px] border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 shadow-card-elevated card-highlight transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-px active:shadow-card-press dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
       {/* Color identity bar */}
       <div className={`h-[3px] w-full ${barColor}`} />
 
@@ -315,7 +318,7 @@ function ActionCard({
       </button>
 
       {/* Copy row */}
-      <div className="flex items-center justify-end border-t border-stone-100/80 px-3 py-1.5 dark:border-stone-700/40">
+      <div className="flex items-center justify-end border-t border-stone-100/60 px-3 py-1.5 dark:border-stone-700/30">
         <button
           onClick={(e) => { e.stopPropagation(); onCopy(displaySpanish); }}
           className="rounded-md px-2 py-0.5 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 active:scale-95 dark:text-stone-500 dark:hover:text-stone-300"
@@ -353,7 +356,7 @@ function ActionCard({
   );
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ══��════════════════════════════════════════════════════
    Stuck Q&A Section
    ═══════════════════════════════════════════════════════ */
 function StuckSection({ questions }: { questions: StuckQuestion[] }) {
@@ -364,7 +367,7 @@ function StuckSection({ questions }: { questions: StuckQuestion[] }) {
     <div className="mt-4">
       <button
         onClick={() => setOpen((p) => !p)}
-        className="flex w-full items-center justify-between rounded-2xl bg-amber-50/60 px-3.5 py-2.5 text-left transition active:scale-[0.99] dark:bg-amber-900/15"
+        className="flex w-full items-center justify-between rounded-2xl bg-amber-50/50 px-3.5 py-2.5 text-left transition-all duration-150 active:scale-[0.99] dark:bg-amber-900/15"
         aria-expanded={open}
       >
         <span className="text-xs font-medium text-amber-700/60 dark:text-amber-400/60">
@@ -385,7 +388,7 @@ function StuckSection({ questions }: { questions: StuckQuestion[] }) {
                   <button
                     key={r.spanish}
                     onClick={() => speakPhrase(r.spanish)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/80 bg-warm-50 px-3 py-1.5 text-left shadow-sm transition active:scale-[0.96] dark:border-amber-700/40 dark:bg-stone-800"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/60 bg-gradient-to-b from-white to-warm-50 px-3 py-1.5 text-left shadow-sm transition-all duration-150 active:scale-[0.96] active:shadow-none dark:border-amber-700/30 dark:from-stone-800/90 dark:to-stone-800/70"
                   >
                     <VolumeIcon size={11} />
                     <span className="text-xs font-semibold text-stone-800 dark:text-stone-200">{r.spanish}</span>
@@ -476,7 +479,7 @@ function QuickHelp() {
         <button
           key={p.spanish}
           onClick={() => speakPhrase(p.spanish)}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-200/70 bg-warm-50 px-3 py-1.5 shadow-sm transition active:scale-[0.96] dark:border-stone-700/50 dark:bg-stone-800"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 px-3 py-1.5 shadow-sm transition-all duration-150 active:scale-[0.96] active:shadow-none dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70"
         >
           <VolumeIcon size={11} />
           <span className="text-[11px] font-semibold text-stone-700 dark:text-stone-300">{p.spanish}</span>
@@ -535,18 +538,18 @@ function SectionNav({
   );
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ══════════════��════════════════════════════════════════
    Premium Glass Mode Toggle
    ═══════════════════════════════════════════════════════ */
 function ModeToggle({ viewMode, onToggle }: { viewMode: ViewMode; onToggle: (m: ViewMode) => void }) {
   return (
     <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
-      <div className="flex items-center gap-1 rounded-2xl border border-white/25 bg-white/75 p-1.5 shadow-glass backdrop-blur-xl dark:border-stone-600/30 dark:bg-stone-900/75">
+      <div className="flex items-center gap-1 rounded-2xl border border-white/20 bg-white/80 p-1.5 shadow-glass backdrop-blur-xl dark:border-stone-600/25 dark:bg-stone-900/80">
         <button
           onClick={() => onToggle("fast")}
-          className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-bold tracking-wide transition-all duration-200 ${
+          className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-extrabold tracking-wide transition-all duration-200 ease-out ${
             viewMode === "fast"
-              ? `${ACCENT} ${ACCENT_DARK} text-white shadow-md shadow-brand/25`
+              ? "bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/25 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
               : "text-stone-400 hover:text-stone-600 active:bg-stone-100/60 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800/60"
           }`}
         >
@@ -555,9 +558,9 @@ function ModeToggle({ viewMode, onToggle }: { viewMode: ViewMode; onToggle: (m: 
         </button>
         <button
           onClick={() => onToggle("full")}
-          className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-bold tracking-wide transition-all duration-200 ${
+          className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-extrabold tracking-wide transition-all duration-200 ease-out ${
             viewMode === "full"
-              ? `${ACCENT} ${ACCENT_DARK} text-white shadow-md shadow-brand/25`
+              ? "bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/25 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
               : "text-stone-400 hover:text-stone-600 active:bg-stone-100/60 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800/60"
           }`}
         >
@@ -647,9 +650,10 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
       ) : (
         <div className="mt-4 flex flex-col gap-6 pb-28">
           {/* Full mode header */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Restaurant</h2>
             <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">All phrases by stage</p>
+            <p className="text-[11px] text-stone-300 dark:text-stone-600">Works offline.</p>
           </div>
 
           <RecentStrip phrases={recentPhrases} onCopy={onCopy} />
