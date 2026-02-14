@@ -1,16 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { FlowStage, Phrase } from "../data/phrases";
+import type { FlowStage, Phrase, StuckQuestion, SpeechMode } from "../data/phrases";
 import { flowUtilityPhrases } from "../data/phrases";
 
 interface FlowNavigatorProps {
   stages: FlowStage[];
   color: string;
   onCopy: (text: string) => void;
+  mode: SpeechMode;
 }
 
-function speakPhrase(phrase: Phrase) {
+/* ── TTS helper ── */
+function speakPhrase(text: string) {
   if ("speechSynthesis" in window) {
-    const u = new SpeechSynthesisUtterance(phrase.spanish);
+    const u = new SpeechSynthesisUtterance(text);
     u.lang = "es-MX";
     u.rate = 0.85;
     window.speechSynthesis.cancel();
@@ -18,7 +20,7 @@ function speakPhrase(phrase: Phrase) {
   }
 }
 
-/* ── Volume icon (inline SVG for zero deps) ── */
+/* ── Volume icon ── */
 function VolumeIcon({ size = 14 }: { size?: number }) {
   return (
     <svg
@@ -38,284 +40,399 @@ function VolumeIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-/* ── Primary Action Card ── */
-function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
-  const handleTap = () => {
-    speakPhrase(phrase);
-  };
-
+/* ── Chevron icon ── */
+function ChevronIcon({ open }: { open: boolean }) {
   return (
-    <button
-      onClick={handleTap}
-      className="flex w-full flex-col items-start gap-1.5 rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.97] active:shadow-none dark:border-stone-700 dark:bg-stone-800"
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+      aria-hidden
     >
-      <p className="text-base font-bold leading-tight text-stone-900 dark:text-stone-50">
-        {phrase.spanish}
-      </p>
-      <p className="text-xs leading-snug text-stone-500 dark:text-stone-400">
-        {phrase.english}
-      </p>
-      <p className="font-mono text-[10px] leading-snug text-stone-400 dark:text-stone-500">
-        {phrase.pronunciation}
-      </p>
-      <div className="mt-1 flex w-full items-center justify-between">
-        <span className="flex items-center gap-1 text-[11px] font-semibold text-[#D94F2A] dark:text-[#E8734F]">
-          <VolumeIcon size={12} />
-          Tap to speak
-        </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onCopy(phrase.spanish);
-          }}
-          className="rounded-lg bg-stone-100 px-2 py-1 text-[10px] font-semibold text-stone-600 transition active:scale-95 dark:bg-stone-700 dark:text-stone-300"
-          aria-label={`Copy: ${phrase.spanish}`}
-        >
-          Copy
-        </button>
-      </div>
-    </button>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   );
 }
 
-/* ── Secondary pill button ── */
-function SecondaryPill({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
-  return (
-    <button
-      onClick={() => speakPhrase(phrase)}
-      className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-left transition active:scale-[0.97] dark:border-stone-700 dark:bg-stone-800"
-    >
-      <span className="text-xs font-medium text-stone-800 dark:text-stone-200">
-        {phrase.spanish}
-      </span>
-      <span className="text-[10px] text-stone-400 dark:text-stone-500">
-        {phrase.english}
-      </span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onCopy(phrase.spanish);
-        }}
-        className="ml-auto shrink-0 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
-        aria-label={`Copy: ${phrase.spanish}`}
-      >
-        Copy
-      </button>
-    </button>
-  );
+/* ── Helper: replace placeholder in a string ── */
+function replaceVariable(text: string, placeholder: string, value: string): string {
+  const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  return text.replace(regex, value);
 }
 
-/* ── Utility helper pill ── */
-function UtilityPill({ phrase }: { phrase: Phrase }) {
-  return (
-    <button
-      onClick={() => speakPhrase(phrase)}
-      className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1.5 text-left transition active:scale-[0.97] dark:bg-amber-900/20"
-    >
-      <VolumeIcon size={11} />
-      <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
-        {phrase.spanish}
-      </span>
-      <span className="text-[10px] text-amber-600/70 dark:text-amber-400/60">
-        {phrase.english}
-      </span>
-    </button>
-  );
-}
-
-export function FlowNavigator({ stages, color: _color, onCopy }: FlowNavigatorProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [showSecondary, setShowSecondary] = useState(false);
-  const topRef = useRef<HTMLDivElement>(null);
-
-  const stage = stages[currentIndex];
-  const isLast = currentIndex === stages.length - 1;
-
-  const goTo = useCallback(
-    (index: number) => {
-      if (index < 0 || index >= stages.length) return;
-      setCurrentIndex(index);
-      setShowSecondary(false);
-    },
-    [stages.length],
-  );
-
-  useEffect(() => {
-    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [currentIndex]);
+/* ── Highlight variable word in displayed Spanish ── */
+function renderHighlightedSpanish(
+  text: string,
+  variables: NonNullable<Phrase["variables"]>,
+  selections: Record<string, string>,
+) {
+  const activeWords = variables.map((v) => selections[v.label] ?? v.placeholder);
+  const pattern = activeWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const regex = new RegExp(`(${pattern})`, "i");
+  const parts = text.split(regex);
 
   return (
-    <div className="flex flex-col gap-0 pb-24">
-      {/* ── Progress Bar ── */}
-      <nav
-        ref={topRef}
-        className="mb-4 flex items-center gap-0"
-        aria-label="Conversation progress"
-      >
-        {stages.map((s, i) => {
-          const isActive = i === currentIndex;
-          const isDone = i < currentIndex;
-          return (
-            <div key={s.key} className="flex flex-1 items-center">
-              <button
-                onClick={() => goTo(i)}
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-all ${
-                  isActive
-                    ? "bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/25 ring-2 ring-[#D94F2A]/30"
-                    : isDone
-                      ? "bg-[#D94F2A]/15 text-[#D94F2A] dark:bg-[#D94F2A]/25 dark:text-[#E8734F]"
-                      : "bg-stone-200 text-stone-400 dark:bg-stone-700 dark:text-stone-500"
-                }`}
-                aria-label={`Step ${i + 1}: ${s.name}`}
-                aria-current={isActive ? "step" : undefined}
-              >
-                {isDone ? (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : (
-                  i + 1
-                )}
-              </button>
-              {i < stages.length - 1 && (
-                <div
-                  className={`h-0.5 flex-1 transition-colors ${
-                    isDone
-                      ? "bg-[#D94F2A]/30 dark:bg-[#D94F2A]/40"
-                      : "bg-stone-200 dark:bg-stone-700"
-                  }`}
-                />
-              )}
-            </div>
-          );
-        })}
-      </nav>
-
-      {/* ── Step Header ── */}
-      <div className="mb-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#D94F2A]">
-          Step {currentIndex + 1} of {stages.length}
-        </p>
-        <h2 className="mt-0.5 text-xl font-bold text-stone-900 dark:text-stone-100">
-          {stage.name}
-        </h2>
-        <p className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
-          {stage.subtitle}
-        </p>
-      </div>
-
-      {/* ── Primary Action Grid (2-col) ── */}
-      <div className="grid grid-cols-2 gap-3">
-        {stage.primaryPhrases.map((phrase) => (
-          <ActionCard key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
-        ))}
-      </div>
-
-      {/* ── Other Useful (accordion pills) ── */}
-      {stage.secondaryPhrases.length > 0 && (
-        <section className="mt-5">
-          <button
-            onClick={() => setShowSecondary((prev) => !prev)}
-            className="flex w-full items-center justify-between rounded-xl bg-stone-100 px-4 py-3 text-left transition active:scale-[0.99] dark:bg-stone-800"
-            aria-expanded={showSecondary}
-            aria-controls="secondary-phrases"
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <span
+            key={i}
+            className="rounded bg-[#D94F2A]/10 px-0.5 text-[#D94F2A] dark:bg-[#D94F2A]/20 dark:text-[#E8734F]"
           >
-            <span className="text-sm font-semibold text-stone-600 dark:text-stone-300">
-              Other useful
-            </span>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={`shrink-0 text-stone-400 transition-transform dark:text-stone-500 ${showSecondary ? "rotate-180" : ""}`}
-              aria-hidden
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-          {showSecondary && (
-            <div
-              id="secondary-phrases"
-              className="mt-2 flex flex-wrap gap-2"
-            >
-              {stage.secondaryPhrases.map((phrase) => (
-                <SecondaryPill key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
-              ))}
-            </div>
-          )}
-        </section>
+            {part.toUpperCase()}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
       )}
+    </>
+  );
+}
 
-      {/* ── Quick Helpers (always visible) ── */}
-      <section className="mt-5">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-          Quick helpers
+/* ═══════════════════════════════════════════════════════
+   Action Card — one phrase in the grid
+   ═══════════════════════════════════════════════════════ */
+function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
+  const [selections, setSelections] = useState<Record<string, string>>({});
+
+  let displaySpanish = phrase.spanish;
+  if (phrase.variables) {
+    for (const v of phrase.variables) {
+      const selected = selections[v.label];
+      if (selected && selected.toLowerCase() !== v.placeholder.toLowerCase()) {
+        displaySpanish = replaceVariable(displaySpanish, v.placeholder, selected);
+      }
+    }
+  }
+
+  return (
+    <div className="flex w-full flex-col rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
+      <button
+        onClick={() => speakPhrase(displaySpanish)}
+        className="flex w-full flex-col items-start gap-1 p-3.5 text-left transition active:scale-[0.97]"
+      >
+        <p className="text-[15px] font-bold leading-tight text-stone-900 dark:text-stone-50">
+          {phrase.variables && phrase.variables.length > 0
+            ? renderHighlightedSpanish(displaySpanish, phrase.variables, selections)
+            : displaySpanish}
+          {phrase.isTemplate && (
+            <span className="ml-1.5 inline-block rounded bg-stone-100 px-1 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-wide text-stone-400 dark:bg-stone-700 dark:text-stone-500">
+              fill-in
+            </span>
+          )}
         </p>
-        <div className="flex flex-wrap gap-2">
-          {flowUtilityPhrases.map((phrase) => (
-            <UtilityPill key={phrase.spanish} phrase={phrase} />
+        <p className="text-xs leading-snug text-stone-500 dark:text-stone-400">{phrase.english}</p>
+        <p className="font-mono text-[10px] leading-snug text-stone-400 dark:text-stone-500">
+          {phrase.pronunciation}
+        </p>
+        <div className="mt-1 flex w-full items-center justify-between">
+          <span className="flex items-center gap-1 text-[11px] font-semibold text-[#D94F2A] dark:text-[#E8734F]">
+            <VolumeIcon size={12} />
+            Tap to speak
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopy(displaySpanish);
+            }}
+            className="rounded-lg bg-stone-100 px-2 py-1 text-[10px] font-semibold text-stone-600 transition active:scale-95 dark:bg-stone-700 dark:text-stone-300"
+            aria-label={`Copy: ${displaySpanish}`}
+          >
+            Copy
+          </button>
+        </div>
+      </button>
+
+      {phrase.variables && phrase.variables.length > 0 && (
+        <div className="flex items-center gap-1.5 border-t border-stone-100 px-3.5 py-2 dark:border-stone-700/60">
+          {phrase.variables.map((v) => (
+            <div key={v.label} className="flex items-center gap-1 overflow-x-auto">
+              {v.options.map((opt) => {
+                const isActive =
+                  (selections[v.label] ?? v.placeholder).toLowerCase() === opt.toLowerCase();
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => setSelections((prev) => ({ ...prev, [v.label]: opt }))}
+                    className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition ${
+                      isActive
+                        ? "bg-[#D94F2A] text-white"
+                        : "bg-stone-100 text-stone-500 active:bg-stone-200 dark:bg-stone-700 dark:text-stone-400"
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
           ))}
         </div>
-      </section>
+      )}
+    </div>
+  );
+}
 
-      {/* ── Sticky Bottom Nav ── */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200/80 bg-white/95 backdrop-blur-md dark:border-stone-700/80 dark:bg-stone-900/95">
-        <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
-          <button
-            onClick={() => goTo(currentIndex - 1)}
-            disabled={currentIndex === 0}
-            className="rounded-xl px-3 py-2.5 text-sm font-medium text-stone-500 transition active:scale-[0.96] disabled:opacity-30 dark:text-stone-400"
-            aria-label="Previous step"
-          >
-            Back
-          </button>
+/* ═══════════════════════════════════════════════════════
+   Stuck Q&A Section
+   ═══════════════════════════════════════════════════════ */
+function StuckSection({ questions }: { questions: StuckQuestion[] }) {
+  const [open, setOpen] = useState(false);
+  if (questions.length === 0) return null;
 
-          <span className="text-xs font-semibold text-stone-400 dark:text-stone-500">
-            {stage.name}
-          </span>
-
-          {isLast ? (
-            <span className="px-3 py-2.5 text-sm font-semibold text-stone-300 dark:text-stone-600">
-              Done
-            </span>
-          ) : (
-            <button
-              onClick={() => goTo(currentIndex + 1)}
-              className="flex items-center gap-1.5 rounded-xl bg-[#D94F2A] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.96]"
-              aria-label={`Next step: ${stages[currentIndex + 1]?.name}`}
-            >
-              Next
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
-          )}
+  return (
+    <div className="mt-4">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="flex w-full items-center justify-between rounded-xl bg-amber-50 px-3.5 py-2.5 text-left transition active:scale-[0.99] dark:bg-amber-900/20"
+        aria-expanded={open}
+      >
+        <span className="text-xs font-medium text-amber-700/70 dark:text-amber-400/70">
+          They might ask you...
+        </span>
+        <ChevronIcon open={open} />
+      </button>
+      {open && (
+        <div className="mt-2.5 flex flex-col gap-3.5">
+          {questions.map((q) => (
+            <div key={q.question}>
+              <p className="mb-1.5 text-xs text-stone-500 dark:text-stone-400">
+                <span className="font-semibold text-stone-700 dark:text-stone-300">
+                  {`"${q.question}"`}
+                </span>{" "}
+                <span className="text-stone-400 dark:text-stone-500">{q.questionEnglish}</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {q.replies.map((r) => (
+                  <button
+                    key={r.spanish}
+                    onClick={() => speakPhrase(r.spanish)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-white px-3 py-1.5 text-left transition active:scale-[0.96] dark:border-amber-700/50 dark:bg-stone-800"
+                  >
+                    <VolumeIcon size={11} />
+                    <span className="text-xs font-semibold text-stone-800 dark:text-stone-200">
+                      {r.spanish}
+                    </span>
+                    <span className="text-[10px] text-stone-400 dark:text-stone-500">
+                      {r.pronunciation}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Collapsible Section for one stage
+   ═══════════════════════════════════════════════════════ */
+function StageSection({
+  stage,
+  mode,
+  onCopy,
+  defaultOpen,
+  sectionRef,
+}: {
+  stage: FlowStage;
+  mode: SpeechMode;
+  onCopy: (t: string) => void;
+  defaultOpen: boolean;
+  sectionRef: (el: HTMLElement | null) => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const phrases = stage.primaryPhrasesByTone[mode];
+
+  return (
+    <section ref={sectionRef} className="scroll-mt-28">
+      {/* Section header / toggle */}
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="group flex w-full items-center justify-between rounded-2xl bg-stone-50 px-4 py-3.5 text-left transition active:scale-[0.99] dark:bg-stone-800/60"
+        aria-expanded={open}
+      >
+        <div className="flex flex-col">
+          <h2 className="text-base font-bold text-stone-900 dark:text-stone-100">{stage.name}</h2>
+          <p className="text-xs text-stone-500 dark:text-stone-400">{stage.subtitle}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-stone-200/60 px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-stone-700/60 dark:text-stone-400">
+            {phrases.length}
+          </span>
+          <ChevronIcon open={open} />
+        </div>
+      </button>
+
+      {/* Expandable content */}
+      {open && (
+        <div className="mt-3 flex flex-col">
+          <div className="grid grid-cols-2 gap-3">
+            {phrases.map((phrase) => (
+              <ActionCard key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
+            ))}
+          </div>
+          <StuckSection questions={stage.stuckQuestions} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Quick Help — pinned helper pills
+   ═══════════════════════════════════════════════════════ */
+function QuickHelp() {
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-hide">
+      {flowUtilityPhrases.map((p) => (
+        <button
+          key={p.spanish}
+          onClick={() => speakPhrase(p.spanish)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 shadow-sm transition active:scale-[0.96] dark:border-stone-700 dark:bg-stone-800"
+        >
+          <VolumeIcon size={11} />
+          <span className="text-[11px] font-semibold text-stone-700 dark:text-stone-300">
+            {p.spanish}
+          </span>
+          <span className="text-[10px] text-stone-400 dark:text-stone-500">{p.english}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Section Nav — sticky tab bar with section names
+   ═══════════════════════════════════════════════════════ */
+function SectionNav({
+  stages,
+  activeKey,
+  onSelect,
+}: {
+  stages: FlowStage[];
+  activeKey: string;
+  onSelect: (key: string) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+
+  // auto-scroll the active tab into view
+  useEffect(() => {
+    if (activeRef.current && scrollRef.current) {
+      const container = scrollRef.current;
+      const el = activeRef.current;
+      const left = el.offsetLeft - container.offsetWidth / 2 + el.offsetWidth / 2;
+      container.scrollTo({ left, behavior: "smooth" });
+    }
+  }, [activeKey]);
+
+  return (
+    <div
+      ref={scrollRef}
+      className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-hide"
+    >
+      {stages.map((s) => {
+        const isActive = s.key === activeKey;
+        return (
+          <button
+            key={s.key}
+            ref={isActive ? activeRef : undefined}
+            onClick={() => onSelect(s.key)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+              isActive
+                ? "bg-[#D94F2A] text-white shadow-sm"
+                : "bg-stone-100 text-stone-500 active:bg-stone-200 dark:bg-stone-800 dark:text-stone-400"
+            }`}
+          >
+            {s.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   FlowNavigator — single-scroll dashboard
+   ═══════════════════════════════════════════════════════ */
+export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavigatorProps) {
+  const [activeKey, setActiveKey] = useState(stages[0]?.key ?? "");
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const isScrollingTo = useRef(false);
+
+  // Click a tab → scroll to section
+  const handleNavSelect = useCallback(
+    (key: string) => {
+      setActiveKey(key);
+      const el = sectionRefs.current[key];
+      if (el) {
+        isScrollingTo.current = true;
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Re-enable scroll tracking after animation
+        setTimeout(() => {
+          isScrollingTo.current = false;
+        }, 600);
+      }
+    },
+    [],
+  );
+
+  // Track which section is in view as user scrolls
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (isScrollingTo.current) return;
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const key = entry.target.getAttribute("data-stage-key");
+            if (key) setActiveKey(key);
+          }
+        }
+      },
+      { rootMargin: "-30% 0px -60% 0px", threshold: 0 },
+    );
+
+    for (const el of Object.values(sectionRefs.current)) {
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [stages]);
+
+  return (
+    <div className="flex flex-col gap-0">
+      {/* ── Pinned bar: Quick Help + Section Nav ── */}
+      <div className="sticky top-[57px] z-20 -mx-4 border-b border-stone-200/60 bg-[#FFFAF7]/95 px-4 pb-2 pt-2 backdrop-blur-md dark:border-stone-800/60 dark:bg-stone-950/95">
+        <QuickHelp />
+        <div className="mt-2">
+          <SectionNav stages={stages} activeKey={activeKey} onSelect={handleNavSelect} />
+        </div>
+      </div>
+
+      {/* ── All sections ── */}
+      <div className="mt-4 flex flex-col gap-6 pb-8">
+        {stages.map((stage, i) => (
+          <StageSection
+            key={stage.key}
+            stage={stage}
+            mode={mode}
+            onCopy={onCopy}
+            defaultOpen={i === 0}
+            sectionRef={(el) => {
+              if (el) {
+                el.setAttribute("data-stage-key", stage.key);
+                sectionRefs.current[stage.key] = el;
+              }
+            }}
+          />
+        ))}
       </div>
     </div>
   );
