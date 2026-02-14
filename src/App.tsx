@@ -103,7 +103,7 @@ function App() {
           )}
 
           <div className="flex items-center gap-2">
-            {!hasFlow && <SpeechModeToggle current={mode} onChange={setMode} />}
+            <SpeechModeToggle current={mode} onChange={setMode} />
             <button
               onClick={() => setShowRescue(true)}
               className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 active:scale-95"
