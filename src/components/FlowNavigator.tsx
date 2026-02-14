@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { FlowStage, Phrase, StuckQuestion, SpeechMode } from "../data/phrases";
-import { flowUtilityPhrases, fastModePhrases } from "../data/phrases";
+import { flowUtilityPhrases, fastModePhrasesBySection } from "../data/phrases";
 
 interface FlowNavigatorProps {
   stages: FlowStage[];
@@ -8,6 +8,8 @@ interface FlowNavigatorProps {
   onCopy: (text: string) => void;
   mode: SpeechMode;
 }
+
+type ViewMode = "fast" | "full";
 
 /* ── TTS helper ── */
 function speakPhrase(text: string) {
@@ -18,6 +20,30 @@ function speakPhrase(text: string) {
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(u);
   }
+}
+
+/* ── Waveform icon ── */
+function WaveformIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M2 12h2" />
+      <path d="M6 8v8" />
+      <path d="M10 4v16" />
+      <path d="M14 6v12" />
+      <path d="M18 8v8" />
+      <path d="M22 12h2" />
+    </svg>
+  );
 }
 
 /* ── Volume icon ── */
@@ -60,6 +86,25 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
+/* ── Bolt icon ── */
+function BoltIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
+
 /* ── Helper: replace placeholder in a string ── */
 function replaceVariable(text: string, placeholder: string, value: string): string {
   const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
@@ -96,7 +141,71 @@ function renderHighlightedSpanish(
 }
 
 /* ═══════════════════════════════════════════════════════
-   Action Card — one phrase in the grid
+   Fast Mode Card — large tap target, commercial polish
+   ═══════════════════════════════════════════════════════ */
+function FastCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
+  return (
+    <div className="flex flex-col rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-md dark:border-stone-700/60 dark:bg-stone-800/90 dark:shadow-none">
+      <button
+        onClick={() => speakPhrase(phrase.spanish)}
+        className="flex w-full flex-col items-start gap-1.5 p-4 text-left transition active:scale-[0.97]"
+      >
+        <p className="text-[17px] font-bold leading-tight text-stone-900 dark:text-stone-50">
+          {phrase.spanish}
+        </p>
+        <p className="text-[13px] leading-snug text-stone-500 dark:text-stone-400">
+          {phrase.english}
+        </p>
+        <p className="font-mono text-[11px] leading-snug text-stone-400/80 dark:text-stone-500/80">
+          {phrase.pronunciation}
+        </p>
+        <div className="mt-2 flex w-full items-center justify-between">
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#D94F2A] dark:text-[#E8734F]">
+            <WaveformIcon size={13} />
+            Tap to Speak
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopy(phrase.spanish);
+            }}
+            className="rounded-lg bg-stone-100 px-2.5 py-1 text-[10px] font-semibold text-stone-500 transition active:scale-95 dark:bg-stone-700 dark:text-stone-400"
+            aria-label={`Copy: ${phrase.spanish}`}
+          >
+            Copy
+          </button>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Fast Mode View — grouped by section with large cards
+   ═══════════════════════════════════════════════════════ */
+function FastModeView({ mode, onCopy }: { mode: SpeechMode; onCopy: (t: string) => void }) {
+  const sections = fastModePhrasesBySection[mode];
+
+  return (
+    <div className="flex flex-col gap-6 pb-28 pt-3">
+      {sections.map((section) => (
+        <div key={section.label}>
+          <h3 className="mb-2.5 text-[11px] font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+            {section.label}
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            {section.phrases.map((phrase) => (
+              <FastCard key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Action Card — one phrase in the full-mode grid
    ═══════════════════════════════════════════════════════ */
 function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
   const [selections, setSelections] = useState<Record<string, string>>({});
@@ -112,7 +221,7 @@ function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) =>
   }
 
   return (
-    <div className="flex w-full flex-col rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
+    <div className="flex w-full flex-col rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.04)] dark:border-stone-700/60 dark:bg-stone-800/90 dark:shadow-none">
       <button
         onClick={() => speakPhrase(displaySpanish)}
         className="flex w-full flex-col items-start gap-1 p-3.5 text-left transition active:scale-[0.97]"
@@ -132,9 +241,9 @@ function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) =>
           {phrase.pronunciation}
         </p>
         <div className="mt-1 flex w-full items-center justify-between">
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-[#D94F2A] dark:text-[#E8734F]">
-            <VolumeIcon size={12} />
-            Tap to speak
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#D94F2A] dark:text-[#E8734F]">
+            <WaveformIcon size={12} />
+            Tap to Speak
           </span>
           <button
             onClick={(e) => {
@@ -193,7 +302,7 @@ function StuckSection({ questions }: { questions: StuckQuestion[] }) {
         aria-expanded={open}
       >
         <span className="text-xs font-medium text-amber-700/70 dark:text-amber-400/70">
-          They might ask you...
+          If they ask...
         </span>
         <ChevronIcon open={open} />
       </button>
@@ -233,7 +342,7 @@ function StuckSection({ questions }: { questions: StuckQuestion[] }) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   Collapsible Section for one stage
+   Collapsible Section for one stage (Full Mode)
    ═══════════════════════════════════════════════════════ */
 function StageSection({
   stage,
@@ -254,7 +363,6 @@ function StageSection({
 
   return (
     <section ref={sectionRef} className="scroll-mt-28">
-      {/* Section header / toggle */}
       <button
         onClick={onToggle}
         className="group flex w-full items-center justify-between rounded-2xl bg-stone-50 px-4 py-3.5 text-left transition active:scale-[0.99] dark:bg-stone-800/60"
@@ -272,7 +380,6 @@ function StageSection({
         </div>
       </button>
 
-      {/* Expandable content */}
       {open && (
         <div className="mt-3 flex flex-col">
           <div className="grid grid-cols-2 gap-3">
@@ -325,7 +432,6 @@ function SectionNav({
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
 
-  // auto-scroll the active tab into view
   useEffect(() => {
     if (activeRef.current && scrollRef.current) {
       const container = scrollRef.current;
@@ -362,62 +468,44 @@ function SectionNav({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Fast Mode Overlay — 8 most-used phrases, large tap targets
+   Sticky Bottom Mode Toggle
    ═══════════════════════════════════════════════════════ */
-function FastModeOverlay({
-  mode,
-  onClose,
-}: {
-  mode: SpeechMode;
-  onClose: () => void;
-}) {
-  const phrases = fastModePhrases[mode];
-
+function ModeToggle({ viewMode, onToggle }: { viewMode: ViewMode; onToggle: (m: ViewMode) => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-stone-950/95 backdrop-blur-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pb-3 pt-[max(env(safe-area-inset-top),16px)]">
-        <h2 className="text-lg font-bold text-white">Fast Mode</h2>
+    <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
+      <div className="flex items-center gap-0.5 rounded-full border border-stone-200/80 bg-white/95 p-1 shadow-lg shadow-stone-900/10 backdrop-blur-md dark:border-stone-700/60 dark:bg-stone-900/95 dark:shadow-stone-950/30">
         <button
-          onClick={onClose}
-          className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold text-white transition active:scale-95"
+          onClick={() => onToggle("fast")}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${
+            viewMode === "fast"
+              ? "bg-[#D94F2A] text-white shadow-sm"
+              : "text-stone-500 active:bg-stone-100 dark:text-stone-400 dark:active:bg-stone-800"
+          }`}
         >
-          Close
+          <BoltIcon size={14} />
+          FAST MODE
         </button>
-      </div>
-
-      {/* Phrase grid — 2 col, large tap targets */}
-      <div className="flex-1 overflow-y-auto px-4 pb-8">
-        <div className="grid grid-cols-2 gap-3">
-          {phrases.map((p) => (
-            <button
-              key={p.spanish}
-              onClick={() => speakPhrase(p.spanish)}
-              className="flex flex-col items-start gap-2 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition active:scale-[0.96] active:bg-white/10"
-              style={{ minHeight: "100px" }}
-            >
-              <p className="text-base font-bold leading-tight text-white">
-                {p.spanish}
-              </p>
-              <p className="text-xs text-white/50">{p.english}</p>
-              <span className="mt-auto flex items-center gap-1 text-[11px] font-semibold text-[#E8734F]">
-                <VolumeIcon size={12} />
-                Tap to speak
-              </span>
-            </button>
-          ))}
-        </div>
+        <button
+          onClick={() => onToggle("full")}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${
+            viewMode === "full"
+              ? "bg-[#D94F2A] text-white shadow-sm"
+              : "text-stone-500 active:bg-stone-100 dark:text-stone-400 dark:active:bg-stone-800"
+          }`}
+        >
+          FULL MODE
+        </button>
       </div>
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
-   FlowNavigator — single-scroll dashboard
+   FlowNavigator — opens in Fast Mode by default
    ═══════════════════════════════════════════════════════ */
 export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavigatorProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>("fast");
   const [activeKey, setActiveKey] = useState(stages[0]?.key ?? "");
-  const [fastMode, setFastMode] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     stages.forEach((s, i) => { init[s.key] = i === 0; });
@@ -430,13 +518,10 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  // Click a tab → expand section + scroll to it
   const handleNavSelect = useCallback(
     (key: string) => {
       setActiveKey(key);
-      // Ensure the section is open
       setOpenSections((prev) => ({ ...prev, [key]: true }));
-      // Scroll after a tick so the DOM expands first
       requestAnimationFrame(() => {
         const el = sectionRefs.current[key];
         if (el) {
@@ -451,8 +536,9 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
     [],
   );
 
-  // Track which section is in view as user scrolls
+  // Track which section is in view as user scrolls (Full Mode)
   useEffect(() => {
+    if (viewMode !== "full") return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (isScrollingTo.current) return;
@@ -470,55 +556,46 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
       if (el) observer.observe(el);
     }
     return () => observer.disconnect();
-  }, [stages]);
+  }, [stages, viewMode]);
 
   return (
     <div className="flex flex-col gap-0">
-      {/* ── Pinned bar: Quick Help + Section Nav ── */}
+      {/* ── Pinned bar: Quick Help + Section Nav (Full Mode only) ── */}
       <div className="sticky top-[57px] z-20 -mx-4 border-b border-stone-200/60 bg-[#FFFAF7]/95 px-4 pb-2 pt-2 backdrop-blur-md dark:border-stone-800/60 dark:bg-stone-950/95">
         <QuickHelp />
-        <div className="mt-2">
-          <SectionNav stages={stages} activeKey={activeKey} onSelect={handleNavSelect} />
+        {viewMode === "full" && (
+          <div className="mt-2">
+            <SectionNav stages={stages} activeKey={activeKey} onSelect={handleNavSelect} />
+          </div>
+        )}
+      </div>
+
+      {/* ── Main content area ── */}
+      {viewMode === "fast" ? (
+        <FastModeView mode={mode} onCopy={onCopy} />
+      ) : (
+        <div className="mt-4 flex flex-col gap-6 pb-28">
+          {stages.map((stage) => (
+            <StageSection
+              key={stage.key}
+              stage={stage}
+              mode={mode}
+              onCopy={onCopy}
+              open={!!openSections[stage.key]}
+              onToggle={() => toggleSection(stage.key)}
+              sectionRef={(el) => {
+                if (el) {
+                  el.setAttribute("data-stage-key", stage.key);
+                  sectionRefs.current[stage.key] = el;
+                }
+              }}
+            />
+          ))}
         </div>
-      </div>
-
-      {/* ── All sections ── */}
-      <div className="mt-4 flex flex-col gap-6 pb-24">
-        {stages.map((stage) => (
-          <StageSection
-            key={stage.key}
-            stage={stage}
-            mode={mode}
-            onCopy={onCopy}
-            open={!!openSections[stage.key]}
-            onToggle={() => toggleSection(stage.key)}
-            sectionRef={(el) => {
-              if (el) {
-                el.setAttribute("data-stage-key", stage.key);
-                sectionRefs.current[stage.key] = el;
-              }
-            }}
-          />
-        ))}
-      </div>
-
-      {/* ── Fast Mode floating button ── */}
-      <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
-        <button
-          onClick={() => setFastMode(true)}
-          className="flex items-center gap-2 rounded-full bg-[#D94F2A] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#D94F2A]/30 transition active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-          </svg>
-          FAST MODE
-        </button>
-      </div>
-
-      {/* ── Fast Mode overlay ── */}
-      {fastMode && (
-        <FastModeOverlay mode={mode} onClose={() => setFastMode(false)} />
       )}
+
+      {/* ── Sticky bottom mode toggle ── */}
+      <ModeToggle viewMode={viewMode} onToggle={setViewMode} />
     </div>
   );
 }
