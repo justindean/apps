@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { FlowStage, Phrase } from "../data/phrases";
+import type { FlowStage, Phrase, StuckQuestion } from "../data/phrases";
 import { flowUtilityPhrases } from "../data/phrases";
 
 interface FlowNavigatorProps {
@@ -8,9 +8,9 @@ interface FlowNavigatorProps {
   onCopy: (text: string) => void;
 }
 
-function speakPhrase(phrase: Phrase) {
+function speakPhrase(text: string) {
   if ("speechSynthesis" in window) {
-    const u = new SpeechSynthesisUtterance(phrase.spanish);
+    const u = new SpeechSynthesisUtterance(text);
     u.lang = "es-MX";
     u.rate = 0.85;
     window.speechSynthesis.cancel();
@@ -18,7 +18,7 @@ function speakPhrase(phrase: Phrase) {
   }
 }
 
-/* ── Volume icon (inline SVG for zero deps) ── */
+/* ── Volume icon ── */
 function VolumeIcon({ size = 14 }: { size?: number }) {
   return (
     <svg
@@ -39,18 +39,25 @@ function VolumeIcon({ size = 14 }: { size?: number }) {
 }
 
 /* ── Primary Action Card ── */
-function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
-  const handleTap = () => {
-    speakPhrase(phrase);
-  };
-
+function ActionCard({
+  phrase,
+  onCopy,
+}: {
+  phrase: Phrase;
+  onCopy: (t: string) => void;
+}) {
   return (
     <button
-      onClick={handleTap}
-      className="flex w-full flex-col items-start gap-1.5 rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.97] active:shadow-none dark:border-stone-700 dark:bg-stone-800"
+      onClick={() => speakPhrase(phrase.spanish)}
+      className="flex w-full flex-col items-start gap-1 rounded-2xl border border-stone-200 bg-white p-3.5 text-left shadow-sm transition active:scale-[0.97] active:shadow-none dark:border-stone-700 dark:bg-stone-800"
     >
-      <p className="text-base font-bold leading-tight text-stone-900 dark:text-stone-50">
+      <p className="text-[15px] font-bold leading-tight text-stone-900 dark:text-stone-50">
         {phrase.spanish}
+        {phrase.isTemplate && (
+          <span className="ml-1.5 inline-block rounded bg-stone-100 px-1 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-wide text-stone-400 dark:bg-stone-700 dark:text-stone-500">
+            fill-in
+          </span>
+        )}
       </p>
       <p className="text-xs leading-snug text-stone-500 dark:text-stone-400">
         {phrase.english}
@@ -78,45 +85,88 @@ function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) =>
   );
 }
 
-/* ── Secondary pill button ── */
-function SecondaryPill({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
+/* ── Stuck Q&A Section ── */
+function StuckSection({ questions }: { questions: StuckQuestion[] }) {
+  const [open, setOpen] = useState(false);
+
+  if (questions.length === 0) return null;
+
   return (
-    <button
-      onClick={() => speakPhrase(phrase)}
-      className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-left transition active:scale-[0.97] dark:border-stone-700 dark:bg-stone-800"
-    >
-      <span className="text-xs font-medium text-stone-800 dark:text-stone-200">
-        {phrase.spanish}
-      </span>
-      <span className="text-[10px] text-stone-400 dark:text-stone-500">
-        {phrase.english}
-      </span>
+    <section className="mt-5">
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onCopy(phrase.spanish);
-        }}
-        className="ml-auto shrink-0 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
-        aria-label={`Copy: ${phrase.spanish}`}
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between rounded-xl bg-amber-50 px-4 py-3 text-left transition active:scale-[0.99] dark:bg-amber-900/20"
+        aria-expanded={open}
+        aria-controls="stuck-section"
       >
-        Copy
+        <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+          If you get stuck (common questions)
+        </span>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`shrink-0 text-amber-600 transition-transform dark:text-amber-400 ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </button>
-    </button>
+      {open && (
+        <div id="stuck-section" className="mt-3 flex flex-col gap-4">
+          {questions.map((q) => (
+            <div key={q.question}>
+              <p className="mb-1.5 text-xs font-medium text-stone-500 dark:text-stone-400">
+                <span className="font-semibold text-stone-700 dark:text-stone-300">
+                  {`"${q.question}"`}
+                </span>
+                {" "}
+                <span className="text-stone-400 dark:text-stone-500">
+                  {q.questionEnglish}
+                </span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {q.replies.map((r) => (
+                  <button
+                    key={r.spanish}
+                    onClick={() => speakPhrase(r.spanish)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-white px-3 py-1.5 text-left transition active:scale-[0.96] dark:border-amber-700/50 dark:bg-stone-800"
+                  >
+                    <VolumeIcon size={11} />
+                    <span className="text-xs font-semibold text-stone-800 dark:text-stone-200">
+                      {r.spanish}
+                    </span>
+                    <span className="text-[10px] text-stone-400 dark:text-stone-500">
+                      {r.pronunciation}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
-/* ── Utility helper pill ── */
-function UtilityPill({ phrase }: { phrase: Phrase }) {
+/* ── Quick Helper Pill ── */
+function HelperPill({ phrase }: { phrase: Phrase }) {
   return (
     <button
-      onClick={() => speakPhrase(phrase)}
-      className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1.5 text-left transition active:scale-[0.97] dark:bg-amber-900/20"
+      onClick={() => speakPhrase(phrase.spanish)}
+      className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-3 py-1.5 text-left transition active:scale-[0.97] dark:bg-stone-800"
     >
       <VolumeIcon size={11} />
-      <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+      <span className="text-[11px] font-semibold text-stone-700 dark:text-stone-300">
         {phrase.spanish}
       </span>
-      <span className="text-[10px] text-amber-600/70 dark:text-amber-400/60">
+      <span className="text-[10px] text-stone-400 dark:text-stone-500">
         {phrase.english}
       </span>
     </button>
@@ -125,7 +175,6 @@ function UtilityPill({ phrase }: { phrase: Phrase }) {
 
 export function FlowNavigator({ stages, color: _color, onCopy }: FlowNavigatorProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [showSecondary, setShowSecondary] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
 
   const stage = stages[currentIndex];
@@ -135,7 +184,6 @@ export function FlowNavigator({ stages, color: _color, onCopy }: FlowNavigatorPr
     (index: number) => {
       if (index < 0 || index >= stages.length) return;
       setCurrentIndex(index);
-      setShowSecondary(false);
     },
     [stages.length],
   );
@@ -214,61 +262,24 @@ export function FlowNavigator({ stages, color: _color, onCopy }: FlowNavigatorPr
         </p>
       </div>
 
-      {/* ── Primary Action Grid (2-col) ── */}
+      {/* ── 10-card Action Grid (2-col) ── */}
       <div className="grid grid-cols-2 gap-3">
         {stage.primaryPhrases.map((phrase) => (
           <ActionCard key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
         ))}
       </div>
 
-      {/* ── Other Useful (accordion pills) ── */}
-      {stage.secondaryPhrases.length > 0 && (
-        <section className="mt-5">
-          <button
-            onClick={() => setShowSecondary((prev) => !prev)}
-            className="flex w-full items-center justify-between rounded-xl bg-stone-100 px-4 py-3 text-left transition active:scale-[0.99] dark:bg-stone-800"
-            aria-expanded={showSecondary}
-            aria-controls="secondary-phrases"
-          >
-            <span className="text-sm font-semibold text-stone-600 dark:text-stone-300">
-              Other useful
-            </span>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={`shrink-0 text-stone-400 transition-transform dark:text-stone-500 ${showSecondary ? "rotate-180" : ""}`}
-              aria-hidden
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-          {showSecondary && (
-            <div
-              id="secondary-phrases"
-              className="mt-2 flex flex-wrap gap-2"
-            >
-              {stage.secondaryPhrases.map((phrase) => (
-                <SecondaryPill key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+      {/* ── If you get stuck (collapsed accordion) ── */}
+      <StuckSection questions={stage.stuckQuestions} />
 
-      {/* ── Quick Helpers (always visible) ── */}
+      {/* ── Quick Helpers (always pinned) ── */}
       <section className="mt-5">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
           Quick helpers
         </p>
         <div className="flex flex-wrap gap-2">
           {flowUtilityPhrases.map((phrase) => (
-            <UtilityPill key={phrase.spanish} phrase={phrase} />
+            <HelperPill key={phrase.spanish} phrase={phrase} />
           ))}
         </div>
       </section>

@@ -17,18 +17,31 @@ export interface IntentPhrases {
   formal: Phrase[]
 }
 
+export interface StuckReply {
+  spanish: string
+  pronunciation: string
+}
+
+export interface StuckQuestion {
+  question: string
+  questionEnglish: string
+  replies: StuckReply[]
+}
+
 export interface FlowStage {
   key: string
   name: string
   subtitle: string
   primaryPhrases: Phrase[]
-  secondaryPhrases: Phrase[]
+  stuckQuestions: StuckQuestion[]
 }
 
 export const flowUtilityPhrases: Phrase[] = [
   { spanish: "Mas despacio, por favor.", english: "Slower, please.", pronunciation: "mahs dehs-PAH-see-oh, por fah-VOR" },
   { spanish: "No hablo mucho espanol.", english: "I don't speak much Spanish.", pronunciation: "noh AH-bloh MOO-choh ehs-pah-NYOL" },
   { spanish: "Un momento, por favor.", english: "One moment, please.", pronunciation: "oon moh-MEHN-toh, por fah-VOR" },
+  { spanish: "Perdon.", english: "Sorry / Pardon.", pronunciation: "pehr-DOHN" },
+  { spanish: "Gracias.", english: "Thank you.", pronunciation: "GRAH-see-ahs" },
 ]
 
 export interface Scenario {
@@ -400,32 +413,60 @@ export const scenarios: Scenario[] = [
         subtitle: "You just walked in",
         primaryPhrases: [
           { spanish: "Mesa para dos, por favor.", english: "Table for two, please.", pronunciation: "MEH-sah PAH-rah dohs, por fah-VOR" },
-          { spanish: "Para comer aqui.", english: "To eat here.", pronunciation: "PAH-rah koh-MEHR ah-KEE" },
+          { spanish: "Somos dos.", english: "We are two.", pronunciation: "SOH-mohs dohs" },
+          { spanish: "Para comer aqui.", english: "Dine in.", pronunciation: "PAH-rah koh-MEHR ah-KEE" },
+          { spanish: "Para llevar.", english: "To go.", pronunciation: "PAH-rah yeh-VAR" },
           { spanish: "Adentro, por favor.", english: "Inside, please.", pronunciation: "ah-DEHN-troh, por fah-VOR" },
-          { spanish: "Afuera esta bien.", english: "Outside is fine.", pronunciation: "ah-FWEH-rah ehs-TAH bee-EHN" },
-          { spanish: "Somos dos.", english: "There are two of us.", pronunciation: "SOH-mohs dohs" },
+          { spanish: "Afuera, por favor.", english: "Outside, please.", pronunciation: "ah-FWEH-rah, por fah-VOR" },
+          { spanish: "Cuanto tiempo de espera?", english: "How long is the wait?", pronunciation: "KWAHN-toh tee-EHM-poh deh ehs-PEH-rah" },
+          { spanish: "Esta bien, gracias.", english: "That's fine, thanks.", pronunciation: "ehs-TAH bee-EHN, GRAH-see-ahs" },
           { spanish: "Podemos sentarnos aqui?", english: "Can we sit here?", pronunciation: "poh-DEH-mohs sehn-TAR-nohs ah-KEE" },
-        ],
-        secondaryPhrases: [
-          { spanish: "Mesa para ___, por favor.", english: "Table for ___, please.", pronunciation: "MEH-sah PAH-rah ___, por fah-VOR", isTemplate: true },
           { spanish: "Estamos esperando a alguien mas.", english: "We're waiting for someone else.", pronunciation: "ehs-TAH-mohs ehs-peh-RAHN-doh ah AHL-gee-ehn mahs" },
+        ],
+        stuckQuestions: [
+          { question: "Cuantos son?", questionEnglish: "How many are you?", replies: [
+            { spanish: "Somos dos.", pronunciation: "SOH-mohs dohs" },
+            { spanish: "Somos tres.", pronunciation: "SOH-mohs trehs" },
+          ]},
+          { question: "Para aqui o para llevar?", questionEnglish: "Dine in or to go?", replies: [
+            { spanish: "Para aqui.", pronunciation: "PAH-rah ah-KEE" },
+            { spanish: "Para llevar.", pronunciation: "PAH-rah yeh-VAR" },
+          ]},
+          { question: "Adentro o afuera?", questionEnglish: "Inside or outside?", replies: [
+            { spanish: "Adentro.", pronunciation: "ah-DEHN-troh" },
+            { spanish: "Afuera.", pronunciation: "ah-FWEH-rah" },
+          ]},
         ],
       },
       {
         key: "drinks",
         name: "Drinks",
-        subtitle: "They ask for your drink order",
+        subtitle: "They ask what you want to drink",
         primaryPhrases: [
-          { spanish: "Agua natural, por favor.", english: "Still water, please.", pronunciation: "AH-gwah nah-too-RAHL, por fah-VOR" },
-          { spanish: "Agua mineral, por favor.", english: "Sparkling water, please.", pronunciation: "AH-gwah mee-neh-RAHL, por fah-VOR" },
-          { spanish: "Una cerveza, por favor.", english: "A beer, please.", pronunciation: "OO-nah ser-VEH-sah, por fah-VOR" },
-          { spanish: "Un refresco, por favor.", english: "A soda, please.", pronunciation: "oon reh-FREHS-koh, por fah-VOR" },
-          { spanish: "Sin hielo, por favor.", english: "No ice, please.", pronunciation: "seen YEH-loh, por fah-VOR" },
-          { spanish: "Todavia no.", english: "Not yet.", pronunciation: "toh-dah-VEE-ah noh" },
-        ],
-        secondaryPhrases: [
-          { spanish: "Solo agua, gracias.", english: "Just water, thanks.", pronunciation: "SOH-loh AH-gwah, GRAH-see-ahs" },
           { spanish: "Dos cervezas, por favor.", english: "Two beers, please.", pronunciation: "dohs ser-VEH-sahs, por fah-VOR" },
+          { spanish: "Una chela, por favor.", english: "A beer, please.", pronunciation: "OO-nah CHEH-lah, por fah-VOR" },
+          { spanish: "Una michelada, por favor.", english: "A michelada, please.", pronunciation: "OO-nah mee-cheh-LAH-dah, por fah-VOR" },
+          { spanish: "Un mezcal, por favor.", english: "A mezcal, please.", pronunciation: "oon mehs-KAHL, por fah-VOR" },
+          { spanish: "Una margarita, por favor.", english: "A margarita, please.", pronunciation: "OO-nah mar-gah-REE-tah, por fah-VOR" },
+          { spanish: "Una copa de vino tinto, por favor.", english: "A glass of red wine, please.", pronunciation: "OO-nah KOH-pah deh VEE-noh TEEN-toh, por fah-VOR" },
+          { spanish: "Una copa de vino blanco, por favor.", english: "A glass of white wine, please.", pronunciation: "OO-nah KOH-pah deh VEE-noh BLAHN-koh, por fah-VOR" },
+          { spanish: "Tienen carta de cocteles?", english: "Do you have a cocktail menu?", pronunciation: "tee-EH-nen KAR-tah deh kok-TEH-lehs" },
+          { spanish: "Otra ronda, por favor.", english: "Another round, please.", pronunciation: "OH-trah ROHN-dah, por fah-VOR" },
+          { spanish: "Agua mineral / natural, por favor.", english: "Sparkling / still water, please.", pronunciation: "AH-gwah mee-neh-RAHL / nah-too-RAHL, por fah-VOR" },
+        ],
+        stuckQuestions: [
+          { question: "Con hielo?", questionEnglish: "With ice?", replies: [
+            { spanish: "Con hielo.", pronunciation: "kohn YEH-loh" },
+            { spanish: "Sin hielo.", pronunciation: "seen YEH-loh" },
+          ]},
+          { question: "Algo mas?", questionEnglish: "Anything else?", replies: [
+            { spanish: "Por ahora no, gracias.", pronunciation: "por ah-OH-rah noh, GRAH-see-ahs" },
+            { spanish: "Si, otra mas.", pronunciation: "see, OH-trah mahs" },
+          ]},
+          { question: "De que marca?", questionEnglish: "Which brand?", replies: [
+            { spanish: "La que tenga.", pronunciation: "lah keh TEHN-gah" },
+            { spanish: "La que recomiende.", pronunciation: "lah keh reh-koh-mee-EHN-deh" },
+          ]},
         ],
       },
       {
@@ -433,18 +474,31 @@ export const scenarios: Scenario[] = [
         name: "Food Order",
         subtitle: "Time to order your food",
         primaryPhrases: [
+          { spanish: "Para mi, ___, por favor.", english: "For me, ___, please.", pronunciation: "PAH-rah mee, ___, por fah-VOR", isTemplate: true },
+          { spanish: "Para ella, ___, por favor.", english: "For her, ___, please.", pronunciation: "PAH-rah EH-yah, ___, por fah-VOR", isTemplate: true },
           { spanish: "Esto, por favor.", english: "This one, please. (point)", pronunciation: "EHS-toh, por fah-VOR" },
+          { spanish: "Que recomiendas?", english: "What do you recommend?", pronunciation: "keh reh-koh-mee-EHN-dahs" },
+          { spanish: "Cual es el mas popular?", english: "Which is most popular?", pronunciation: "kwahl ehs el mahs poh-poo-LAR" },
           { spanish: "Sin picante, por favor.", english: "No spice, please.", pronunciation: "seen pee-KAHN-teh, por fah-VOR" },
           { spanish: "Poco picante.", english: "A little spicy.", pronunciation: "POH-koh pee-KAHN-teh" },
-          { spanish: "Eso es todo.", english: "That's all.", pronunciation: "EH-soh ehs TOH-doh" },
           { spanish: "Para compartir.", english: "To share.", pronunciation: "PAH-rah kohm-par-TEER" },
           { spanish: "Lo mismo, por favor.", english: "The same, please.", pronunciation: "loh MEES-moh, por fah-VOR" },
+          { spanish: "Eso es todo, gracias.", english: "That's all, thanks.", pronunciation: "EH-soh ehs TOH-doh, GRAH-see-ahs" },
         ],
-        secondaryPhrases: [
-          { spanish: "Yo quiero esto.", english: "I want this one. (point)", pronunciation: "yoh kee-EH-roh EHS-toh" },
-          { spanish: "Solo esto, gracias.", english: "Just this, thanks.", pronunciation: "SOH-loh EHS-toh, GRAH-see-ahs" },
-          { spanish: "Sin cebolla, por favor.", english: "No onion, please.", pronunciation: "seen seh-BOH-yah, por fah-VOR" },
-          { spanish: "Sin ___, por favor.", english: "Without ___, please.", pronunciation: "seen ___, por fah-VOR", isTemplate: true },
+        stuckQuestions: [
+          { question: "Picante?", questionEnglish: "Spicy?", replies: [
+            { spanish: "Sin picante.", pronunciation: "seen pee-KAHN-teh" },
+            { spanish: "Poco picante.", pronunciation: "POH-koh pee-KAHN-teh" },
+            { spanish: "Si, picante.", pronunciation: "see, pee-KAHN-teh" },
+          ]},
+          { question: "Algo mas?", questionEnglish: "Anything else?", replies: [
+            { spanish: "Eso es todo.", pronunciation: "EH-soh ehs TOH-doh" },
+            { spanish: "Si, tambien...", pronunciation: "see, tahm-bee-EHN..." },
+          ]},
+          { question: "Con todo?", questionEnglish: "With everything?", replies: [
+            { spanish: "Si, con todo.", pronunciation: "see, kohn TOH-doh" },
+            { spanish: "Sin cebolla.", pronunciation: "seen seh-BOH-yah" },
+          ]},
         ],
       },
       {
@@ -453,15 +507,25 @@ export const scenarios: Scenario[] = [
         subtitle: "You need something while eating",
         primaryPhrases: [
           { spanish: "Disculpe.", english: "Excuse me.", pronunciation: "dees-KOOL-peh" },
-          { spanish: "Mas agua, por favor.", english: "More water, please.", pronunciation: "mahs AH-gwah, por fah-VOR" },
+          { spanish: "Otra ronda, por favor.", english: "Another round, please.", pronunciation: "OH-trah ROHN-dah, por fah-VOR" },
           { spanish: "Mas tortillas, por favor.", english: "More tortillas, please.", pronunciation: "mahs tor-TEE-yahs, por fah-VOR" },
-          { spanish: "Salsa, por favor.", english: "Salsa, please.", pronunciation: "SAHL-sah, por fah-VOR" },
-          { spanish: "Donde esta el bano?", english: "Where is the bathroom?", pronunciation: "DOHN-deh ehs-TAH el BAH-nyoh" },
+          { spanish: "Mas salsa, por favor.", english: "More salsa, please.", pronunciation: "mahs SAHL-sah, por fah-VOR" },
+          { spanish: "Mas agua, por favor.", english: "More water, please.", pronunciation: "mahs AH-gwah, por fah-VOR" },
+          { spanish: "La cuenta cuando puedas, por favor.", english: "The check when you can, please.", pronunciation: "lah KWEHN-tah KWAHN-doh PWEH-dahs, por fah-VOR" },
           { spanish: "Esta muy bueno.", english: "It's very good.", pronunciation: "ehs-TAH mooy BWEH-noh" },
+          { spanish: "Me trae ___, por favor?", english: "Can you bring me ___, please?", pronunciation: "meh TRAH-eh ___, por fah-VOR", isTemplate: true },
+          { spanish: "Donde esta el bano?", english: "Where is the bathroom?", pronunciation: "DOHN-deh ehs-TAH el BAH-nyoh" },
+          { spanish: "Perdon, no entiendo.", english: "Sorry, I don't understand.", pronunciation: "pehr-DOHN, noh ehn-tee-EHN-doh" },
         ],
-        secondaryPhrases: [
-          { spanish: "Otra cerveza, por favor.", english: "Another beer, please.", pronunciation: "OH-trah ser-VEH-sah, por fah-VOR" },
-          { spanish: "Servilletas, por favor.", english: "Napkins, please.", pronunciation: "ser-vee-YEH-tahs, por fah-VOR" },
+        stuckQuestions: [
+          { question: "Todo bien?", questionEnglish: "Everything okay?", replies: [
+            { spanish: "Si, todo bien, gracias.", pronunciation: "see, TOH-doh bee-EHN, GRAH-see-ahs" },
+            { spanish: "Mas salsa, por favor.", pronunciation: "mahs SAHL-sah, por fah-VOR" },
+          ]},
+          { question: "Desean algo mas?", questionEnglish: "Would you like anything else?", replies: [
+            { spanish: "No, gracias.", pronunciation: "noh, GRAH-see-ahs" },
+            { spanish: "Mas agua, por favor.", pronunciation: "mahs AH-gwah, por fah-VOR" },
+          ]},
         ],
       },
       {
@@ -469,14 +533,26 @@ export const scenarios: Scenario[] = [
         name: "Finished",
         subtitle: "You're done eating",
         primaryPhrases: [
-          { spanish: "Estuvo delicioso.", english: "It was delicious.", pronunciation: "ehs-TOO-voh deh-lee-see-OH-soh" },
-          { spanish: "Ya terminamos.", english: "We're done.", pronunciation: "yah ter-mee-NAH-mohs" },
+          { spanish: "Ya terminamos, gracias.", english: "We're done, thanks.", pronunciation: "yah ter-mee-NAH-mohs, GRAH-see-ahs" },
+          { spanish: "Puede retirar los platos, por favor?", english: "Can you clear the plates, please?", pronunciation: "PWEH-deh reh-tee-RAR lohs PLAH-tohs, por fah-VOR" },
           { spanish: "Estoy lleno.", english: "I'm full.", pronunciation: "ehs-TOY YEH-noh" },
           { spanish: "Nada mas, gracias.", english: "Nothing else, thanks.", pronunciation: "NAH-dah mahs, GRAH-see-ahs" },
+          { spanish: "Estuvo delicioso.", english: "It was delicious.", pronunciation: "ehs-TOO-voh deh-lee-see-OH-soh" },
+          { spanish: "Postre, por favor?", english: "Dessert, please?", pronunciation: "POHS-treh, por fah-VOR" },
+          { spanish: "Solo cafe, por favor.", english: "Just coffee, please.", pronunciation: "SOH-loh kah-FEH, por fah-VOR" },
+          { spanish: "La cuenta, por favor.", english: "The check, please.", pronunciation: "lah KWEHN-tah, por fah-VOR" },
+          { spanish: "Para llevar, por favor.", english: "To go, please.", pronunciation: "PAH-rah yeh-VAR, por fah-VOR" },
+          { spanish: "Una caja, por favor.", english: "A box, please.", pronunciation: "OO-nah KAH-hah, por fah-VOR" },
         ],
-        secondaryPhrases: [
-          { spanish: "Ya termine.", english: "I'm done.", pronunciation: "yah ter-mee-NEH" },
-          { spanish: "Puede llevarse los platos.", english: "You can take the plates.", pronunciation: "PWEH-deh yeh-VAR-seh lohs PLAH-tohs" },
+        stuckQuestions: [
+          { question: "Desean algo mas?", questionEnglish: "Would you like anything else?", replies: [
+            { spanish: "Nada mas, gracias.", pronunciation: "NAH-dah mahs, GRAH-see-ahs" },
+            { spanish: "Un cafe, por favor.", pronunciation: "oon kah-FEH, por fah-VOR" },
+          ]},
+          { question: "Algun postre?", questionEnglish: "Any dessert?", replies: [
+            { spanish: "No, gracias.", pronunciation: "noh, GRAH-see-ahs" },
+            { spanish: "Si, que tienen?", pronunciation: "see, keh tee-EH-nen" },
+          ]},
         ],
       },
       {
@@ -486,13 +562,24 @@ export const scenarios: Scenario[] = [
         primaryPhrases: [
           { spanish: "La cuenta, por favor.", english: "The check, please.", pronunciation: "lah KWEHN-tah, por fah-VOR" },
           { spanish: "Aceptan tarjeta?", english: "Do you accept cards?", pronunciation: "ah-SEHP-tahn tar-HEH-tah" },
+          { spanish: "Con tarjeta.", english: "By card.", pronunciation: "kohn tar-HEH-tah" },
           { spanish: "En efectivo.", english: "Cash.", pronunciation: "en eh-fehk-TEE-voh" },
+          { spanish: "Me trae la terminal, por favor?", english: "Bring the card machine, please.", pronunciation: "meh TRAH-eh lah ter-mee-NAHL, por fah-VOR" },
           { spanish: "Todo junto.", english: "All together.", pronunciation: "TOH-doh HOON-toh" },
-          { spanish: "Cuentas separadas, por favor.", english: "Separate checks.", pronunciation: "KWEHN-tahs seh-pah-RAH-dahs, por fah-VOR" },
+          { spanish: "Cuentas separadas, por favor.", english: "Separate checks, please.", pronunciation: "KWEHN-tahs seh-pah-RAH-dahs, por fah-VOR" },
+          { spanish: "Incluye propina?", english: "Is tip included?", pronunciation: "een-KLOO-yeh proh-PEE-nah" },
           { spanish: "Quedese con el cambio.", english: "Keep the change.", pronunciation: "KEH-deh-seh kohn el KAHM-bee-oh" },
+          { spanish: "Puedo pagar con el telefono?", english: "Can I pay with my phone?", pronunciation: "PWEH-doh pah-GAR kohn el teh-LEH-foh-noh" },
         ],
-        secondaryPhrases: [
-          { spanish: "Esta incluida la propina?", english: "Is the tip included?", pronunciation: "ehs-TAH een-kloo-EE-dah lah proh-PEE-nah" },
+        stuckQuestions: [
+          { question: "Efectivo o tarjeta?", questionEnglish: "Cash or card?", replies: [
+            { spanish: "Tarjeta.", pronunciation: "tar-HEH-tah" },
+            { spanish: "Efectivo.", pronunciation: "eh-fehk-TEE-voh" },
+          ]},
+          { question: "Todo junto?", questionEnglish: "All together?", replies: [
+            { spanish: "Si, todo junto.", pronunciation: "see, TOH-doh HOON-toh" },
+            { spanish: "Separado, por favor.", pronunciation: "seh-pah-RAH-doh, por fah-VOR" },
+          ]},
         ],
       },
       {
@@ -503,12 +590,15 @@ export const scenarios: Scenario[] = [
           { spanish: "Muchas gracias.", english: "Thank you very much.", pronunciation: "MOO-chahs GRAH-see-ahs" },
           { spanish: "Estuvo muy bien.", english: "Everything was great.", pronunciation: "ehs-TOO-voh mooy bee-EHN" },
           { spanish: "Hasta luego.", english: "See you later.", pronunciation: "AHS-tah LWEH-goh" },
-          { spanish: "Muy amable.", english: "Very kind.", pronunciation: "mooy ah-MAH-bleh" },
-        ],
-        secondaryPhrases: [
           { spanish: "Buenas noches.", english: "Good night.", pronunciation: "BWEH-nahs NOH-chehs" },
-          { spanish: "Buenas tardes.", english: "Good afternoon.", pronunciation: "BWEH-nahs TAR-dehs" },
+          { spanish: "Que tenga buena noche.", english: "Have a good night.", pronunciation: "keh TEHN-gah BWEH-nah NOH-cheh" },
+          { spanish: "Gracias por todo.", english: "Thanks for everything.", pronunciation: "GRAH-see-ahs por TOH-doh" },
+          { spanish: "Nos vemos.", english: "See you.", pronunciation: "nohs VEH-mohs" },
+          { spanish: "Muy amable.", english: "Very kind.", pronunciation: "mooy ah-MAH-bleh" },
+          { spanish: "Excelente servicio.", english: "Excellent service.", pronunciation: "ehk-seh-LEHN-teh ser-VEE-see-oh" },
+          { spanish: "Regresamos pronto.", english: "We'll be back soon.", pronunciation: "reh-greh-SAH-mohs PROHN-toh" },
         ],
+        stuckQuestions: [],
       },
     ],
   },
