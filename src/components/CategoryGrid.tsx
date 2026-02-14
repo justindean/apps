@@ -1,16 +1,22 @@
-import type { Category } from '../data/phrases'
-import { colorMap } from '../utils/colors'
+import { colorMap } from "../utils/colors";
+
+interface CategoryItem {
+  key: string;
+  name: string;
+  emoji: string;
+  color: string;
+}
 
 interface CategoryGridProps {
-  categories: Category[]
-  onSelect: (key: string) => void
+  categories: CategoryItem[];
+  onSelect: (key: string) => void;
 }
 
 export function CategoryGrid({ categories, onSelect }: CategoryGridProps) {
   return (
-    <section className="mt-6 grid grid-cols-2 gap-3">
+    <section className="mt-2 grid grid-cols-2 gap-3">
       {categories.map((cat) => {
-        const colors = colorMap[cat.color] ?? colorMap.slate
+        const colors = colorMap[cat.color] ?? colorMap.slate;
         return (
           <button
             key={cat.key}
@@ -21,12 +27,9 @@ export function CategoryGrid({ categories, onSelect }: CategoryGridProps) {
               {cat.emoji}
             </span>
             <span className="text-base leading-tight">{cat.name}</span>
-            <span className={`mt-0.5 text-[11px] font-normal ${colors.muted}`}>
-              {cat.subContexts.length} topics
-            </span>
           </button>
-        )
+        );
       })}
     </section>
-  )
+  );
 }
