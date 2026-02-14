@@ -62,15 +62,15 @@ function App() {
     <div
       className={`min-h-dvh transition-colors ${
         hasFlow
-          ? "bg-[#FFFAF7] text-stone-900 dark:bg-stone-950 dark:text-stone-100"
+          ? "bg-warm-50 text-stone-900 dark:bg-warm-950 dark:text-stone-100"
           : "bg-slate-50 text-slate-900 dark:bg-slate-925 dark:text-slate-100"
       }`}
     >
       {/* ── Header ── */}
       <header
-        className={`sticky top-0 z-30 border-b backdrop-blur-md ${
+        className={`sticky top-0 z-30 border-b backdrop-blur-xl ${
           hasFlow
-            ? "border-stone-200/60 bg-[#FFFAF7]/90 dark:border-stone-800/60 dark:bg-stone-950/90"
+            ? "border-stone-200/40 bg-warm-50/85 dark:border-stone-800/40 dark:bg-warm-950/85"
             : "border-slate-200/60 bg-slate-50/90 dark:border-slate-800/60 dark:bg-slate-925/90"
         }`}
       >
@@ -167,7 +167,7 @@ function App() {
         aria-live="polite"
         className={`fixed left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm font-medium shadow-lg transition-all duration-200 ${
           hasFlow
-            ? "bottom-24 bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
+            ? "bottom-24 bg-stone-900 text-white shadow-glass dark:bg-stone-100 dark:text-stone-900"
             : "bottom-6 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
         } ${
           toast.visible

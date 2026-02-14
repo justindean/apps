@@ -11,10 +11,10 @@ export function PhraseCard({ phrase, color, onCopy }: PhraseCardProps) {
   const colors = colorMap[color] ?? colorMap.slate
 
   return (
-    <article className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+    <article className="rounded-[18px] bg-white p-4 shadow-card ring-1 ring-slate-200/70 transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-0 active:shadow-card-press dark:bg-slate-800 dark:ring-slate-700/50">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-lg font-semibold leading-snug text-slate-900 dark:text-slate-100">
+          <p className="text-lg font-bold leading-snug tracking-[0.01em] text-slate-900 dark:text-slate-100">
             {phrase.spanish}
             {phrase.isTemplate ? (
               <span className="ml-2 inline-block rounded-md bg-slate-100 px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:bg-slate-700 dark:text-slate-400">
@@ -22,22 +22,21 @@ export function PhraseCard({ phrase, color, onCopy }: PhraseCardProps) {
               </span>
             ) : null}
           </p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
             {phrase.english}
           </p>
-          <p className="mt-1 text-xs font-mono leading-relaxed text-slate-400 dark:text-slate-500">
+          <p className="mt-1 font-mono text-xs leading-relaxed tracking-tight text-slate-300 dark:text-slate-600">
             {phrase.pronunciation}
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-1.5">
           <button
             onClick={() => onCopy(phrase.spanish)}
-            className={`rounded-lg px-3 py-2 text-xs font-medium transition active:scale-[0.95] ${colors.accent}`}
+            className={`rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150 active:scale-[0.95] ${colors.accent}`}
             aria-label={`Copy: ${phrase.spanish}`}
           >
             Copy
           </button>
-          {/* Future-ready: voice playback hook */}
           <button
             disabled
             className="rounded-lg px-3 py-2 text-xs font-medium text-slate-300 ring-1 ring-slate-200 dark:text-slate-600 dark:ring-slate-700 cursor-not-allowed"
