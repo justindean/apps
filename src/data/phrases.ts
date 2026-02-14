@@ -420,8 +420,8 @@ export const scenarios: Scenario[] = [
         subtitle: "You just walked in",
         primaryPhrasesByTone: {
           street: [
-            { spanish: "Mesa para dos, por favor.", english: "Table for two, please.", pronunciation: "MEH-sah PAH-rah dohs, por fah-VOR", variables: [{ label: "Personas", placeholder: "dos", options: ["uno", "dos", "tres", "cuatro", "cinco"] }] },
-            { spanish: "Somos dos.", english: "There are two of us.", pronunciation: "SOH-mohs dohs", variables: [{ label: "Personas", placeholder: "dos", options: ["dos", "tres", "cuatro", "cinco"] }] },
+            { spanish: "Mesa para dos, por favor.", english: "Table for two, please.", pronunciation: "MEH-sah PAH-rah dohs, por fah-VOR", variables: [{ label: "Personas", placeholder: "dos", options: ["uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho"] }] },
+            { spanish: "Somos dos.", english: "There are two of us.", pronunciation: "SOH-mohs dohs", variables: [{ label: "Personas", placeholder: "dos", options: ["dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho"] }] },
             { spanish: "Para comer aqui.", english: "To eat here.", pronunciation: "PAH-rah koh-MEHR ah-KEE" },
             { spanish: "Adentro, por favor.", english: "Inside, please.", pronunciation: "ah-DEHN-troh, por fah-VOR" },
             { spanish: "Afuera esta bien.", english: "Outside is fine.", pronunciation: "ah-FWEH-rah ehs-TAH bee-EHN" },
@@ -432,8 +432,8 @@ export const scenarios: Scenario[] = [
             { spanish: "Tienen menu en ingles?", english: "Do you have an English menu?", pronunciation: "tee-EH-nen meh-NOO en een-GLEHS" },
           ],
           neutral: [
-            { spanish: "Mesa para dos, por favor.", english: "Table for two, please.", pronunciation: "MEH-sah PAH-rah dohs, por fah-VOR", variables: [{ label: "Personas", placeholder: "dos", options: ["uno", "dos", "tres", "cuatro", "cinco"] }] },
-            { spanish: "Somos dos.", english: "There are two of us.", pronunciation: "SOH-mohs dohs", variables: [{ label: "Personas", placeholder: "dos", options: ["dos", "tres", "cuatro", "cinco"] }] },
+            { spanish: "Mesa para dos, por favor.", english: "Table for two, please.", pronunciation: "MEH-sah PAH-rah dohs, por fah-VOR", variables: [{ label: "Personas", placeholder: "dos", options: ["uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho"] }] },
+            { spanish: "Somos dos.", english: "There are two of us.", pronunciation: "SOH-mohs dohs", variables: [{ label: "Personas", placeholder: "dos", options: ["dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho"] }] },
             { spanish: "Para comer aqui.", english: "To eat here.", pronunciation: "PAH-rah koh-MEHR ah-KEE" },
             { spanish: "Adentro, por favor.", english: "Inside, please.", pronunciation: "ah-DEHN-troh, por fah-VOR" },
             { spanish: "Afuera esta bien.", english: "Outside is fine.", pronunciation: "ah-FWEH-rah ehs-TAH bee-EHN" },
@@ -444,8 +444,8 @@ export const scenarios: Scenario[] = [
             { spanish: "Tienen menu en ingles?", english: "Do you have an English menu?", pronunciation: "tee-EH-nen meh-NOO en een-GLEHS" },
           ],
           formal: [
-            { spanish: "Nos podria dar una mesa para dos, por favor?", english: "Could you give us a table for two?", pronunciation: "nohs poh-DREE-ah dar OO-nah MEH-sah PAH-rah dohs, por fah-VOR", variables: [{ label: "Personas", placeholder: "dos", options: ["uno", "dos", "tres", "cuatro", "cinco"] }] },
-            { spanish: "Somos dos.", english: "There are two of us.", pronunciation: "SOH-mohs dohs", variables: [{ label: "Personas", placeholder: "dos", options: ["dos", "tres", "cuatro", "cinco"] }] },
+            { spanish: "Nos podria dar una mesa para dos, por favor?", english: "Could you give us a table for two?", pronunciation: "nohs poh-DREE-ah dar OO-nah MEH-sah PAH-rah dohs, por fah-VOR", variables: [{ label: "Personas", placeholder: "dos", options: ["uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho"] }] },
+            { spanish: "Somos dos.", english: "There are two of us.", pronunciation: "SOH-mohs dohs", variables: [{ label: "Personas", placeholder: "dos", options: ["dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho"] }] },
             { spanish: "Para comer aqui, por favor.", english: "To eat here, please.", pronunciation: "PAH-rah koh-MEHR ah-KEE, por fah-VOR" },
             { spanish: "Adentro, por favor.", english: "Inside, please.", pronunciation: "ah-DEHN-troh, por fah-VOR" },
             { spanish: "Afuera esta bien.", english: "Outside is fine.", pronunciation: "ah-FWEH-rah ehs-TAH bee-EHN" },
@@ -477,7 +477,7 @@ export const scenarios: Scenario[] = [
         subtitle: "They ask what you want to drink",
         primaryPhrasesByTone: {
           street: [
-            { spanish: "Dos cervezas, por favor.", english: "Two beers, please.", pronunciation: "dohs ser-VEH-sahs, por fah-VOR", variables: [{ label: "Cantidad", placeholder: "Dos", options: ["Una", "Dos", "Tres", "Cuatro"] }] },
+            { spanish: "Dos cervezas, por favor.", english: "Two beers, please.", pronunciation: "dohs ser-VEH-sahs, por fah-VOR", variables: [{ label: "Cantidad", placeholder: "Dos", options: ["Una", "Dos", "Tres", "Cuatro", "Cinco", "Seis", "Siete", "Ocho"] }] },
             { spanish: "Una cerveza para mi.", english: "A beer for me.", pronunciation: "OO-nah ser-VEH-sah PAH-rah mee" },
             { spanish: "Una michelada, por favor.", english: "A michelada, please.", pronunciation: "OO-nah mee-cheh-LAH-dah, por fah-VOR" },
             { spanish: "Un mezcal, por favor.", english: "A mezcal, please.", pronunciation: "oon mehs-KAHL, por fah-VOR" },
@@ -489,7 +489,7 @@ export const scenarios: Scenario[] = [
             { spanish: "Agua natural, por favor.", english: "Still water, please.", pronunciation: "AH-gwah nah-too-RAHL, por fah-VOR" },
           ],
           neutral: [
-            { spanish: "Dos cervezas, por favor.", english: "Two beers, please.", pronunciation: "dohs ser-VEH-sahs, por fah-VOR", variables: [{ label: "Cantidad", placeholder: "Dos", options: ["Una", "Dos", "Tres", "Cuatro"] }] },
+            { spanish: "Dos cervezas, por favor.", english: "Two beers, please.", pronunciation: "dohs ser-VEH-sahs, por fah-VOR", variables: [{ label: "Cantidad", placeholder: "Dos", options: ["Una", "Dos", "Tres", "Cuatro", "Cinco", "Seis", "Siete", "Ocho"] }] },
             { spanish: "Una cerveza, por favor.", english: "A beer, please.", pronunciation: "OO-nah ser-VEH-sah, por fah-VOR" },
             { spanish: "Una michelada, por favor.", english: "A michelada, please.", pronunciation: "OO-nah mee-cheh-LAH-dah, por fah-VOR" },
             { spanish: "Un mezcal, por favor.", english: "A mezcal, please.", pronunciation: "oon mehs-KAHL, por fah-VOR" },
@@ -501,7 +501,7 @@ export const scenarios: Scenario[] = [
             { spanish: "Agua natural, por favor.", english: "Still water, please.", pronunciation: "AH-gwah nah-too-RAHL, por fah-VOR" },
           ],
           formal: [
-            { spanish: "Nos podria traer dos cervezas, por favor?", english: "Could you bring us two beers?", pronunciation: "nohs poh-DREE-ah trah-EHR dohs ser-VEH-sahs, por fah-VOR", variables: [{ label: "Cantidad", placeholder: "dos", options: ["una", "dos", "tres", "cuatro"] }] },
+            { spanish: "Nos podria traer dos cervezas, por favor?", english: "Could you bring us two beers?", pronunciation: "nohs poh-DREE-ah trah-EHR dohs ser-VEH-sahs, por fah-VOR", variables: [{ label: "Cantidad", placeholder: "dos", options: ["una", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho"] }] },
             { spanish: "Me podria traer una cerveza, por favor?", english: "Could you bring me a beer?", pronunciation: "meh poh-DREE-ah trah-EHR OO-nah ser-VEH-sah, por fah-VOR" },
             { spanish: "Me podria traer una michelada, por favor?", english: "Could you bring me a michelada?", pronunciation: "meh poh-DREE-ah trah-EHR OO-nah mee-cheh-LAH-dah, por fah-VOR" },
             { spanish: "Me podria traer un mezcal, por favor?", english: "Could you bring me a mezcal?", pronunciation: "meh poh-DREE-ah trah-EHR oon mehs-KAHL, por fah-VOR" },

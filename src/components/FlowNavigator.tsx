@@ -153,9 +153,6 @@ function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) =>
         <div className="flex items-center gap-1.5 border-t border-stone-100 px-3.5 py-2 dark:border-stone-700/60">
           {phrase.variables.map((v) => (
             <div key={v.label} className="flex items-center gap-1 overflow-x-auto">
-              <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-stone-400 dark:text-stone-500">
-                {v.label}:
-              </span>
               {v.options.map((opt) => {
                 const isActive =
                   (selections[v.label] ?? v.placeholder).toLowerCase() === opt.toLowerCase();
