@@ -86,6 +86,14 @@ export const colorMap: Record<string, {
     badgeActive: 'bg-lime-600 text-white ring-lime-700 dark:bg-lime-500 dark:text-lime-950 dark:ring-lime-400',
     accent: 'bg-lime-600 text-white dark:bg-lime-500 dark:text-lime-950',
   },
+  stone: {
+    card: 'bg-stone-50 text-stone-950 dark:bg-stone-800 dark:text-stone-100',
+    ring: 'ring-stone-200 dark:ring-stone-700',
+    muted: 'text-stone-500 dark:text-stone-400',
+    badge: 'bg-stone-100 text-stone-700 ring-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:ring-stone-600',
+    badgeActive: 'bg-[#D94F2A] text-white ring-[#D94F2A] dark:bg-[#E8734F] dark:text-white dark:ring-[#E8734F]',
+    accent: 'bg-[#D94F2A] text-white dark:bg-[#E8734F] dark:text-white',
+  },
   slate: {
     card: 'bg-slate-50 text-slate-950 dark:bg-slate-800 dark:text-slate-100',
     ring: 'ring-slate-200 dark:ring-slate-700',
