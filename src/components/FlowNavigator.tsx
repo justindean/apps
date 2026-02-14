@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { FlowStage, Phrase } from "../data/phrases";
-import { PhraseCard } from "./PhraseCard";
+import { flowUtilityPhrases } from "../data/phrases";
 
 interface FlowNavigatorProps {
   stages: FlowStage[];
@@ -8,13 +8,127 @@ interface FlowNavigatorProps {
   onCopy: (text: string) => void;
 }
 
-export function FlowNavigator({ stages, color, onCopy }: FlowNavigatorProps) {
+function speakPhrase(phrase: Phrase) {
+  if ("speechSynthesis" in window) {
+    const u = new SpeechSynthesisUtterance(phrase.spanish);
+    u.lang = "es-MX";
+    u.rate = 0.85;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  }
+}
+
+/* ── Volume icon (inline SVG for zero deps) ── */
+function VolumeIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+    </svg>
+  );
+}
+
+/* ── Primary Action Card ── */
+function ActionCard({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
+  const handleTap = () => {
+    speakPhrase(phrase);
+  };
+
+  return (
+    <button
+      onClick={handleTap}
+      className="flex w-full flex-col items-start gap-1.5 rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.97] active:shadow-none dark:border-stone-700 dark:bg-stone-800"
+    >
+      <p className="text-base font-bold leading-tight text-stone-900 dark:text-stone-50">
+        {phrase.spanish}
+      </p>
+      <p className="text-xs leading-snug text-stone-500 dark:text-stone-400">
+        {phrase.english}
+      </p>
+      <p className="font-mono text-[10px] leading-snug text-stone-400 dark:text-stone-500">
+        {phrase.pronunciation}
+      </p>
+      <div className="mt-1 flex w-full items-center justify-between">
+        <span className="flex items-center gap-1 text-[11px] font-semibold text-[#D94F2A] dark:text-[#E8734F]">
+          <VolumeIcon size={12} />
+          Tap to speak
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onCopy(phrase.spanish);
+          }}
+          className="rounded-lg bg-stone-100 px-2 py-1 text-[10px] font-semibold text-stone-600 transition active:scale-95 dark:bg-stone-700 dark:text-stone-300"
+          aria-label={`Copy: ${phrase.spanish}`}
+        >
+          Copy
+        </button>
+      </div>
+    </button>
+  );
+}
+
+/* ── Secondary pill button ── */
+function SecondaryPill({ phrase, onCopy }: { phrase: Phrase; onCopy: (t: string) => void }) {
+  return (
+    <button
+      onClick={() => speakPhrase(phrase)}
+      className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-left transition active:scale-[0.97] dark:border-stone-700 dark:bg-stone-800"
+    >
+      <span className="text-xs font-medium text-stone-800 dark:text-stone-200">
+        {phrase.spanish}
+      </span>
+      <span className="text-[10px] text-stone-400 dark:text-stone-500">
+        {phrase.english}
+      </span>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onCopy(phrase.spanish);
+        }}
+        className="ml-auto shrink-0 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+        aria-label={`Copy: ${phrase.spanish}`}
+      >
+        Copy
+      </button>
+    </button>
+  );
+}
+
+/* ── Utility helper pill ── */
+function UtilityPill({ phrase }: { phrase: Phrase }) {
+  return (
+    <button
+      onClick={() => speakPhrase(phrase)}
+      className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1.5 text-left transition active:scale-[0.97] dark:bg-amber-900/20"
+    >
+      <VolumeIcon size={11} />
+      <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+        {phrase.spanish}
+      </span>
+      <span className="text-[10px] text-amber-600/70 dark:text-amber-400/60">
+        {phrase.english}
+      </span>
+    </button>
+  );
+}
+
+export function FlowNavigator({ stages, color: _color, onCopy }: FlowNavigatorProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showSecondary, setShowSecondary] = useState(false);
-  const heroRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
 
   const stage = stages[currentIndex];
-  const isFirst = currentIndex === 0;
   const isLast = currentIndex === stages.length - 1;
 
   const goTo = useCallback(
@@ -26,26 +140,16 @@ export function FlowNavigator({ stages, color, onCopy }: FlowNavigatorProps) {
     [stages.length],
   );
 
-  // Scroll hero into view on step change
   useEffect(() => {
-    heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [currentIndex]);
 
-  const speakPhrase = (phrase: Phrase) => {
-    if ("speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(phrase.spanish);
-      utterance.lang = "es-MX";
-      utterance.rate = 0.85;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
   return (
-    <div className="flex flex-col gap-0 pb-28">
+    <div className="flex flex-col gap-0 pb-24">
       {/* ── Progress Bar ── */}
       <nav
-        className="mb-5 flex items-center gap-0"
+        ref={topRef}
+        className="mb-4 flex items-center gap-0"
         aria-label="Conversation progress"
       >
         {stages.map((s, i) => {
@@ -98,7 +202,7 @@ export function FlowNavigator({ stages, color, onCopy }: FlowNavigatorProps) {
       </nav>
 
       {/* ── Step Header ── */}
-      <div ref={heroRef} className="mb-4">
+      <div className="mb-4">
         <p className="text-xs font-semibold uppercase tracking-widest text-[#D94F2A]">
           Step {currentIndex + 1} of {stages.length}
         </p>
@@ -110,92 +214,14 @@ export function FlowNavigator({ stages, color, onCopy }: FlowNavigatorProps) {
         </p>
       </div>
 
-      {/* ── Hero Phrase Card ── */}
-      <article className="rounded-2xl border border-[#D94F2A]/20 bg-gradient-to-br from-[#FDF6F3] to-[#FFF9F7] p-5 shadow-lg shadow-[#D94F2A]/5 dark:border-[#D94F2A]/30 dark:from-stone-800 dark:to-stone-800/80">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#D94F2A]/70">
-          Say this now
-        </p>
-        <p className="mt-2 text-2xl font-bold leading-snug text-stone-900 dark:text-stone-50">
-          {stage.primaryPhrase.spanish}
-        </p>
-        <p className="mt-1.5 text-base text-stone-600 dark:text-stone-300">
-          {stage.primaryPhrase.english}
-        </p>
-        <p className="mt-1 font-mono text-xs text-stone-400 dark:text-stone-500">
-          {stage.primaryPhrase.pronunciation}
-        </p>
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            onClick={() => speakPhrase(stage.primaryPhrase)}
-            className="flex items-center gap-1.5 rounded-xl bg-[#D94F2A] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.96]"
-            aria-label="Speak phrase aloud"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-            </svg>
-            Speak
-          </button>
-          <button
-            onClick={() => onCopy(stage.primaryPhrase.spanish)}
-            className="flex items-center gap-1.5 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.96] dark:bg-stone-100 dark:text-stone-900"
-            aria-label="Copy phrase"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-            </svg>
-            Copy
-          </button>
-        </div>
-      </article>
+      {/* ── Primary Action Grid (2-col) ── */}
+      <div className="grid grid-cols-2 gap-3">
+        {stage.primaryPhrases.map((phrase) => (
+          <ActionCard key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
+        ))}
+      </div>
 
-      {/* ── Expected Replies ── */}
-      {stage.expectedReplies.length > 0 && (
-        <section className="mt-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-            They might reply
-          </p>
-          <div className="flex flex-col gap-1.5">
-            {stage.expectedReplies.map((reply) => (
-              <div
-                key={reply.spanish}
-                className="rounded-xl bg-stone-100 px-4 py-2.5 dark:bg-stone-800"
-              >
-                <p className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                  {reply.spanish}
-                </p>
-                <p className="text-xs text-stone-400 dark:text-stone-500">
-                  {reply.english}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ── Secondary Phrases (accordion) ── */}
+      {/* ── Other Useful (accordion pills) ── */}
       {stage.secondaryPhrases.length > 0 && (
         <section className="mt-5">
           <button
@@ -205,7 +231,7 @@ export function FlowNavigator({ stages, color, onCopy }: FlowNavigatorProps) {
             aria-controls="secondary-phrases"
           >
             <span className="text-sm font-semibold text-stone-600 dark:text-stone-300">
-              Other useful phrases
+              Other useful
             </span>
             <svg
               width="16"
@@ -225,67 +251,43 @@ export function FlowNavigator({ stages, color, onCopy }: FlowNavigatorProps) {
           {showSecondary && (
             <div
               id="secondary-phrases"
-              className="mt-2 flex flex-col gap-2"
+              className="mt-2 flex flex-wrap gap-2"
             >
               {stage.secondaryPhrases.map((phrase) => (
-                <PhraseCard
-                  key={phrase.spanish}
-                  phrase={phrase}
-                  color={color}
-                  onCopy={onCopy}
-                />
+                <SecondaryPill key={phrase.spanish} phrase={phrase} onCopy={onCopy} />
               ))}
             </div>
           )}
         </section>
       )}
 
+      {/* ── Quick Helpers (always visible) ── */}
+      <section className="mt-5">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+          Quick helpers
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {flowUtilityPhrases.map((phrase) => (
+            <UtilityPill key={phrase.spanish} phrase={phrase} />
+          ))}
+        </div>
+      </section>
+
       {/* ── Sticky Bottom Nav ── */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200/80 bg-white/95 backdrop-blur-md dark:border-stone-700/80 dark:bg-stone-900/95">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
           <button
-            onClick={() => speakPhrase(stage.primaryPhrase)}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 transition active:scale-[0.96] dark:text-stone-300"
-            aria-label="Speak current phrase"
+            onClick={() => goTo(currentIndex - 1)}
+            disabled={currentIndex === 0}
+            className="rounded-xl px-3 py-2.5 text-sm font-medium text-stone-500 transition active:scale-[0.96] disabled:opacity-30 dark:text-stone-400"
+            aria-label="Previous step"
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-            </svg>
-            Speak
+            Back
           </button>
 
-          <button
-            onClick={() => onCopy(stage.primaryPhrase.spanish)}
-            className="flex items-center gap-1.5 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.96] dark:bg-stone-100 dark:text-stone-900"
-            aria-label="Copy current phrase"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-            </svg>
-            Copy
-          </button>
+          <span className="text-xs font-semibold text-stone-400 dark:text-stone-500">
+            {stage.name}
+          </span>
 
           {isLast ? (
             <span className="px-3 py-2.5 text-sm font-semibold text-stone-300 dark:text-stone-600">
