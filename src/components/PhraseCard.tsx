@@ -11,7 +11,7 @@ export function PhraseCard({ phrase, color, onCopy }: PhraseCardProps) {
   const colors = colorMap[color] ?? colorMap.slate
 
   return (
-    <article className="rounded-[18px] bg-white p-4 shadow-card ring-1 ring-slate-200/70 transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-0 active:shadow-card-press dark:bg-slate-800 dark:ring-slate-700/50">
+    <article className="rounded-[18px] bg-gradient-to-b from-white to-slate-50/80 p-4 shadow-card-elevated ring-1 ring-slate-200/60 card-highlight transition-all duration-150 hover:shadow-card-hover hover:-translate-y-0.5 active:translate-y-px active:shadow-card-press dark:from-slate-800 dark:to-slate-800/80 dark:ring-slate-700/40">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-lg font-bold leading-snug tracking-[0.01em] text-slate-900 dark:text-slate-100">
