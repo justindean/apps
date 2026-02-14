@@ -17,10 +17,18 @@ export interface IntentPhrases {
   formal: Phrase[]
 }
 
+export interface ExpectedReply {
+  spanish: string
+  english: string
+}
+
 export interface FlowStage {
   key: string
   name: string
-  phrases: Phrase[]
+  subtitle: string
+  primaryPhrase: Phrase
+  expectedReplies: ExpectedReply[]
+  secondaryPhrases: Phrase[]
 }
 
 export interface Scenario {
@@ -231,7 +239,7 @@ export const scenarios: Scenario[] = [
     key: "restaurant",
     name: "Restaurant",
     emoji: "\uD83C\uDF7D\uFE0F",
-    color: "rose",
+    color: "stone",
     intents: {
       order: {
         street: [
@@ -389,8 +397,15 @@ export const scenarios: Scenario[] = [
       {
         key: "arrival",
         name: "Arrival",
-        phrases: [
-          { spanish: "Mesa para dos, por favor.", english: "Table for two, please.", pronunciation: "MEH-sah PAH-rah dohs, por fah-VOR" },
+        subtitle: "You just walked in",
+        primaryPhrase: { spanish: "Mesa para dos, por favor.", english: "Table for two, please.", pronunciation: "MEH-sah PAH-rah dohs, por fah-VOR" },
+        expectedReplies: [
+          { spanish: "Cuantos son?", english: "How many are you?" },
+          { spanish: "Para aqui o para llevar?", english: "Dine in or to go?" },
+          { spanish: "Adentro o afuera?", english: "Inside or outside?" },
+          { spanish: "Un momento, por favor.", english: "One moment, please." },
+        ],
+        secondaryPhrases: [
           { spanish: "Mesa para ___, por favor.", english: "Table for ___, please.", pronunciation: "MEH-sah PAH-rah ___, por fah-VOR", isTemplate: true },
           { spanish: "Para comer aqui.", english: "To eat here.", pronunciation: "PAH-rah koh-MEHR ah-KEE" },
           { spanish: "Adentro, por favor.", english: "Inside, please.", pronunciation: "ah-DEHN-troh, por fah-VOR" },
@@ -403,8 +418,14 @@ export const scenarios: Scenario[] = [
       {
         key: "drinks",
         name: "Drinks",
-        phrases: [
-          { spanish: "Agua natural, por favor.", english: "Still water, please.", pronunciation: "AH-gwah nah-too-RAHL, por fah-VOR" },
+        subtitle: "They ask for your drink order",
+        primaryPhrase: { spanish: "Agua natural, por favor.", english: "Still water, please.", pronunciation: "AH-gwah nah-too-RAHL, por fah-VOR" },
+        expectedReplies: [
+          { spanish: "Algo de tomar?", english: "Something to drink?" },
+          { spanish: "Natural o mineral?", english: "Still or sparkling?" },
+          { spanish: "Con hielo?", english: "With ice?" },
+        ],
+        secondaryPhrases: [
           { spanish: "Agua mineral, por favor.", english: "Sparkling water, please.", pronunciation: "AH-gwah mee-neh-RAHL, por fah-VOR" },
           { spanish: "Solo agua, gracias.", english: "Just water, thanks.", pronunciation: "SOH-loh AH-gwah, GRAH-see-ahs" },
           { spanish: "Una cerveza, por favor.", english: "A beer, please.", pronunciation: "OO-nah ser-VEH-sah, por fah-VOR" },
@@ -417,9 +438,16 @@ export const scenarios: Scenario[] = [
       {
         key: "food",
         name: "Food Order",
-        phrases: [
+        subtitle: "Time to order your food",
+        primaryPhrase: { spanish: "Esto, por favor.", english: "This one, please. (point at menu)", pronunciation: "EHS-toh, por fah-VOR" },
+        expectedReplies: [
+          { spanish: "Ya saben que van a pedir?", english: "Ready to order?" },
+          { spanish: "Algo mas?", english: "Anything else?" },
+          { spanish: "Con todo?", english: "With everything?" },
+          { spanish: "Picante o no?", english: "Spicy or not?" },
+        ],
+        secondaryPhrases: [
           { spanish: "Yo quiero esto.", english: "I want this one. (point)", pronunciation: "yoh kee-EH-roh EHS-toh" },
-          { spanish: "Esto, por favor.", english: "This one, please. (point)", pronunciation: "EHS-toh, por fah-VOR" },
           { spanish: "Sin picante, por favor.", english: "No spice, please.", pronunciation: "seen pee-KAHN-teh, por fah-VOR" },
           { spanish: "Poco picante.", english: "A little spicy.", pronunciation: "POH-koh pee-KAHN-teh" },
           { spanish: "Eso es todo.", english: "That's all.", pronunciation: "EH-soh ehs TOH-doh" },
@@ -433,8 +461,14 @@ export const scenarios: Scenario[] = [
       {
         key: "during",
         name: "During Meal",
-        phrases: [
-          { spanish: "Disculpe.", english: "Excuse me. (to get attention)", pronunciation: "dees-KOOL-peh" },
+        subtitle: "You need something while eating",
+        primaryPhrase: { spanish: "Disculpe.", english: "Excuse me. (to get attention)", pronunciation: "dees-KOOL-peh" },
+        expectedReplies: [
+          { spanish: "Si, digame.", english: "Yes, tell me." },
+          { spanish: "En un momento.", english: "In a moment." },
+          { spanish: "Todo bien?", english: "Everything okay?" },
+        ],
+        secondaryPhrases: [
           { spanish: "Mas agua, por favor.", english: "More water, please.", pronunciation: "mahs AH-gwah, por fah-VOR" },
           { spanish: "Otra cerveza, por favor.", english: "Another beer, please.", pronunciation: "OH-trah ser-VEH-sah, por fah-VOR" },
           { spanish: "Mas tortillas, por favor.", english: "More tortillas, please.", pronunciation: "mahs tor-TEE-yahs, por fah-VOR" },
@@ -447,20 +481,32 @@ export const scenarios: Scenario[] = [
       {
         key: "finished",
         name: "Finished",
-        phrases: [
+        subtitle: "You're done eating",
+        primaryPhrase: { spanish: "Estuvo delicioso.", english: "It was delicious.", pronunciation: "ehs-TOO-voh deh-lee-see-OH-soh" },
+        expectedReplies: [
+          { spanish: "Le puedo retirar?", english: "Can I take your plate?" },
+          { spanish: "Desean algo mas?", english: "Would you like anything else?" },
+          { spanish: "Algun postre?", english: "Any dessert?" },
+        ],
+        secondaryPhrases: [
           { spanish: "Ya terminamos.", english: "We're done.", pronunciation: "yah ter-mee-NAH-mohs" },
           { spanish: "Ya termine.", english: "I'm done.", pronunciation: "yah ter-mee-NEH" },
           { spanish: "Estoy lleno.", english: "I'm full.", pronunciation: "ehs-TOY YEH-noh" },
           { spanish: "Puede llevarse los platos.", english: "You can take the plates.", pronunciation: "PWEH-deh yeh-VAR-seh lohs PLAH-tohs" },
           { spanish: "Nada mas, gracias.", english: "Nothing else, thanks.", pronunciation: "NAH-dah mahs, GRAH-see-ahs" },
-          { spanish: "Estuvo delicioso.", english: "It was delicious.", pronunciation: "ehs-TOO-voh deh-lee-see-OH-soh" },
         ],
       },
       {
         key: "bill",
         name: "Bill",
-        phrases: [
-          { spanish: "La cuenta, por favor.", english: "The check, please.", pronunciation: "lah KWEHN-tah, por fah-VOR" },
+        subtitle: "Time to pay",
+        primaryPhrase: { spanish: "La cuenta, por favor.", english: "The check, please.", pronunciation: "lah KWEHN-tah, por fah-VOR" },
+        expectedReplies: [
+          { spanish: "Efectivo o tarjeta?", english: "Cash or card?" },
+          { spanish: "Todo junto?", english: "All together?" },
+          { spanish: "Aqui esta su cuenta.", english: "Here's your check." },
+        ],
+        secondaryPhrases: [
           { spanish: "Todo junto.", english: "All together.", pronunciation: "TOH-doh HOON-toh" },
           { spanish: "Cuentas separadas, por favor.", english: "Separate checks, please.", pronunciation: "KWEHN-tahs seh-pah-RAH-dahs, por fah-VOR" },
           { spanish: "Aceptan tarjeta?", english: "Do you accept cards?", pronunciation: "ah-SEHP-tahn tar-HEH-tah" },
@@ -472,9 +518,15 @@ export const scenarios: Scenario[] = [
       {
         key: "exit",
         name: "Exit",
-        phrases: [
+        subtitle: "Saying goodbye",
+        primaryPhrase: { spanish: "Muchas gracias, todo estuvo muy bien.", english: "Thank you, everything was great.", pronunciation: "MOO-chahs GRAH-see-ahs, TOH-doh ehs-TOO-voh mooy bee-EHN" },
+        expectedReplies: [
+          { spanish: "Gracias a ustedes!", english: "Thank you!" },
+          { spanish: "Vuelvan pronto!", english: "Come back soon!" },
+          { spanish: "Que les vaya bien.", english: "Have a good one." },
+        ],
+        secondaryPhrases: [
           { spanish: "Muchas gracias.", english: "Thank you very much.", pronunciation: "MOO-chahs GRAH-see-ahs" },
-          { spanish: "Todo estuvo muy bien.", english: "Everything was great.", pronunciation: "TOH-doh ehs-TOO-voh mooy bee-EHN" },
           { spanish: "Buenas noches.", english: "Good night.", pronunciation: "BWEH-nahs NOH-chehs" },
           { spanish: "Buenas tardes.", english: "Good afternoon.", pronunciation: "BWEH-nahs TAR-dehs" },
           { spanish: "Hasta luego.", english: "See you later.", pronunciation: "AHS-tah LWEH-goh" },

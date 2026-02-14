@@ -59,9 +59,21 @@ function App() {
       : [];
 
   return (
-    <div className="min-h-dvh bg-slate-50 text-slate-900 dark:bg-slate-925 dark:text-slate-100">
+    <div
+      className={`min-h-dvh transition-colors ${
+        hasFlow
+          ? "bg-[#FFFAF7] text-stone-900 dark:bg-stone-950 dark:text-stone-100"
+          : "bg-slate-50 text-slate-900 dark:bg-slate-925 dark:text-slate-100"
+      }`}
+    >
       {/* ── Header ── */}
-      <header className="sticky top-0 z-30 border-b border-slate-200/60 bg-slate-50/90 backdrop-blur-md dark:border-slate-800/60 dark:bg-slate-925/90">
+      <header
+        className={`sticky top-0 z-30 border-b backdrop-blur-md ${
+          hasFlow
+            ? "border-stone-200/60 bg-[#FFFAF7]/90 dark:border-stone-800/60 dark:bg-stone-950/90"
+            : "border-slate-200/60 bg-slate-50/90 dark:border-slate-800/60 dark:bg-slate-925/90"
+        }`}
+      >
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
           {scenario ? (
             <button
@@ -152,7 +164,11 @@ function App() {
       <div
         role="status"
         aria-live="polite"
-        className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg transition-all duration-200 dark:bg-slate-100 dark:text-slate-900 ${
+        className={`fixed left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm font-medium shadow-lg transition-all duration-200 ${
+          hasFlow
+            ? "bottom-20 bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
+            : "bottom-6 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+        } ${
           toast.visible
             ? "translate-y-0 opacity-100"
             : "pointer-events-none translate-y-2 opacity-0"
