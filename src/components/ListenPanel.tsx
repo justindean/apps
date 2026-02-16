@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { classifyIntent, getSectionPhrases, getConstrainedReplies, getReplyKeys, buildIntentMatchFromLLM } from "../data/restaurantIntents";
-import type { IntentMatch, LLMClassifyResponse } from "../data/restaurantIntents";
+import { classifyIntent, LLM_SYSTEM_PROMPT, buildListenMatchFromLLM } from "../data/restaurantIntents";
+import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
 function speakPhrase(text: string) {
@@ -110,7 +110,6 @@ declare global {
 }
 
 /* ── Device detection ── */
-/** Check if SpeechRecognition is available (works on iOS Safari 14.5+, Chrome, Edge) */
 function hasSpeechRecognition(): boolean {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
@@ -130,8 +129,6 @@ function getDeviceInfo(): string {
 const CORRECTIONS: [RegExp, string][] = [
   [/\ba fuera\b/gi, "afuera"],
   [/\ba dentro\b/gi, "adentro"],
-  [/\ba dent?ro? o a ?fuera?\b/gi, "adentro o afuera"],
-  [/\bafuera? o ?a ?dent?ro?\b/gi, "afuera o adentro"],
   [/\bquienes? son\b/gi, "cuantos son"],
   [/\bla quenta\b/gi, "la cuenta"],
   [/\bsu quenta\b/gi, "su cuenta"],
@@ -146,10 +143,6 @@ const CORRECTIONS: [RegExp, string][] = [
   [/\bpi[ck]ante\b/gi, "picante"],
   [/\bme ?nu\b/gi, "menu"],
   [/\borde[nm]ar\b/gi, "ordenar"],
-  [/\balgo\s*de\s*tom[ae]r\b/gi, "algo de tomar"],
-  [/\bvan\s*a\s*tom[ae]r\b/gi, "van a tomar"],
-  [/\bvan\s*a\s*ped[ie]r\b/gi, "van a pedir"],
-  [/\bvan\s*a\s*orden[ae]r\b/gi, "van a ordenar"],
 ];
 
 function correctSpanish(raw: string): string {
@@ -166,12 +159,14 @@ const RESTAURANT_HINTS = [
   "cerveza", "agua", "menu", "ordenar", "tarjeta", "efectivo",
   "recibo", "picante", "chile", "salsa", "tomar", "beber",
   "pedir", "separado", "junto", "pesos", "cambio", "terraza",
+  "algo mas", "nada mas", "todo bien",
 ];
 
 /* ── Section colors ── */
 const sectionBorderColor: Record<string, string> = {
   Arrival: "border-sky-300/60 dark:border-sky-600/40",
   Drinks: "border-amber-300/60 dark:border-amber-600/40",
+  Menu: "border-teal-300/60 dark:border-teal-600/40",
   Food: "border-orange-300/60 dark:border-orange-500/40",
   Bill: "border-emerald-300/60 dark:border-emerald-600/40",
   Tip: "border-violet-300/60 dark:border-violet-600/40",
@@ -181,11 +176,17 @@ const sectionBorderColor: Record<string, string> = {
 const sectionBadgeColor: Record<string, string> = {
   Arrival: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
   Drinks: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+  Menu: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400",
   Food: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
   Bill: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
   Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
   Clarify: "bg-stone-100 text-stone-600 dark:bg-stone-800/40 dark:text-stone-400",
 };
+
+/* ── Convert ListenReply to Phrase (for onSpeak/onCopy compatibility) ── */
+function replyToPhrase(r: ListenReply): Phrase {
+  return { spanish: r.spanish, english: r.english, pronunciation: r.pronunciation };
+}
 
 /* ── Types ── */
 type ListenState = "idle" | "listening" | "recording" | "processing";
@@ -202,21 +203,19 @@ interface ListenPanelProps {
   onSpeak: (phrase: Phrase) => void;
 }
 
-/* ═════════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    ListenPanel
-   ═════════════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════════════ */
 export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
   const [correctedText, setCorrectedText] = useState("");
-  const [match, setMatch] = useState<IntentMatch | null>(null);
-  const [altPhrases, setAltPhrases] = useState<Phrase[]>([]);
+  const [match, setMatch] = useState<ListenMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
 
-  // Mode detection — prefer SpeechRecognition on ALL platforms (including iOS Safari 14.5+)
-  // Only fall back to Whisper capture if SpeechRecognition is genuinely missing
+  // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
   const [deviceInfo] = useState(() => getDeviceInfo());
 
@@ -246,8 +245,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }, []);
 
   /* ── Process transcript (shared by both modes) ── */
-  /* PASS 1: Fast deterministic keyword matching
-     PASS 2: If confidence < 0.6, fire LLM classifier in background to refine */
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
@@ -256,53 +253,43 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setCorrectedText(corrected);
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      // ── PASS 1: Deterministic keyword classifier ──
-      const keywordMatch = classifyIntent(corrected, mode);
+      // ── PASS 1: Deterministic classifier (includes fast-path regex shortcuts) ──
+      const keywordMatch = classifyIntent(corrected);
       setMatch(keywordMatch);
-      addLog("intent", `[keyword] ${keywordMatch.intent} [${keywordMatch.section}] conf=${keywordMatch.confidence}`);
+      addLog("intent", `[keyword] ${keywordMatch.intent} conf=${keywordMatch.confidence} keywords=[${keywordMatch.keywords.join(", ")}]`);
 
-      // Use intent-constrained replies (not generic section phrases)
-      const constrained = getConstrainedReplies(keywordMatch.intent, mode);
-      const alts = constrained.length > 0
-        ? constrained.filter((p) => p.spanish !== keywordMatch.phrase.spanish).slice(0, 3)
-        : getSectionPhrases(keywordMatch.section, mode).filter((p) => p.spanish !== keywordMatch.phrase.spanish).slice(0, 3);
-      setAltPhrases(alts);
-
-      // ── PASS 2: LLM classifier if keyword match is uncertain ──
-      if (keywordMatch.confidence < 0.6) {
+      // ── PASS 2: LLM classifier if keyword match is low confidence ──
+      if (keywordMatch.confidence < 60) {
         addLog("info", `Low confidence (${keywordMatch.confidence}), running LLM classifier...`);
         setLlmClassifying(true);
-
-        const replyKeys = getReplyKeys(mode);
 
         fetch("/api/classify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transcript: corrected, replyKeys }),
+          body: JSON.stringify({
+            transcript: corrected,
+            systemPromptOverride: LLM_SYSTEM_PROMPT,
+          }),
         })
           .then((r) => r.json())
-          .then((data: LLMClassifyResponse & { error?: string }) => {
+          .then((data: LLMListenResponse & { error?: string }) => {
             if (data.error) {
               addLog("error", `LLM: ${data.error}`);
-              // Keep keyword match -- it's still better than nothing
               return;
             }
 
-            addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply_key}`);
-            addLog("info", `[LLM] meaning: "${data.meaning_en}"`);
+            addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply="${data.best_reply}"`);
+            addLog("info", `[LLM] meaning: "${data.english}"`);
 
-            const llmResult = buildIntentMatchFromLLM(data, mode);
+            const llmMatch = buildListenMatchFromLLM(data);
 
-            // Only upgrade if LLM is more confident or keyword was UNCLEAR
+            // Upgrade if LLM is more confident or keyword was unknown
             if (
-              keywordMatch.intent === "UNCLEAR" ||
-              (data.confidence ?? 0) > keywordMatch.confidence
+              keywordMatch.intent === "unknown" ||
+              (llmMatch.confidence ?? 0) > keywordMatch.confidence
             ) {
-              setMatch(llmResult.match);
-              if (llmResult.altPhrases.length > 0) {
-                setAltPhrases(llmResult.altPhrases);
-              }
-              addLog("info", `[LLM] Upgraded from keyword (${keywordMatch.intent} ${keywordMatch.confidence}) to LLM (${llmResult.match.intent} ${llmResult.match.confidence})`);
+              setMatch(llmMatch);
+              addLog("info", `[LLM] Upgraded from ${keywordMatch.intent}(${keywordMatch.confidence}) to ${llmMatch.intent}(${llmMatch.confidence})`);
             } else {
               addLog("info", `[LLM] Kept keyword match (higher confidence)`);
             }
@@ -310,7 +297,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : "LLM classify failed";
             addLog("error", `LLM: ${msg}`);
-            // Keep the keyword match
           })
           .finally(() => setLlmClassifying(false));
       }
@@ -319,7 +305,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   );
 
   /* ═══════════════════════════════════════════════════════════════════════
-     CAPTURE MODE — iOS Safari: record audio blob -> server Whisper
+     CAPTURE MODE — fallback: record audio blob -> server Whisper
      ═══════════════════════════════════════════════════════════════════════ */
   const startCapture = useCallback(async () => {
     setError(null);
@@ -327,7 +313,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     setFinalText("");
     setCorrectedText("");
     setMatch(null);
-    setAltPhrases([]);
 
     addLog("capture", "Requesting mic (capture mode)...");
 
@@ -336,7 +321,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         audio: { channelCount: 1, sampleRate: { ideal: 44100 }, echoCancellation: true, noiseSuppression: true },
       });
 
-      // Log mic settings
       const track = stream.getAudioTracks()[0];
       if (track) {
         const s = track.getSettings();
@@ -344,7 +328,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         addLog("info", `Mic: ${track.label} sr=${s.sampleRate}`);
       }
 
-      // Determine best supported mime type
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/mp4")
@@ -374,7 +357,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         setState("processing");
         setInterimText("Transcribing...");
 
-        // Whisper transcription with retry/backoff for 429 rate limits
         const MAX_RETRIES = 3;
         let attempt = 0;
         const transcribe = async (): Promise<void> => {
@@ -384,14 +366,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             form.append("audio", blob, `audio.${mimeType.includes("mp4") ? "mp4" : "webm"}`);
             form.append("model", "whisper-1");
             form.append("language", "es");
-            form.append("prompt", "Conversacion en restaurante mexicano: menu, cerveza, cuenta, propina, adentro, afuera, mesa, tarjeta, efectivo.");
+            form.append("prompt", "Conversacion en restaurante mexicano: menu, cerveza, cuenta, propina, adentro, afuera, mesa, tarjeta, efectivo, algo mas, nada mas, todo bien.");
 
             const resp = await fetch("/api/transcribe", { method: "POST", body: form });
 
-            // Handle 429 rate limit with retry
             if (resp.status === 429 && attempt < MAX_RETRIES) {
-              const wait = attempt * 2000; // 2s, 4s, 6s
-              addLog("info", `Rate limited (429). Retrying in ${wait / 1000}s (attempt ${attempt}/${MAX_RETRIES})...`);
+              const wait = attempt * 2000;
+              addLog("info", `Rate limited (429). Retrying in ${wait / 1000}s...`);
               setInterimText(`Rate limited. Retrying in ${wait / 1000}s...`);
               await new Promise((r) => setTimeout(r, wait));
               return transcribe();
@@ -400,7 +381,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             const data = await resp.json();
 
             if (data.error) {
-              // If it's a 429 error string, show a friendlier message
               const isRateLimit = typeof data.error === "string" && (data.error.includes("429") || data.error.toLowerCase().includes("rate"));
               addLog("error", data.error);
               setError(isRateLimit ? "API rate limit hit. Wait a moment and try again." : data.error);
@@ -427,11 +407,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start(250); // chunk every 250ms
+      recorder.start(250);
       setState("recording");
-      addLog("capture", "Recording started (10s max)");
+      addLog("capture", "Recording started (12s max)");
 
-      // Auto-stop after 12 seconds
       captureTimerRef.current = setTimeout(() => {
         if (mediaRecorderRef.current?.state === "recording") {
           addLog("capture", "Auto-stop (12s limit)");
@@ -457,7 +436,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }, [addLog]);
 
   /* ═══════════════════════════════════════════════════════════════════════
-     REALTIME MODE — Chrome/desktop: SpeechRecognition streaming
+     REALTIME MODE — SpeechRecognition streaming
      ═══════════════════════════════════════════════════════════════════════ */
   const startRealtime = useCallback(async () => {
     setError(null);
@@ -465,7 +444,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     setFinalText("");
     setCorrectedText("");
     setMatch(null);
-    setAltPhrases([]);
     finalTextRef.current = "";
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -474,7 +452,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       return;
     }
 
-    // Request mic with quality constraints
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, sampleRate: { ideal: 48000 }, autoGainControl: true, noiseSuppression: true, echoCancellation: true },
@@ -550,7 +527,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     };
 
     recognition.onend = () => {
-      // Clean up silence timer
       if (silenceTimerRef.current) {
         clearInterval(silenceTimerRef.current);
         silenceTimerRef.current = null;
@@ -575,9 +551,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     try {
       recognition.start();
       setState("listening");
-      addLog("info", "Listening (es-MX, realtime, auto-stop after 2.2s silence)");
+      addLog("info", "Listening (es-MX, auto-stop 2.2s silence)");
 
-      // Start silence polling timer — auto-stop after 2.2s of no new transcript events
       if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
       silenceTimerRef.current = setInterval(() => {
         if (
@@ -629,25 +604,25 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     };
   }, []);
 
-  const handleSuggestedPhrase = useCallback((phrase: Phrase) => {
-    speakPhrase(phrase.spanish);
-    onSpeak(phrase);
+  const handleReply = useCallback((reply: ListenReply) => {
+    speakPhrase(reply.spanish);
+    onSpeak(replyToPhrase(reply));
   }, [onSpeak]);
 
   const displayText = finalText || interimText;
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ═════════════════════════════════════════════════════════════════════
+  /* ═══════════════════════════════════════════════════════════════════════
      RENDER
-     ═════════════════════════════════════════════════════════════════════ */
+     ═══════════════════════════════════════════════════════════════════════ */
   return (
     <div className="flex flex-col gap-5">
 
       {/* ── Mode indicator + Debug toggle ── */}
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-medium text-stone-400 dark:text-stone-500">
-          {captureMode ? "Capture mode (Whisper fallback)" : "Realtime mode"}{" \u00B7 "}{deviceInfo}
+          {captureMode ? "Capture mode (Whisper)" : "Realtime mode"}{" \u00B7 "}{deviceInfo}
         </p>
         <button
           onClick={() => setShowDebug((p) => !p)}
@@ -658,9 +633,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </button>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════
-          MIC BUTTON
-          ══════════════════════════════════════════════════════════════════ */}
+      {/* ── MIC BUTTON ── */}
       <div className="flex flex-col items-center gap-2.5">
         <button
           onClick={isActive && state !== "processing" ? stopListening : !isActive ? startListening : undefined}
@@ -687,10 +660,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {state === "recording" && "Recording... tap to stop"}
           {state === "processing" && "Processing..."}
         </p>
-
-        {captureMode && state === "recording" && (
-          <p className="text-[11px] text-stone-300 dark:text-stone-600">Auto-stops after 12 seconds</p>
-        )}
       </div>
 
       {/* ── Error ── */}
@@ -700,9 +669,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════
-          THEY SAID — English meaning first, Spanish heard underneath
-          ══════════════════════════════════════════════════════════════════ */}
+      {/* ── THEY SAID ── */}
       {displayText && (
         <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${match ? sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40" : "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">
@@ -717,7 +684,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {/* English meaning */}
           {match && hasResults ? (
             <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
-              {`\u201C${match.theySaidEnglish}\u201D`}
+              {`\u201C${match.english}\u201D`}
             </p>
           ) : (
             <p className={`text-[15px] font-bold leading-tight text-stone-700 dark:text-stone-300 ${isInterim ? "opacity-50" : ""}`}>
@@ -741,9 +708,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {match && hasResults && (
             <div className="mt-2 flex items-center gap-2">
               <div className="flex items-center gap-1.5">
-                <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 0.6 ? "bg-emerald-400" : match.confidence >= 0.4 ? "bg-amber-400" : "bg-stone-300"}`} />
-                <span className={`text-[10px] font-semibold ${match.confidence >= 0.6 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
-                  {match.confidence >= 0.6 ? "Strong match" : match.confidence >= 0.4 ? "Likely match" : "Best guess"}
+                <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 60 ? "bg-emerald-400" : match.confidence >= 40 ? "bg-amber-400" : "bg-stone-300"}`} />
+                <span className={`text-[10px] font-semibold ${match.confidence >= 60 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 40 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
+                  {match.confidence >= 60 ? "Strong match" : match.confidence >= 40 ? "Likely match" : "Best guess"}
                 </span>
               </div>
               {llmClassifying && (
@@ -754,33 +721,31 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════
-          BEST REPLY — always shown when we have results (never blank)
-          ══════════════════════════════════════════════════════════════════ */}
+      {/* ── BEST REPLY ── */}
       {match && hasResults && (
         <div className="animate-fade-in">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             {match.section === "Clarify"
               ? "Not sure \u2014 try asking"
-              : match.confidence < 0.5
+              : match.confidence < 50
                 ? `Sounds like ${match.section.toLowerCase()} \u2014 try`
                 : "Best reply"}
           </p>
 
           <button
-            onClick={() => handleSuggestedPhrase(match.phrase)}
+            onClick={() => handleReply(match.bestReply)}
             className={`group relative flex w-full flex-col overflow-hidden rounded-[18px] border-2 bg-gradient-to-b from-white to-warm-50 p-4 text-left shadow-card-elevated card-highlight transition-all duration-150 active:translate-y-px active:shadow-card-press dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-300/60"}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
                 <p className="text-[20px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
-                  {match.phrase.spanish}
+                  {match.bestReply.spanish}
                 </p>
                 <p className="mt-1 text-[14px] leading-snug text-stone-500 dark:text-stone-400">
-                  {match.phrase.english}
+                  {match.bestReply.english}
                 </p>
                 <p className="mt-1 font-mono text-[11px] leading-snug tracking-tight text-stone-300 dark:text-stone-600">
-                  {match.phrase.pronunciation}
+                  {match.bestReply.pronunciation}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-3.5 py-2 text-white shadow-md shadow-[#D94F2A]/25 transition-transform active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20">
@@ -793,32 +758,32 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {/* Copy */}
           <div className="mt-1.5 flex justify-end">
             <button
-              onClick={() => onCopy(match.phrase.spanish)}
+              onClick={() => onCopy(match.bestReply.spanish)}
               className="rounded-md px-2 py-0.5 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 active:scale-95 dark:text-stone-500 dark:hover:text-stone-300"
             >
               Copy
             </button>
           </div>
 
-          {/* ── Alternative phrases ── */}
-          {altPhrases.length > 0 && (
+          {/* ── Alternates ── */}
+          {match.alternates.length > 0 && (
             <div className="mt-3">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
                 Or try
               </p>
               <div className="flex flex-col gap-2">
-                {altPhrases.map((phrase) => (
+                {match.alternates.map((reply) => (
                   <button
-                    key={phrase.spanish}
-                    onClick={() => handleSuggestedPhrase(phrase)}
+                    key={reply.spanish}
+                    onClick={() => handleReply(reply)}
                     className="flex items-center justify-between gap-3 rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 px-3.5 py-2.5 text-left shadow-sm card-highlight transition-all duration-150 active:scale-[0.98] active:shadow-none dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70"
                   >
                     <div className="flex min-w-0 flex-col">
                       <p className="text-[14px] font-bold leading-tight text-stone-800 dark:text-stone-200">
-                        {phrase.spanish}
+                        {reply.spanish}
                       </p>
                       <p className="mt-0.5 text-[12px] text-stone-400 dark:text-stone-500">
-                        {phrase.english}
+                        {reply.english}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 text-stone-400 dark:text-stone-500">
@@ -833,9 +798,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════���══════════════════════════
-          DEBUG PANEL
-          ══════════════════════════════════════════════════════════════════ */}
+      {/* ── DEBUG PANEL ── */}
       {showDebug && (
         <div className="rounded-2xl border border-stone-200/60 bg-stone-50 p-4 text-left font-mono text-[10px] leading-relaxed text-stone-500 dark:border-stone-700/40 dark:bg-stone-900 dark:text-stone-400">
           <div className="mb-2 flex items-center justify-between">
@@ -846,10 +809,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {/* System info */}
           <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
             <p><span className="text-stone-400">Device: </span>{deviceInfo}</p>
-            <p><span className="text-stone-400">Mode: </span>{captureMode ? "Capture (Whisper fallback)" : "Realtime (SpeechRecognition)"}</p>
+            <p><span className="text-stone-400">Mode: </span>{captureMode ? "Capture (Whisper)" : "Realtime (SpeechRecognition)"}</p>
             <p><span className="text-stone-400">Lang: </span>es-MX</p>
             <p><span className="text-stone-400">SpeechRecognition: </span>{hasSpeechRecognition() ? "Available" : "Unavailable"}</p>
-            <p><span className="text-stone-400">UA: </span>{navigator.userAgent.slice(0, 100)}</p>
           </div>
 
           {/* Mic settings */}
@@ -860,15 +822,16 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             </div>
           )}
 
-          {/* Transcript + intent summary */}
+          {/* Last result summary */}
           {(finalText || correctedText || match) && (
             <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
               <p className="font-bold text-stone-600 dark:text-stone-300">Last Result:</p>
               {finalText && <p><span className="text-stone-400">Raw: </span>{`"${finalText}"`}</p>}
               {correctedText && correctedText !== finalText && <p><span className="text-amber-500">Corrected: </span>{`"${correctedText}"`}</p>}
               {match && <p><span className="text-sky-500">Intent: </span>{match.intent} [{match.section}] conf={match.confidence}</p>}
-              {match && <p><span className="text-sky-500">English: </span>{match.theySaidEnglish}</p>}
-              {match && <p><span className="text-emerald-500">Reply: </span>{match.phrase.spanish} ({match.phrase.english})</p>}
+              {match && <p><span className="text-sky-500">English: </span>{match.english}</p>}
+              {match && <p><span className="text-emerald-500">Reply: </span>{match.bestReply.spanish} ({match.bestReply.english})</p>}
+              {match && match.keywords.length > 0 && <p><span className="text-violet-500">Keywords: </span>{match.keywords.join(", ")}</p>}
             </div>
           )}
 

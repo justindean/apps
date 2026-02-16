@@ -1,333 +1,423 @@
 /**
- * Restaurant intent classification for Listen mode
+ * Restaurant intent classification for Listen mode — v3
  *
- * Intent-first approach: every transcript is mapped to one of ~25 restaurant
- * intents. Each intent returns:
- *   - theySaidEnglish  (clear English meaning)
- *   - intent           (machine-readable key)
- *   - confidence        (0–1)
- *   - best reply        (Phrase from our dataset)
- *   - section           (dataset section for alternatives)
+ * Self-contained intent+reply system. Each intent owns its own set of allowed
+ * replies. No cross-referencing `fastModePhrasesBySection`. The classifier
+ * returns a `ListenMatch` with the best reply + 2 alternates, and NEVER
+ * returns null.
  *
- * NEVER returns null — if uncertain, returns a CLARIFY fallback with a
- * Spanish clarifying question so the user always has something to say.
+ * LLM fallback uses the exact same intent list + reply sets.
  */
 
-import type { Phrase, SpeechMode } from "./phrases";
-import { fastModePhrasesBySection } from "./phrases";
+// ── Core types ──────────────────────────────────────────────────────────
 
-export interface IntentMatch {
-  confidence: number;
-  section: string;
+export interface ListenReply {
+  spanish: string;
+  english: string;
+  pronunciation: string;
+}
+
+export interface ListenMatch {
   intent: string;
-  phrase: Phrase;
-  theySaidEnglish: string;
+  english: string;        // what they meant in English
+  confidence: number;     // 0–100
+  keywords: string[];     // detected trigger words (for debug)
+  bestReply: ListenReply;
+  alternates: ListenReply[];
+  section: string;        // UI section color key
 }
 
 // ── Intent definitions ──────────────────────────────────────────────────
 
 interface IntentDef {
   intent: string;
-  theySaidEnglish: string;
-  /** Keyword groups. Each group is a set of synonyms; matching any word in a group counts as 1 group hit. More group hits = higher confidence. */
+  englishMeaning: string;
+  /** Keyword groups — matching any word in a group counts as 1 hit. More groups hit = higher confidence. */
   triggerGroups: string[][];
+  replies: ListenReply[];
   section: string;
-  phraseIndex: number;
-  weight: number;
-  /** Hard-coded allowed reply indices within the section. If set, only these indices are allowed as primary + alts. */
-  allowedReplies?: number[];
+  weight: number; // base confidence weight (0–1)
 }
 
-/**
- * Intent → allowed reply indices within its section.
- * This prevents e.g. OFFER_MENU from suggesting "Esto, por favor" (a Food/ordering reply).
- */
-const INTENT_REPLY_CONSTRAINTS: Record<string, { section: string; allowedIndices: number[] }> = {
-  // Arrival
-  HOW_MANY:            { section: "Arrival", allowedIndices: [0, 1, 2] },
-  WELCOME:             { section: "Arrival", allowedIndices: [0, 1, 2] },
-  INSIDE_OUTSIDE:      { section: "Arrival", allowedIndices: [0, 1, 2] },
-  THIS_TABLE_OK:       { section: "Arrival", allowedIndices: [0, 1] },
-  WAIT_TIME:           { section: "Arrival", allowedIndices: [0, 1, 2, 3, 4] },
-  // Drinks
-  DRINK_ASK:           { section: "Drinks", allowedIndices: [0, 1, 2] },
-  DRINK_WATER:         { section: "Drinks", allowedIndices: [0, 1, 2] },
-  DRINK_REFILL:        { section: "Drinks", allowedIndices: [0, 1, 2] },
-  DRINK_BEER:          { section: "Drinks", allowedIndices: [0, 1, 2] },
-  // Menu — dedicated section for OFFER_MENU (0=Yes, 1=No, 2=Bring menu, 3=English menu)
-  OFFER_MENU:          { section: "Menu", allowedIndices: [0, 1, 2, 3] },
-  // Food
-  READY_TO_ORDER:      { section: "Food", allowedIndices: [0, 1, 2] },
-  SPICE_ASK:           { section: "Food", allowedIndices: [0, 1, 2] },
-  SHARE_ASK:           { section: "Food", allowedIndices: [0, 1, 2] },
-  FOOD_SUGGEST:        { section: "Food", allowedIndices: [0, 1, 2] },
-  ANYTHING_ELSE:       { section: "Food", allowedIndices: [0, 1, 2] },
-  HOW_IS_EVERYTHING:   { section: "Arrival", allowedIndices: [0, 1] },
-  // Bill
-  BRING_CHECK:         { section: "Bill", allowedIndices: [0, 1, 2] },
-  HOW_PAY:             { section: "Bill", allowedIndices: [0, 1, 2] },
-  TOGETHER_OR_SEPARATE:{ section: "Bill", allowedIndices: [0, 1, 2] },
-  CHANGE:              { section: "Bill", allowedIndices: [0, 1, 2] },
-  // Tip
-  TIP_ASK:             { section: "Tip", allowedIndices: [0, 1, 2, 3] },
-  TIP_PERCENT:         { section: "Tip", allowedIndices: [0, 1] },
-  RECEIPT_ASK:         { section: "Tip", allowedIndices: [4, 5] },
-  TOTAL_AMOUNT:        { section: "Tip", allowedIndices: [4, 0, 1] },
-  CASH_OR_CARD:        { section: "Tip", allowedIndices: [2, 3] },
+// ── Reply sets by intent ────────────────────────────────────────────────
+// These are "neutral" tone. The tone-aware versions are generated below.
+
+const REPLY_SETS: Record<string, ListenReply[]> = {
+  menu_offer: [
+    { spanish: "Si, por favor.", english: "Yes, please.", pronunciation: "see, por fah-VOR" },
+    { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+    { spanish: "Me trae el menu, por favor?", english: "Can you bring the menu, please?", pronunciation: "meh TRAH-eh el meh-NOO, por fah-VOR" },
+    { spanish: "Tiene menu en ingles?", english: "Do you have an English menu?", pronunciation: "tee-EH-neh meh-NOO ehn een-GLEHS" },
+  ],
+  table_preference: [
+    { spanish: "Adentro, por favor.", english: "Inside, please.", pronunciation: "ah-DEHN-troh, por fah-VOR" },
+    { spanish: "Afuera, por favor.", english: "Outside, please.", pronunciation: "ah-FWEH-rah, por fah-VOR" },
+    { spanish: "Donde sea, esta bien.", english: "Anywhere is fine.", pronunciation: "DOHN-deh SEH-ah, ehs-TAH bee-EHN" },
+    { spanish: "Aqui esta bien.", english: "Here is fine.", pronunciation: "ah-KEE ehs-TAH bee-EHN" },
+  ],
+  party_size: [
+    { spanish: "Para uno, por favor.", english: "For one, please.", pronunciation: "PAH-rah OO-noh, por fah-VOR" },
+    { spanish: "Para dos, por favor.", english: "For two, please.", pronunciation: "PAH-rah dohs, por fah-VOR" },
+    { spanish: "Para tres, por favor.", english: "For three, please.", pronunciation: "PAH-rah trehs, por fah-VOR" },
+    { spanish: "Para cuatro, por favor.", english: "For four, please.", pronunciation: "PAH-rah KWAH-troh, por fah-VOR" },
+  ],
+  greeting: [
+    { spanish: "Hola.", english: "Hi.", pronunciation: "OH-lah" },
+    { spanish: "Buenas.", english: "Hello.", pronunciation: "BWEH-nahs" },
+    { spanish: "Hola, que tal?", english: "Hi, how's it going?", pronunciation: "OH-lah, keh tahl" },
+  ],
+  order_ready: [
+    { spanish: "Si, ya.", english: "Yes, ready.", pronunciation: "see, yah" },
+    { spanish: "Un momento, por favor.", english: "One moment, please.", pronunciation: "oon moh-MEHN-toh, por fah-VOR" },
+    { spanish: "Todavia no.", english: "Not yet.", pronunciation: "toh-dah-VEE-ah noh" },
+  ],
+  order_items: [
+    { spanish: "Quiero esto, por favor.", english: "I'd like this, please.", pronunciation: "kee-EH-roh EHS-toh, por fah-VOR" },
+    { spanish: "Para mi, esto.", english: "This one for me.", pronunciation: "PAH-rah mee, EHS-toh" },
+    { spanish: "Me recomienda algo?", english: "Can you recommend something?", pronunciation: "meh reh-koh-mee-EHN-dah AHL-goh" },
+  ],
+  drinks_offer: [
+    { spanish: "Agua, por favor.", english: "Water, please.", pronunciation: "AH-gwah, por fah-VOR" },
+    { spanish: "Una cerveza, por favor.", english: "A beer, please.", pronunciation: "OO-nah ser-VEH-sah, por fah-VOR" },
+    { spanish: "Nada, gracias.", english: "Nothing, thanks.", pronunciation: "NAH-dah, GRAH-see-ahs" },
+  ],
+  anything_else: [
+    { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+    { spanish: "Nada mas, gracias.", english: "Nothing else, thanks.", pronunciation: "NAH-dah mahs, GRAH-see-ahs" },
+    { spanish: "Si, un momento.", english: "Yes, one moment.", pronunciation: "see, oon moh-MEHN-toh" },
+    { spanish: "Si, quiero otra cosa.", english: "Yes, I'd like something else.", pronunciation: "see, kee-EH-roh OH-trah KOH-sah" },
+  ],
+  check_in_food: [
+    { spanish: "Todo bien, gracias.", english: "Everything's great, thanks.", pronunciation: "TOH-doh bee-EHN, GRAH-see-ahs" },
+    { spanish: "Muy rico, gracias.", english: "Very tasty, thanks.", pronunciation: "mwee REE-koh, GRAH-see-ahs" },
+    { spanish: "Esta bien, gracias.", english: "It's fine, thanks.", pronunciation: "ehs-TAH bee-EHN, GRAH-see-ahs" },
+  ],
+  bill_offer: [
+    { spanish: "La cuenta, por favor.", english: "The check, please.", pronunciation: "lah KWEHN-tah, por fah-VOR" },
+    { spanish: "Si, por favor.", english: "Yes, please.", pronunciation: "see, por fah-VOR" },
+    { spanish: "Todavia no, gracias.", english: "Not yet, thanks.", pronunciation: "toh-dah-VEE-ah noh, GRAH-see-ahs" },
+  ],
+  payment_method: [
+    { spanish: "Con tarjeta, por favor.", english: "By card, please.", pronunciation: "kohn tar-HEH-tah, por fah-VOR" },
+    { spanish: "En efectivo, por favor.", english: "In cash, please.", pronunciation: "ehn eh-fehk-TEE-voh, por fah-VOR" },
+    { spanish: "Puede ser contactless?", english: "Can it be contactless?", pronunciation: "PWEH-deh sehr kohn-TAHK-lehs" },
+  ],
+  tip_service: [
+    { spanish: "Si, con propina, por favor.", english: "Yes, with tip, please.", pronunciation: "see, kohn proh-PEE-nah, por fah-VOR" },
+    { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+    { spanish: "Ya incluye servicio?", english: "Does it already include service?", pronunciation: "yah een-KLOO-yeh ser-VEE-see-oh" },
+  ],
+  receipt: [
+    { spanish: "Si, por favor.", english: "Yes, please.", pronunciation: "see, por fah-VOR" },
+    { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+    { spanish: "Me da el recibo?", english: "Can I get the receipt?", pronunciation: "meh dah el reh-SEE-boh" },
+  ],
+  not_available: [
+    { spanish: "Ok, gracias.", english: "Ok, thanks.", pronunciation: "oh-KAY, GRAH-see-ahs" },
+    { spanish: "Entonces, que me recomienda?", english: "Then what do you recommend?", pronunciation: "ehn-TOHN-sehs, keh meh reh-koh-mee-EHN-dah" },
+    { spanish: "Tiene otra opcion?", english: "Do you have another option?", pronunciation: "tee-EH-neh OH-trah ohp-see-OHN" },
+  ],
+  clarification: [
+    { spanish: "Puede repetir, por favor?", english: "Can you repeat, please?", pronunciation: "PWEH-deh reh-peh-TEER, por fah-VOR" },
+    { spanish: "Mas despacio, por favor.", english: "Slower, please.", pronunciation: "mahs dehs-PAH-see-oh, por fah-VOR" },
+    { spanish: "No entiendo, puede decirlo de otra forma?", english: "I don't understand, can you say it differently?", pronunciation: "noh ehn-tee-EHN-doh, PWEH-deh deh-SEER-loh deh OH-trah FOR-mah" },
+  ],
+  unknown: [
+    { spanish: "Puede repetir, por favor?", english: "Can you repeat, please?", pronunciation: "PWEH-deh reh-peh-TEER, por fah-VOR" },
+    { spanish: "Mas despacio, por favor.", english: "Slower, please.", pronunciation: "mahs dehs-PAH-see-oh, por fah-VOR" },
+    { spanish: "No entiendo, puede decirlo de otra forma?", english: "I don't understand, can you say it differently?", pronunciation: "noh ehn-tee-EHN-doh, PWEH-deh deh-SEER-loh deh OH-trah FOR-mah" },
+  ],
+
+  // ── Smalltalk ──
+  smalltalk_origin: [
+    { spanish: "Soy de Estados Unidos.", english: "I'm from the US.", pronunciation: "soy deh ehs-TAH-dohs oo-NEE-dohs" },
+    { spanish: "Soy de California.", english: "I'm from California.", pronunciation: "soy deh kah-lee-FOR-nee-ah" },
+    { spanish: "Soy de Los Angeles.", english: "I'm from Los Angeles.", pronunciation: "soy deh lohs AHN-heh-lehs" },
+    { spanish: "Y tu?", english: "And you?", pronunciation: "ee too" },
+  ],
+  smalltalk_live_here: [
+    { spanish: "No, estoy de visita.", english: "No, I'm visiting.", pronunciation: "noh, ehs-TOY deh vee-SEE-tah" },
+    { spanish: "Si, vivo aqui.", english: "Yes, I live here.", pronunciation: "see, VEE-voh ah-KEE" },
+    { spanish: "Estoy aqui por unos dias.", english: "I'm here for a few days.", pronunciation: "ehs-TOY ah-KEE por OO-nohs DEE-ahs" },
+    { spanish: "Y tu?", english: "And you?", pronunciation: "ee too" },
+  ],
+  smalltalk_first_time: [
+    { spanish: "Si, es mi primera vez.", english: "Yes, it's my first time.", pronunciation: "see, ehs mee pree-MEH-rah vehs" },
+    { spanish: "No, ya he venido antes.", english: "No, I've been before.", pronunciation: "noh, yah eh veh-NEE-doh AHN-tehs" },
+    { spanish: "Vine hace poco.", english: "I came recently.", pronunciation: "VEE-neh AH-seh POH-koh" },
+    { spanish: "Me gusta mucho.", english: "I like it a lot.", pronunciation: "meh GOOS-tah MOO-choh" },
+  ],
+  smalltalk_enjoying: [
+    { spanish: "Si, me encanta.", english: "Yes, I love it.", pronunciation: "see, meh ehn-KAHN-tah" },
+    { spanish: "Si, esta increible.", english: "Yes, it's incredible.", pronunciation: "see, ehs-TAH een-kreh-EE-bleh" },
+    { spanish: "Si, me gusta mucho.", english: "Yes, I like it a lot.", pronunciation: "see, meh GOOS-tah MOO-choh" },
+    { spanish: "La comida esta buenisima.", english: "The food is amazing.", pronunciation: "lah koh-MEE-dah ehs-TAH bweh-NEE-see-mah" },
+  ],
 };
 
-const intents: IntentDef[] = [
-  // ── ARRIVAL ─────────────────────────────────────────────
+// ── Section mapping for UI colors ───────────────────────────────────────
+
+const INTENT_TO_SECTION: Record<string, string> = {
+  menu_offer: "Menu",
+  table_preference: "Arrival",
+  party_size: "Arrival",
+  greeting: "Arrival",
+  order_ready: "Food",
+  order_items: "Food",
+  drinks_offer: "Drinks",
+  anything_else: "Food",
+  check_in_food: "Food",
+  bill_offer: "Bill",
+  payment_method: "Bill",
+  tip_service: "Tip",
+  receipt: "Tip",
+  not_available: "Food",
+  clarification: "Clarify",
+  unknown: "Clarify",
+  smalltalk_origin: "Smalltalk",
+  smalltalk_live_here: "Smalltalk",
+  smalltalk_first_time: "Smalltalk",
+  smalltalk_enjoying: "Smalltalk",
+};
+
+// ── Intent definitions with trigger groups ───────────────────────────────
+
+const INTENTS: IntentDef[] = [
+  // ── Greeting ──
   {
-    intent: "HOW_MANY",
-    theySaidEnglish: "How many people?",
+    intent: "greeting",
+    englishMeaning: "Hello! Welcome!",
     triggerGroups: [
-      ["cuantos", "cuantas"],
-      ["son", "personas", "para cuantos", "mesa para"],
+      ["hola", "buenas", "buenas tardes", "buenas noches", "bienvenido", "bienvenida", "bienvenidos", "pase", "pasen", "adelante"],
     ],
-    section: "Arrival", phraseIndex: 0, weight: 0.92,
+    replies: REPLY_SETS.greeting,
+    section: "Arrival",
+    weight: 0.7,
   },
+
+  // ── Party size ──
   {
-    intent: "WELCOME",
-    theySaidEnglish: "Welcome! Come on in.",
+    intent: "party_size",
+    englishMeaning: "How many people?",
     triggerGroups: [
-      ["bienvenido", "bienvenida", "bienvenidos"],
-      ["hola", "buenas", "buenas tardes", "buenas noches", "pase", "pasen", "adelante"],
+      ["cuantos", "cuantas", "para cuantos", "mesa para"],
+      ["son", "personas", "gente", "vienen"],
     ],
-    section: "Arrival", phraseIndex: 1, weight: 0.7,
+    replies: REPLY_SETS.party_size,
+    section: "Arrival",
+    weight: 0.92,
   },
+
+  // ── Table preference ──
   {
-    intent: "INSIDE_OUTSIDE",
-    theySaidEnglish: "Inside or outside?",
+    intent: "table_preference",
+    englishMeaning: "Inside or outside?",
     triggerGroups: [
       ["adentro", "dentro", "interior", "salon"],
       ["afuera", "fuera", "exterior", "terraza", "jardin"],
     ],
-    section: "Arrival", phraseIndex: 2, weight: 0.92,
-  },
-  {
-    intent: "THIS_TABLE_OK",
-    theySaidEnglish: "Is this table okay?",
-    triggerGroups: [
-      ["esta mesa", "esta bien", "les parece", "aqui esta", "le gusta esta"],
-    ],
-    section: "Arrival", phraseIndex: 1, weight: 0.82,
-  },
-  {
-    intent: "WAIT_TIME",
-    theySaidEnglish: "There will be a wait.",
-    triggerGroups: [
-      ["espera", "esperar", "lista de espera"],
-      ["minutos", "momento", "tarda", "lleno", "no hay mesa", "ocupado"],
-    ],
-    section: "Arrival", phraseIndex: 4, weight: 0.85,
+    replies: REPLY_SETS.table_preference,
+    section: "Arrival",
+    weight: 0.92,
   },
 
-  // ── OFFER MENU ──────────────────────────────────────────
+  // ── Menu offer ──
   {
-    intent: "OFFER_MENU",
-    theySaidEnglish: "Would you like a menu?",
+    intent: "menu_offer",
+    englishMeaning: "Would you like a menu?",
     triggerGroups: [
-      ["menu", "carta", "la carta", "carta de comida", "para comer"],
+      ["menu", "carta", "la carta"],
       ["quiere", "quieres", "gusta", "gustaria", "le traigo", "te traigo", "necesita", "desea", "quieren"],
     ],
-    section: "Menu", phraseIndex: 0, weight: 0.92,
+    replies: REPLY_SETS.menu_offer,
+    section: "Menu",
+    weight: 0.92,
   },
 
-  // ── DRINKS ──────────────────────────────────────────────
+  // ── Drinks offer ──
   {
-    intent: "DRINK_ASK",
-    theySaidEnglish: "What would you like to drink?",
+    intent: "drinks_offer",
+    englishMeaning: "What would you like to drink?",
     triggerGroups: [
-      ["tomar", "beber", "bebida"],
-      ["algo de tomar", "para tomar", "que les traigo", "les ofrezco", "desea tomar", "quiere tomar", "van a tomar"],
+      ["tomar", "beber", "bebida", "cerveza", "chela"],
+      ["algo de tomar", "para tomar", "les traigo", "les ofrezco", "desea tomar", "quiere tomar", "van a tomar"],
     ],
-    section: "Drinks", phraseIndex: 0, weight: 0.92,
-  },
-  {
-    intent: "DRINK_WATER",
-    theySaidEnglish: "Would you like water?",
-    triggerGroups: [
-      ["agua"],
-      ["natural", "mineral", "con gas", "sin gas"],
-    ],
-    section: "Drinks", phraseIndex: 1, weight: 0.82,
-  },
-  {
-    intent: "DRINK_REFILL",
-    theySaidEnglish: "Would you like another one?",
-    triggerGroups: [
-      ["otra", "otro", "mas", "mismo", "misma", "repito"],
-      ["le traigo otra", "quiere otra", "una mas"],
-    ],
-    section: "Drinks", phraseIndex: 2, weight: 0.85,
-  },
-  {
-    intent: "DRINK_BEER",
-    theySaidEnglish: "What beer would you like?",
-    triggerGroups: [
-      ["cerveza", "chela", "cervezas"],
-      ["clara", "oscura", "de barril", "que cerveza"],
-    ],
-    section: "Drinks", phraseIndex: 0, weight: 0.8,
+    replies: REPLY_SETS.drinks_offer,
+    section: "Drinks",
+    weight: 0.92,
   },
 
-  // ── FOOD ────────────────────────────────────────────────
+  // ── Order ready ──
   {
-    intent: "READY_TO_ORDER",
-    theySaidEnglish: "Are you ready to order?",
+    intent: "order_ready",
+    englishMeaning: "Are you ready to order?",
     triggerGroups: [
       ["ordenar", "pedir", "orden"],
       ["listo", "listos", "ya saben", "les tomo", "van a pedir", "que desean", "van a ordenar"],
     ],
-    section: "Food", phraseIndex: 0, weight: 0.92,
-  },
-  {
-    intent: "SPICE_ASK",
-    theySaidEnglish: "Is spicy okay?",
-    triggerGroups: [
-      ["picante", "picoso", "chile", "enchilado"],
-      ["salsa", "pica", "con chile", "le pone salsa"],
-    ],
-    section: "Food", phraseIndex: 1, weight: 0.88,
-  },
-  {
-    intent: "SHARE_ASK",
-    theySaidEnglish: "Would you like to share?",
-    triggerGroups: [
-      ["compartir", "para compartir", "para los dos", "entre los dos", "a la mitad"],
-    ],
-    section: "Food", phraseIndex: 2, weight: 0.82,
-  },
-  {
-    intent: "FOOD_SUGGEST",
-    theySaidEnglish: "I recommend this one.",
-    triggerGroups: [
-      ["recomiendo", "especialidad", "le sugiero", "lo mas pedido", "plato del dia", "especial", "popular"],
-    ],
-    section: "Food", phraseIndex: 0, weight: 0.7,
-  },
-  {
-    intent: "ANYTHING_ELSE",
-    theySaidEnglish: "Anything else?",
-    triggerGroups: [
-      ["algo mas", "necesita", "necesitan", "otra cosa", "desea algo mas", "falta algo", "le traigo algo"],
-    ],
-    section: "Food", phraseIndex: 0, weight: 0.65,
-  },
-  {
-    intent: "HOW_IS_EVERYTHING",
-    theySaidEnglish: "How is everything?",
-    triggerGroups: [
-      ["todo bien", "le gusta", "les gusta", "que tal", "como esta", "como va", "les gusto", "satisfecho"],
-    ],
-    section: "Arrival", phraseIndex: 1, weight: 0.55,
+    replies: REPLY_SETS.order_ready,
+    section: "Food",
+    weight: 0.92,
   },
 
-  // ── BILL / PAYMENT ──────────────────────────────────────
+  // ── Order items (what specifically) ──
   {
-    intent: "BRING_CHECK",
-    theySaidEnglish: "Here is the check.",
+    intent: "order_items",
+    englishMeaning: "What would you like to have?",
     triggerGroups: [
-      ["cuenta", "su cuenta", "aqui esta la cuenta"],
-      ["total", "son", "pesos"],
+      ["recomiendo", "especialidad", "le sugiero", "plato del dia", "especial", "popular", "lo mas pedido"],
     ],
-    section: "Bill", phraseIndex: 0, weight: 0.88,
-  },
-  {
-    intent: "HOW_PAY",
-    theySaidEnglish: "How would you like to pay?",
-    triggerGroups: [
-      ["pagar", "cobrar", "forma de pago", "metodo de pago"],
-      ["efectivo", "tarjeta", "terminal", "como va a pagar"],
-    ],
-    section: "Bill", phraseIndex: 0, weight: 0.85,
-  },
-  {
-    intent: "TOGETHER_OR_SEPARATE",
-    theySaidEnglish: "Together or separate checks?",
-    triggerGroups: [
-      ["junto", "juntos", "separado", "separada", "dividir", "separar"],
-      ["una sola", "dividimos", "separar la cuenta"],
-    ],
-    section: "Bill", phraseIndex: 1, weight: 0.88,
-  },
-  {
-    intent: "CHANGE",
-    theySaidEnglish: "Here is your change.",
-    triggerGroups: [
-      ["cambio", "vuelta", "su cambio", "aqui tiene", "le debo"],
-    ],
-    section: "Bill", phraseIndex: 0, weight: 0.7,
+    replies: REPLY_SETS.order_items,
+    section: "Food",
+    weight: 0.7,
   },
 
-  // ── TIP ─────────────────────────────────────────────────
+  // ── ANYTHING ELSE (critical — "algo mas", "nada mas", "quieres algo mas") ──
   {
-    intent: "TIP_ASK",
-    theySaidEnglish: "Would you like to add a tip?",
+    intent: "anything_else",
+    englishMeaning: "Would you like anything else?",
     triggerGroups: [
-      ["propina", "servicio"],
-      ["agregar", "dejar", "gusta agregar", "le pongo", "le agrego", "desea dejar", "con cuanto"],
+      ["algo mas", "nada mas", "otra cosa", "algo mas para", "falta algo", "le traigo algo", "necesita algo", "necesitan algo", "quieres algo", "quieren algo", "desea algo"],
     ],
-    section: "Tip", phraseIndex: 0, weight: 0.92,
+    replies: REPLY_SETS.anything_else,
+    section: "Food",
+    weight: 0.95, // High weight — this is a common trigger
   },
+
+  // ── Check in on food ──
   {
-    intent: "TIP_PERCENT",
-    theySaidEnglish: "Add 10%?",
+    intent: "check_in_food",
+    englishMeaning: "How is everything?",
     triggerGroups: [
-      ["diez", "quince", "veinte"],
-      ["por ciento", "porcentaje", "el 10", "el 15", "el 20"],
+      ["todo bien", "que tal", "como esta todo", "como va todo", "les gusto", "todo en orden", "como esta"],
     ],
-    section: "Tip", phraseIndex: 0, weight: 0.9,
+    replies: REPLY_SETS.check_in_food,
+    section: "Food",
+    weight: 0.8,
   },
+
+  // ── Bill offer ──
   {
-    intent: "RECEIPT_ASK",
-    theySaidEnglish: "Do you need a receipt?",
+    intent: "bill_offer",
+    englishMeaning: "Would you like the check?",
     triggerGroups: [
-      ["recibo", "factura", "ticket", "comprobante", "nota"],
-      ["necesita", "requiere", "le doy", "quiere"],
+      ["cuenta", "la cuenta", "su cuenta", "les traigo la cuenta"],
+      ["total", "son", "pesos", "cobrar"],
     ],
-    section: "Tip", phraseIndex: 5, weight: 0.85,
+    replies: REPLY_SETS.bill_offer,
+    section: "Bill",
+    weight: 0.88,
   },
+
+  // ── Payment method ──
   {
-    intent: "TOTAL_AMOUNT",
-    theySaidEnglish: "The total is...",
+    intent: "payment_method",
+    englishMeaning: "How would you like to pay?",
     triggerGroups: [
-      ["total", "total con", "queda en", "serian"],
-      ["propina", "servicio"],
+      ["tarjeta", "efectivo", "terminal", "forma de pago", "metodo de pago", "como va a pagar", "como paga"],
     ],
-    section: "Tip", phraseIndex: 4, weight: 0.8,
+    replies: REPLY_SETS.payment_method,
+    section: "Bill",
+    weight: 0.88,
   },
+
+  // ── Tip / service ──
   {
-    intent: "CASH_OR_CARD",
-    theySaidEnglish: "Cash or card?",
+    intent: "tip_service",
+    englishMeaning: "Would you like to add a tip?",
     triggerGroups: [
-      ["efectivo", "tarjeta"],
-      ["o tarjeta", "o efectivo", "como paga", "forma de pago"],
+      ["propina", "servicio", "incluimos servicio", "cuanto de propina", "agregar servicio"],
     ],
-    section: "Tip", phraseIndex: 2, weight: 0.88,
+    replies: REPLY_SETS.tip_service,
+    section: "Tip",
+    weight: 0.92,
+  },
+
+  // ── Receipt ──
+  {
+    intent: "receipt",
+    englishMeaning: "Do you need a receipt?",
+    triggerGroups: [
+      ["recibo", "factura", "ticket", "comprobante", "nota", "requiere factura"],
+    ],
+    replies: REPLY_SETS.receipt,
+    section: "Tip",
+    weight: 0.85,
+  },
+
+  // ── Not available ──
+  {
+    intent: "not_available",
+    englishMeaning: "Sorry, that's not available.",
+    triggerGroups: [
+      ["no hay", "se termino", "no tenemos", "se acabo", "ya no hay", "no queda"],
+    ],
+    replies: REPLY_SETS.not_available,
+    section: "Food",
+    weight: 0.85,
+  },
+
+  // ── Clarification (they ask you to repeat) ──
+  {
+    intent: "clarification",
+    englishMeaning: "Could you repeat that?",
+    triggerGroups: [
+      ["repetir", "otra vez", "como dijo", "que dijo", "mande", "perdon"],
+    ],
+    replies: REPLY_SETS.clarification,
+    section: "Clarify",
+    weight: 0.7,
+  },
+
+  // ── Smalltalk: where are you from? ──
+  {
+    intent: "smalltalk_origin",
+    englishMeaning: "Where are you from?",
+    triggerGroups: [
+      ["de donde eres", "de donde vienes", "de donde son", "de donde viene", "de donde es"],
+    ],
+    replies: REPLY_SETS.smalltalk_origin,
+    section: "Smalltalk",
+    weight: 0.92,
+  },
+
+  // ── Smalltalk: do you live here? ──
+  {
+    intent: "smalltalk_live_here",
+    englishMeaning: "Do you live here?",
+    triggerGroups: [
+      ["vives aqui", "vive aqui", "viven aqui", "vives aca", "radicas aqui"],
+    ],
+    replies: REPLY_SETS.smalltalk_live_here,
+    section: "Smalltalk",
+    weight: 0.92,
+  },
+
+  // ── Smalltalk: is it your first time? ──
+  {
+    intent: "smalltalk_first_time",
+    englishMeaning: "Is it your first time here?",
+    triggerGroups: [
+      ["primera vez", "primer vez", "primera visita", "ya habias venido", "habias estado"],
+    ],
+    replies: REPLY_SETS.smalltalk_first_time,
+    section: "Smalltalk",
+    weight: 0.92,
+  },
+
+  // ── Smalltalk: are you enjoying it? ──
+  {
+    intent: "smalltalk_enjoying",
+    englishMeaning: "Are you enjoying Mexico?",
+    triggerGroups: [
+      ["te gusta", "te esta gustando", "les gusta", "les esta gustando", "que te parece", "como la estas pasando", "te encanta"],
+      ["mexico", "ciudad", "pais", "cdmx", "aqui"],
+    ],
+    replies: REPLY_SETS.smalltalk_enjoying,
+    section: "Smalltalk",
+    weight: 0.88,
   },
 ];
-
-// ── Fallback "clarify" phrases — never show blank ───────────────────────
-
-const CLARIFY_PHRASES: Record<SpeechMode, Phrase[]> = {
-  street: [
-    { spanish: "Que dijo?", english: "What did you say?", pronunciation: "keh DEE-hoh" },
-    { spanish: "Otra vez?", english: "Again?", pronunciation: "OH-trah vehs" },
-    { spanish: "No entendi.", english: "I didn't get that.", pronunciation: "noh ehn-tehn-DEE" },
-  ],
-  neutral: [
-    { spanish: "Perdone, que dijo?", english: "Sorry, what did you say?", pronunciation: "pehr-DOH-neh, keh DEE-hoh" },
-    { spanish: "Me puede repetir?", english: "Can you repeat that?", pronunciation: "meh PWEH-deh reh-peh-TEER" },
-    { spanish: "No entendi, disculpe.", english: "I didn't understand, sorry.", pronunciation: "noh ehn-tehn-DEE, dees-KOOL-peh" },
-  ],
-  formal: [
-    { spanish: "Disculpe, podria repetir?", english: "Excuse me, could you repeat?", pronunciation: "dees-KOOL-peh, poh-DREE-ah reh-peh-TEER" },
-    { spanish: "Perdone, no le entendi.", english: "Sorry, I didn't catch that.", pronunciation: "pehr-DOH-neh, noh leh ehn-tehn-DEE" },
-    { spanish: "Me lo podria decir de nuevo?", english: "Could you say that again?", pronunciation: "meh loh poh-DREE-ah deh-SEER deh NWEH-voh" },
-  ],
-};
 
 // ── Normalizer ──────────────────────────────────────────────────────────
 
@@ -341,19 +431,52 @@ function normalize(text: string): string {
     .trim();
 }
 
+// ── Fast-path shortcuts (no AI needed) ──────────────────────────────────
+
+const FAST_PATHS: { pattern: RegExp; intent: string; english: string }[] = [
+  { pattern: /\b(algo\s*mas|nada\s*mas|quieres?\s*algo|quieren\s*algo|otra\s*cosa|algo\s*mas\s*para)\b/i, intent: "anything_else", english: "Would you like anything else?" },
+  { pattern: /\b(todo\s*bien|como\s*esta\s*todo|que\s*tal|como\s*va)\b/i, intent: "check_in_food", english: "How is everything?" },
+  { pattern: /\b(adentro|afuera|terraza|interior|exterior)\b/i, intent: "table_preference", english: "Inside or outside?" },
+  { pattern: /\b(cuantos\s*son|para\s*cuantos|mesa\s*para)\b/i, intent: "party_size", english: "How many people?" },
+  { pattern: /\b(tarjeta\s*o\s*efectivo|efectivo\s*o\s*tarjeta|como\s*va\s*a\s*pagar)\b/i, intent: "payment_method", english: "Cash or card?" },
+  { pattern: /\b(propina|servicio|incluimos\s*servicio)\b/i, intent: "tip_service", english: "Would you like to add a tip?" },
+  { pattern: /\b(la\s*cuenta|su\s*cuenta|les\s*traigo\s*la\s*cuenta)\b/i, intent: "bill_offer", english: "Here's the check." },
+  { pattern: /\b(no\s*hay|se\s*termino|no\s*tenemos|ya\s*no\s*hay)\b/i, intent: "not_available", english: "Sorry, that's not available." },
+  { pattern: /\b(recibo|factura|ticket|comprobante)\b/i, intent: "receipt", english: "Do you need a receipt?" },
+  // Smalltalk
+  { pattern: /\b(de\s+donde\s+eres|de\s+donde\s+vienes|de\s+donde\s+son|de\s+donde\s+es)\b/i, intent: "smalltalk_origin", english: "Where are you from?" },
+  { pattern: /\b(vives?\s+aqui|vives?\s+aca|viven\s+aqui)\b/i, intent: "smalltalk_live_here", english: "Do you live here?" },
+  { pattern: /\b(primera\s+vez|primer\s+vez|primera\s+visita)\b/i, intent: "smalltalk_first_time", english: "Is it your first time?" },
+  { pattern: /\b(te\s+gusta\s+mexico|te\s+esta\s+gustando|les\s+gusta\s+mexico|como\s+la\s+estas\s+pasando)\b/i, intent: "smalltalk_enjoying", english: "Are you enjoying Mexico?" },
+];
+
 // ── Classifier ──────────────────────────────────────────────────────────
 
-export function classifyIntent(
-  transcript: string,
-  mode: SpeechMode,
-): IntentMatch {
+export function classifyIntent(transcript: string): ListenMatch {
   const normed = normalize(transcript);
 
-  let best: { def: IntentDef; score: number } | null = null;
+  // ── FAST PATH: regex shortcuts for common phrases ──
+  for (const fp of FAST_PATHS) {
+    if (fp.pattern.test(normed)) {
+      const replies = REPLY_SETS[fp.intent] ?? REPLY_SETS.unknown;
+      return {
+        intent: fp.intent,
+        english: fp.english,
+        confidence: 85,
+        keywords: [normed.match(fp.pattern)?.[0] ?? ""],
+        bestReply: replies[0],
+        alternates: replies.slice(1, 3),
+        section: INTENT_TO_SECTION[fp.intent] ?? "Clarify",
+      };
+    }
+  }
 
-  for (const def of intents) {
+  // ── KEYWORD CLASSIFIER ──
+  let best: { def: IntentDef; score: number; matchedWords: string[] } | null = null;
+
+  for (const def of INTENTS) {
     let groupHits = 0;
-    let totalWordHits = 0;
+    const matchedWords: string[] = [];
 
     for (const group of def.triggerGroups) {
       let groupMatched = false;
@@ -361,7 +484,7 @@ export function classifyIntent(
         const normedTrigger = normalize(trigger);
         if (normed.includes(normedTrigger)) {
           groupMatched = true;
-          totalWordHits++;
+          matchedWords.push(trigger);
         }
       }
       if (groupMatched) groupHits++;
@@ -369,204 +492,370 @@ export function classifyIntent(
 
     if (groupHits === 0) continue;
 
-    // Score rewards hitting more trigger groups (covering more semantic axes)
     const groupRatio = groupHits / def.triggerGroups.length;
-    // Bonus for multi-word phrase matches
-    const multiWordBonus = totalWordHits > 1 ? 0.08 : 0;
-    // Bonus for matching ALL groups
+    const multiWordBonus = matchedWords.length > 1 ? 0.08 : 0;
     const fullMatchBonus = groupHits === def.triggerGroups.length ? 0.12 : 0;
     const score = Math.min(1, def.weight * groupRatio + 0.2 + multiWordBonus + fullMatchBonus);
 
     if (!best || score > best.score) {
-      best = { def, score };
+      best = { def, score, matchedWords };
     }
   }
 
-  // If we have a match, return it — constrained to allowed replies for the intent
   if (best && best.score >= 0.35) {
-    const sections = fastModePhrasesBySection[mode];
-    const constraint = INTENT_REPLY_CONSTRAINTS[best.def.intent];
-    const sectionLabel = constraint?.section ?? best.def.section;
-    const section = sections.find((s) => s.label === sectionLabel);
-    if (section) {
-      // Use first allowed reply index, falling back to the intent's default phraseIndex
-      const allowedIdx = constraint?.allowedIndices?.[0] ?? best.def.phraseIndex;
-      const phrase = section.phrases[allowedIdx] ?? section.phrases[0];
-      if (phrase) {
-        return {
-          confidence: Math.round(best.score * 100) / 100,
-          section: sectionLabel,
-          intent: best.def.intent,
-          phrase,
-          theySaidEnglish: best.def.theySaidEnglish,
-        };
+    const confidence = Math.round(best.score * 100);
+    const replies = best.def.replies;
+    return {
+      intent: best.def.intent,
+      english: best.def.englishMeaning,
+      confidence,
+      keywords: best.matchedWords,
+      bestReply: replies[0],
+      alternates: replies.slice(1, 3),
+      section: best.def.section,
+    };
+  }
+
+  // ── FALLBACK — unknown ──
+  const replies = REPLY_SETS.unknown;
+  return {
+    intent: "unknown",
+    english: "Not sure what they said.",
+    confidence: 15,
+    keywords: [],
+    bestReply: replies[0],
+    alternates: replies.slice(1, 3),
+    section: "Clarify",
+  };
+}
+
+// ── Get replies for a specific intent ───────────────────────────────────
+
+export function getRepliesForIntent(intent: string): ListenReply[] {
+  return REPLY_SETS[intent] ?? REPLY_SETS.unknown;
+}
+
+// ── Build LLM system + user prompts ─────────────────────────────────────
+
+export const LLM_SYSTEM_PROMPT = `You are TapHabla's Listen Mode brain for the Restaurant situation.
+
+Goal: Given a short Spanish transcript (often imperfect), determine:
+1) What they likely meant (English)
+2) The intent (from a fixed list)
+3) The best Spanish reply the user should say (from allowed replies only)
+4) 2 alternate replies (from allowed replies only)
+5) A match confidence (0-100)
+6) A small set of keywords you detected (for debugging)
+
+Rules:
+- Output must be VALID JSON only. No extra text.
+- Be concise. No explanations.
+- Do NOT invent long replies. Keep Spanish replies short and natural for Mexico.
+- If transcript is imperfect, infer using restaurant context.
+- If intent is clear, choose a reply even if transcript is messy.
+- Never pick a reply that doesn't fit the intent.
+- Use the provided allowed replies by intent exactly; do not paraphrase them.
+- Prefer restaurant-specific intents, BUT you MUST also handle common small-talk questions that happen in restaurants.
+- If transcript is a clear personal question (e.g., "De donde eres?"), do NOT return unknown. Use a smalltalk intent.
+- If no intent fits, use intent "unknown" and reply "Puede repetir, por favor?"
+
+INTENTS (choose exactly one):
+- menu_offer
+- table_preference
+- party_size
+- greeting
+- order_ready
+- order_items
+- drinks_offer
+- anything_else   (IMPORTANT: "Quieres algo mas?", "Algo mas?", "Algo mas para tomar/comer?")
+- check_in_food    ("Que tal?", "Como esta todo?", "Todo bien?")
+- bill_offer       ("La cuenta?", "Les traigo la cuenta?")
+- payment_method   ("Tarjeta o efectivo?", "Como va a pagar?")
+- tip_service      ("Servicio?", "Propina?", "Incluimos servicio?", "Cuanto de propina?")
+- receipt          ("Requiere factura/recibo?")
+- not_available    ("No hay", "Se termino", "No tenemos")
+- clarification    (they ask you to repeat/confirm)
+- smalltalk_origin      ("De donde eres?", "De donde vienes?")
+- smalltalk_live_here   ("Vives aqui?", "Vive aqui?")
+- smalltalk_first_time  ("Es tu primera vez?", "Primera vez en Mexico?")
+- smalltalk_enjoying    ("Te gusta Mexico?", "Te esta gustando?", "Como la estas pasando?")
+- unknown
+
+ALLOWED REPLIES BY INTENT (choose best + 2 alternates from the same intent list):
+
+menu_offer:
+- "Si, por favor."
+- "No, gracias."
+- "Me trae el menu, por favor?"
+- "Tiene menu en ingles?"
+
+table_preference:
+- "Adentro, por favor."
+- "Afuera, por favor."
+- "Donde sea, esta bien."
+- "Aqui esta bien."
+
+party_size:
+- "Para uno, por favor."
+- "Para dos, por favor."
+- "Para tres, por favor."
+- "Para cuatro, por favor."
+
+greeting:
+- "Hola."
+- "Buenas."
+- "Hola, que tal?"
+
+order_ready:
+- "Si, ya."
+- "Un momento, por favor."
+- "Todavia no."
+
+order_items:
+- "Quiero esto, por favor."
+- "Para mi, esto."
+- "Me recomienda algo?"
+
+drinks_offer:
+- "Agua, por favor."
+- "Una cerveza, por favor."
+- "Nada, gracias."
+
+anything_else:
+- "No, gracias."
+- "Nada mas, gracias."
+- "Si, un momento."
+- "Si, quiero otra cosa."
+
+check_in_food:
+- "Todo bien, gracias."
+- "Muy rico, gracias."
+- "Esta bien, gracias."
+
+bill_offer:
+- "La cuenta, por favor."
+- "Si, por favor."
+- "Todavia no, gracias."
+
+payment_method:
+- "Con tarjeta, por favor."
+- "En efectivo, por favor."
+- "Puede ser contactless?"
+
+tip_service:
+- "Si, con propina, por favor."
+- "No, gracias."
+- "Ya incluye servicio?"
+
+receipt:
+- "Si, por favor."
+- "No, gracias."
+- "Me da el recibo?"
+
+not_available:
+- "Ok, gracias."
+- "Entonces, que me recomienda?"
+- "Tiene otra opcion?"
+
+clarification:
+- "Puede repetir, por favor?"
+- "Mas despacio, por favor."
+- "No entiendo, puede decirlo de otra forma?"
+
+smalltalk_origin:
+- "Soy de Estados Unidos."
+- "Soy de California."
+- "Soy de Los Angeles."
+- "Y tu?"
+
+smalltalk_live_here:
+- "No, estoy de visita."
+- "Si, vivo aqui."
+- "Estoy aqui por unos dias."
+- "Y tu?"
+
+smalltalk_first_time:
+- "Si, es mi primera vez."
+- "No, ya he venido antes."
+- "Vine hace poco."
+- "Me gusta mucho."
+
+smalltalk_enjoying:
+- "Si, me encanta."
+- "Si, esta increible."
+- "Si, me gusta mucho."
+- "La comida esta buenisima."
+
+unknown:
+- "Puede repetir, por favor?"
+- "Mas despacio, por favor."
+- "No entiendo, puede decirlo de otra forma?"
+
+OUTPUT JSON SCHEMA:
+{
+  "intent": "<one intent>",
+  "english": "<short natural English meaning>",
+  "keywords": ["<keyword1>", "<keyword2>"],
+  "confidence": <0-100>,
+  "best_reply": "<one allowed reply>",
+  "alternates": ["<allowed reply>", "<allowed reply>"]
+}`;
+
+export function buildLLMUserPrompt(transcript: string): string {
+  return `Transcript: "${transcript}"\nTone: Neutral`;
+}
+
+// ── Step 2: Reply Generator prompt (used when intent is already known) ──
+
+/** Build allowed replies section for a specific intent */
+function buildAllowedRepliesForIntent(intent: string): string {
+  const replies = REPLY_SETS[intent] ?? REPLY_SETS.unknown;
+  return replies.map((r) => `- "${r.spanish}"`).join("\n");
+}
+
+export function buildReplyGeneratorSystemPrompt(intent: string): string {
+  const allowedReplies = buildAllowedRepliesForIntent(intent);
+  return `You are TapHabla Reply Generator for Restaurant Listen Mode.
+
+You will be given:
+- intent (already determined)
+- transcript (Spanish, may be imperfect)
+- tone (Street/Neutral/Formal)
+
+Your job:
+1) Provide a short English meaning of what they said.
+2) Choose the best reply AND 2 alternates FROM THE ALLOWED REPLIES for that intent only.
+
+Hard rules:
+- Output valid JSON only.
+- Never output "unknown" or "not sure" if intent is not unknown.
+- If intent is "${intent}", you MUST pick replies from ${intent} ONLY.
+- Keep replies short, natural for Mexico.
+- No extra commentary.
+
+ALLOWED REPLIES for ${intent}:
+${allowedReplies}
+
+OUTPUT JSON:
+{
+  "english": "<short English meaning>",
+  "best_reply": "<one allowed reply>",
+  "alternates": ["<allowed reply>", "<allowed reply>"]
+}`;
+}
+
+export function buildReplyGeneratorUserPrompt(intent: string, transcript: string, tone: string = "Neutral"): string {
+  return `intent: ${intent}\ntranscript: "${transcript}"\ntone: ${tone}`;
+}
+
+/** Parse reply generator response into a ListenMatch */
+export function buildListenMatchFromReplyGenerator(
+  intent: string,
+  data: { english?: string; best_reply?: string; alternates?: string[]; error?: string },
+  fallbackEnglish: string,
+): ListenMatch {
+  const english = data.english ?? fallbackEnglish;
+  const section = INTENT_TO_SECTION[intent] ?? "Clarify";
+  const replies = REPLY_SETS[intent] ?? REPLY_SETS.unknown;
+
+  let bestReply = data.best_reply ? resolveReply(data.best_reply, intent) : null;
+  if (!bestReply) bestReply = replies[0];
+
+  const alternates: ListenReply[] = [];
+  if (data.alternates) {
+    for (const alt of data.alternates) {
+      const resolved = resolveReply(alt, intent);
+      if (resolved && resolved.spanish !== bestReply.spanish) {
+        alternates.push(resolved);
+      }
+    }
+  }
+  if (alternates.length < 2) {
+    for (const r of replies) {
+      if (r.spanish !== bestReply.spanish && !alternates.find((a) => a.spanish === r.spanish)) {
+        alternates.push(r);
+        if (alternates.length >= 2) break;
       }
     }
   }
 
-  // FALLBACK — never return null. Show a "Not sure" response with a clarifying question.
-  const clarifyPhrases = CLARIFY_PHRASES[mode];
-  const phrase = clarifyPhrases[Math.floor(Math.random() * clarifyPhrases.length)];
-
   return {
-    confidence: 0.15,
-    section: "Clarify",
-    intent: "UNCLEAR",
-    phrase,
-    theySaidEnglish: "Not sure what they said.",
+    intent,
+    english,
+    confidence: 90, // High confidence since intent is already known
+    keywords: [],
+    bestReply,
+    alternates: alternates.slice(0, 2),
+    section,
   };
 }
 
-// ── Section phrase getter ───────────────────────────────────────────────
+// ── Parse LLM response back into a ListenMatch ─────────────────────────
 
-export function getSectionPhrases(sectionLabel: string, mode: SpeechMode): Phrase[] {
-  if (sectionLabel === "Clarify") return CLARIFY_PHRASES[mode];
-  const sections = fastModePhrasesBySection[mode];
-  const section = sections.find((s) => s.label === sectionLabel);
-  return section?.phrases ?? [];
-}
-
-/**
- * Get allowed reply phrases for a specific intent, constrained to the allowed indices.
- * Returns only the phrases that are valid for this intent.
- */
-export function getConstrainedReplies(intent: string, mode: SpeechMode): Phrase[] {
-  const constraint = INTENT_REPLY_CONSTRAINTS[intent];
-  if (!constraint) return getSectionPhrases("Clarify", mode);
-
-  const sections = fastModePhrasesBySection[mode];
-  const section = sections.find((s) => s.label === constraint.section);
-  if (!section) return [];
-
-  return constraint.allowedIndices
-    .map((idx) => section.phrases[idx])
-    .filter((p): p is Phrase => !!p);
-}
-
-// ── Reply keys for LLM classification ───────────────────────────────────
-
-/**
- * Build a map of reply keys to their display text (Spanish + English) for
- * sending to the LLM in the classify prompt.
- */
-export function getReplyKeys(mode: SpeechMode): Record<string, string> {
-  const keys: Record<string, string> = {};
-  const sections = fastModePhrasesBySection[mode];
-  for (const section of sections) {
-    for (let i = 0; i < section.phrases.length; i++) {
-      const p = section.phrases[i];
-      const key = `${section.label.toUpperCase()}_${i}`;
-      keys[key] = `${p.spanish} (${p.english})`;
-    }
-  }
-  // Add clarify keys
-  const clarify = CLARIFY_PHRASES[mode];
-  for (let i = 0; i < clarify.length; i++) {
-    const p = clarify[i];
-    keys[`CLARIFY_${i === 0 ? "REPEAT" : i === 1 ? "AGAIN" : "SORRY"}`] = `${p.spanish} (${p.english})`;
-  }
-  return keys;
-}
-
-/**
- * Resolve a reply key back to a Phrase.
- */
-function resolveReplyKey(key: string, mode: SpeechMode): Phrase | null {
-  // Parse section and index: e.g. "ARRIVAL_0", "DRINKS_2", "CLARIFY_REPEAT"
-  if (key.startsWith("CLARIFY_")) {
-    const clarify = CLARIFY_PHRASES[mode];
-    if (key === "CLARIFY_REPEAT") return clarify[0] ?? null;
-    if (key === "CLARIFY_AGAIN") return clarify[1] ?? null;
-    if (key === "CLARIFY_SORRY") return clarify[2] ?? null;
-    return clarify[0] ?? null;
-  }
-
-  const lastUnderscore = key.lastIndexOf("_");
-  if (lastUnderscore === -1) return null;
-
-  const sectionKey = key.substring(0, lastUnderscore);
-  const idx = parseInt(key.substring(lastUnderscore + 1), 10);
-  if (isNaN(idx)) return null;
-
-  const sections = fastModePhrasesBySection[mode];
-  const section = sections.find((s) => s.label.toUpperCase() === sectionKey);
-  if (!section) return null;
-
-  return section.phrases[idx] ?? section.phrases[0] ?? null;
-}
-
-/** Infer section from reply key */
-function sectionFromKey(key: string): string {
-  if (key.startsWith("CLARIFY_")) return "Clarify";
-  const lastUnderscore = key.lastIndexOf("_");
-  if (lastUnderscore === -1) return "Clarify";
-  const sectionKey = key.substring(0, lastUnderscore);
-  // Map back from uppercase key to proper label
-  const map: Record<string, string> = {
-    ARRIVAL: "Arrival", DRINKS: "Drinks", FOOD: "Food", BILL: "Bill", TIP: "Tip",
-  };
-  return map[sectionKey] ?? "Clarify";
-}
-
-/**
- * Build an IntentMatch from the LLM classification JSON response.
- * Always returns something usable — never null.
- */
-export interface LLMClassifyResponse {
-  heard_es?: string;
-  meaning_en?: string;
+export interface LLMListenResponse {
   intent?: string;
+  english?: string;
+  keywords?: string[];
   confidence?: number;
-  best_reply_key?: string;
-  alt_reply_keys?: string[];
-  clarifying_reply_key?: string;
+  best_reply?: string;
+  alternates?: string[];
+  error?: string;
 }
 
-export function buildIntentMatchFromLLM(
-  llmResponse: LLMClassifyResponse,
-  mode: SpeechMode,
-): { match: IntentMatch; altPhrases: Phrase[] } {
-  const confidence = Math.min(1, Math.max(0, llmResponse.confidence ?? 0.3));
-  const intent = llmResponse.intent ?? "OTHER";
-  const meaningEn = llmResponse.meaning_en ?? "Not sure what they said.";
+/** Resolve a Spanish reply string back to a ListenReply object */
+function resolveReply(spanish: string, intent: string): ListenReply | null {
+  const normed = normalize(spanish);
+  const replies = REPLY_SETS[intent] ?? REPLY_SETS.unknown;
+  for (const r of replies) {
+    if (normalize(r.spanish) === normed) return r;
+  }
+  // Fuzzy: check if the reply starts with the same first 3 words
+  const first3 = normed.split(" ").slice(0, 3).join(" ");
+  for (const r of replies) {
+    if (normalize(r.spanish).startsWith(first3)) return r;
+  }
+  return null;
+}
+
+export function buildListenMatchFromLLM(data: LLMListenResponse): ListenMatch {
+  const intent = data.intent ?? "unknown";
+  const english = data.english ?? "Not sure what they said.";
+  const confidence = Math.max(0, Math.min(100, data.confidence ?? 15));
+  const keywords = data.keywords ?? [];
+  const section = INTENT_TO_SECTION[intent] ?? "Clarify";
+  const replies = REPLY_SETS[intent] ?? REPLY_SETS.unknown;
 
   // Resolve best reply
-  const bestKey = llmResponse.best_reply_key ?? "CLARIFY_REPEAT";
-  let phrase = resolveReplyKey(bestKey, mode);
-  let section = sectionFromKey(bestKey);
+  let bestReply = data.best_reply ? resolveReply(data.best_reply, intent) : null;
+  if (!bestReply) bestReply = replies[0];
 
-  // If couldn't resolve, use clarify
-  if (!phrase) {
-    phrase = CLARIFY_PHRASES[mode][0];
-    section = "Clarify";
-  }
-
-  // Resolve alternatives
-  const altPhrases: Phrase[] = [];
-  const altKeys = llmResponse.alt_reply_keys ?? [];
-  for (const altKey of altKeys) {
-    const altPhrase = resolveReplyKey(altKey, mode);
-    if (altPhrase && altPhrase.spanish !== phrase.spanish) {
-      altPhrases.push(altPhrase);
+  // Resolve alternates
+  const alternates: ListenReply[] = [];
+  if (data.alternates) {
+    for (const alt of data.alternates) {
+      const resolved = resolveReply(alt, intent);
+      if (resolved && resolved.spanish !== bestReply.spanish) {
+        alternates.push(resolved);
+      }
     }
   }
-
-  // If low confidence and we have a clarifying key, add it
-  if (confidence < 0.55 && llmResponse.clarifying_reply_key) {
-    const clarifyPhrase = resolveReplyKey(llmResponse.clarifying_reply_key, mode);
-    if (clarifyPhrase && !altPhrases.find((p) => p.spanish === clarifyPhrase.spanish) && clarifyPhrase.spanish !== phrase.spanish) {
-      altPhrases.push(clarifyPhrase);
+  // Fill alternates from reply set if needed
+  if (alternates.length < 2) {
+    for (const r of replies) {
+      if (r.spanish !== bestReply.spanish && !alternates.find((a) => a.spanish === r.spanish)) {
+        alternates.push(r);
+        if (alternates.length >= 2) break;
+      }
     }
   }
 
   return {
-    match: {
-      confidence,
-      section,
-      intent,
-      phrase,
-      theySaidEnglish: meaningEn,
-    },
-    altPhrases: altPhrases.slice(0, 4),
+    intent,
+    english,
+    confidence,
+    keywords,
+    bestReply,
+    alternates: alternates.slice(0, 2),
+    section,
   };
 }
