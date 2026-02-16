@@ -31,9 +31,11 @@ const sectionColors: Record<string, { bar: string; bg: string; bgDark: string }>
 const sectionColorForLabel: Record<string, string> = {
   Arrival: "bg-sky-400 dark:bg-sky-500",
   Drinks:  "bg-amber-400 dark:bg-amber-500",
+  Menu:    "bg-teal-400 dark:bg-teal-500",
   Food:    "bg-orange-300 dark:bg-orange-400",
   Bill:    "bg-emerald-400 dark:bg-emerald-500",
   Tip:     "bg-violet-400 dark:bg-violet-500",
+  Clarify: "bg-stone-300 dark:bg-stone-500",
 };
 
 function getSectionColor(key: string) {

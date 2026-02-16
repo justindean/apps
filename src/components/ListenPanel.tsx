@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { classifyIntent, getSectionPhrases, getReplyKeys, buildIntentMatchFromLLM } from "../data/restaurantIntents";
+import { classifyIntent, getSectionPhrases, getConstrainedReplies, getReplyKeys, buildIntentMatchFromLLM } from "../data/restaurantIntents";
 import type { IntentMatch, LLMClassifyResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
@@ -235,6 +235,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const finalTextRef = useRef("");
 
+  // Auto-stop silence detection refs
+  const lastTranscriptAtRef = useRef(0);
+  const speechStartedRef = useRef(false);
+  const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const addLog = useCallback((type: DebugLog["type"], text: string) => {
     const time = new Date().toLocaleTimeString("en-US", { hour12: false });
     setDebugLogs((prev) => [...prev.slice(-60), { time, type, text }]);
@@ -256,8 +261,12 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setMatch(keywordMatch);
       addLog("intent", `[keyword] ${keywordMatch.intent} [${keywordMatch.section}] conf=${keywordMatch.confidence}`);
 
-      const all = getSectionPhrases(keywordMatch.section, mode);
-      setAltPhrases(all.filter((p) => p.spanish !== keywordMatch.phrase.spanish).slice(0, 4));
+      // Use intent-constrained replies (not generic section phrases)
+      const constrained = getConstrainedReplies(keywordMatch.intent, mode);
+      const alts = constrained.length > 0
+        ? constrained.filter((p) => p.spanish !== keywordMatch.phrase.spanish).slice(0, 3)
+        : getSectionPhrases(keywordMatch.section, mode).filter((p) => p.spanish !== keywordMatch.phrase.spanish).slice(0, 3);
+      setAltPhrases(alts);
 
       // ── PASS 2: LLM classifier if keyword match is uncertain ──
       if (keywordMatch.confidence < 0.6) {
@@ -516,6 +525,12 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         }
       }
 
+      // Track timestamp for silence detection
+      lastTranscriptAtRef.current = Date.now();
+      if (!speechStartedRef.current && (final || interim)) {
+        speechStartedRef.current = true;
+      }
+
       if (final) {
         finalTextRef.current = final;
         setFinalText(final);
@@ -535,6 +550,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     };
 
     recognition.onend = () => {
+      // Clean up silence timer
+      if (silenceTimerRef.current) {
+        clearInterval(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
@@ -549,16 +569,44 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     };
 
     recognitionRef.current = recognition;
+    speechStartedRef.current = false;
+    lastTranscriptAtRef.current = 0;
+
     try {
       recognition.start();
       setState("listening");
-      addLog("info", "Listening (es-MX, realtime)");
+      addLog("info", "Listening (es-MX, realtime, auto-stop after 2.2s silence)");
+
+      // Start silence polling timer — auto-stop after 2.2s of no new transcript events
+      if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+      silenceTimerRef.current = setInterval(() => {
+        if (
+          speechStartedRef.current &&
+          lastTranscriptAtRef.current > 0 &&
+          Date.now() - lastTranscriptAtRef.current > 2200
+        ) {
+          addLog("info", "Auto-stopping (2.2s silence)");
+          setInterimText("Auto-stopping...");
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+          }
+          if (silenceTimerRef.current) {
+            clearInterval(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }
+        }
+      }, 250);
     } catch {
       setError("Could not start recognition.");
     }
   }, [processTranscript, addLog]);
 
   const stopRealtime = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearInterval(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
@@ -577,6 +625,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
       if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
       if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
+      if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
     };
   }, []);
 
@@ -714,8 +763,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             {match.section === "Clarify"
               ? "Not sure \u2014 try asking"
               : match.confidence < 0.5
-                ? `Sounds like ${match.section.toLowerCase()} \u2014 try saying`
-                : "Say this"}
+                ? `Sounds like ${match.section.toLowerCase()} \u2014 try`
+                : "Best reply"}
           </p>
 
           <button

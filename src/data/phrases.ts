@@ -62,6 +62,12 @@ export const fastModePhrasesBySection: Record<"street" | "neutral" | "formal", F
       { spanish: "Agua natural.", english: "Still water.", pronunciation: "AH-gwah nah-too-RAHL" },
       { spanish: "Otra igual.", english: "Another one.", pronunciation: "OH-trah ee-GWAHL" },
     ]},
+    { label: "Menu", phrases: [
+      { spanish: "Si, por favor.", english: "Yes, please.", pronunciation: "see, por fah-VOR" },
+      { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+      { spanish: "Me trae el menu?", english: "Can you bring the menu?", pronunciation: "meh TRAH-eh el meh-NOO" },
+      { spanish: "Tiene menu en ingles?", english: "Do you have an English menu?", pronunciation: "tee-EH-neh meh-NOO ehn een-GLEHS" },
+    ]},
     { label: "Food", phrases: [
       { spanish: "Esto.", english: "This one.", pronunciation: "EHS-toh" },
       { spanish: "Sin picante.", english: "No spice.", pronunciation: "seen pee-KAHN-teh" },
@@ -94,6 +100,12 @@ export const fastModePhrasesBySection: Record<"street" | "neutral" | "formal", F
       { spanish: "Agua natural, por favor.", english: "Still water, please.", pronunciation: "AH-gwah nah-too-RAHL, por fah-VOR" },
       { spanish: "Otra igual, por favor.", english: "Another one, please.", pronunciation: "OH-trah ee-GWAHL, por fah-VOR" },
     ]},
+    { label: "Menu", phrases: [
+      { spanish: "Si, por favor.", english: "Yes, please.", pronunciation: "see, por fah-VOR" },
+      { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+      { spanish: "Me trae el menu, por favor?", english: "Can you bring the menu, please?", pronunciation: "meh TRAH-eh el meh-NOO, por fah-VOR" },
+      { spanish: "Tiene menu en ingles?", english: "Do you have an English menu?", pronunciation: "tee-EH-neh meh-NOO ehn een-GLEHS" },
+    ]},
     { label: "Food", phrases: [
       { spanish: "Esto, por favor.", english: "This one, please.", pronunciation: "EHS-toh, por fah-VOR" },
       { spanish: "Sin picante, por favor.", english: "No spice, please.", pronunciation: "seen pee-KAHN-teh, por fah-VOR" },
@@ -125,6 +137,12 @@ export const fastModePhrasesBySection: Record<"street" | "neutral" | "formal", F
       { spanish: "Una cerveza, por favor.", english: "A beer, please.", pronunciation: "OO-nah ser-VEH-sah, por fah-VOR" },
       { spanish: "Agua natural, por favor.", english: "Still water, please.", pronunciation: "AH-gwah nah-too-RAHL, por fah-VOR" },
       { spanish: "La misma otra vez, por favor.", english: "The same again, please.", pronunciation: "lah MEES-mah OH-trah vehs, por fah-VOR" },
+    ]},
+    { label: "Menu", phrases: [
+      { spanish: "Si, por favor.", english: "Yes, please.", pronunciation: "see, por fah-VOR" },
+      { spanish: "No, muchas gracias.", english: "No, thank you.", pronunciation: "noh, MOO-chahs GRAH-see-ahs" },
+      { spanish: "Me podria traer el menu, por favor?", english: "Could you bring the menu, please?", pronunciation: "meh poh-DREE-ah trah-EHR el meh-NOO, por fah-VOR" },
+      { spanish: "Tiene menu en ingles, por favor?", english: "Do you have an English menu, please?", pronunciation: "tee-EH-neh meh-NOO ehn een-GLEHS, por fah-VOR" },
     ]},
     { label: "Food", phrases: [
       { spanish: "Este platillo, por favor.", english: "This dish, please.", pronunciation: "EHS-teh plah-TEE-yoh, por fah-VOR" },

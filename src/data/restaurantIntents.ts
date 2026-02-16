@@ -34,7 +34,47 @@ interface IntentDef {
   section: string;
   phraseIndex: number;
   weight: number;
+  /** Hard-coded allowed reply indices within the section. If set, only these indices are allowed as primary + alts. */
+  allowedReplies?: number[];
 }
+
+/**
+ * Intent → allowed reply indices within its section.
+ * This prevents e.g. OFFER_MENU from suggesting "Esto, por favor" (a Food/ordering reply).
+ */
+const INTENT_REPLY_CONSTRAINTS: Record<string, { section: string; allowedIndices: number[] }> = {
+  // Arrival
+  HOW_MANY:            { section: "Arrival", allowedIndices: [0, 1, 2] },
+  WELCOME:             { section: "Arrival", allowedIndices: [0, 1, 2] },
+  INSIDE_OUTSIDE:      { section: "Arrival", allowedIndices: [0, 1, 2] },
+  THIS_TABLE_OK:       { section: "Arrival", allowedIndices: [0, 1] },
+  WAIT_TIME:           { section: "Arrival", allowedIndices: [0, 1, 2, 3, 4] },
+  // Drinks
+  DRINK_ASK:           { section: "Drinks", allowedIndices: [0, 1, 2] },
+  DRINK_WATER:         { section: "Drinks", allowedIndices: [0, 1, 2] },
+  DRINK_REFILL:        { section: "Drinks", allowedIndices: [0, 1, 2] },
+  DRINK_BEER:          { section: "Drinks", allowedIndices: [0, 1, 2] },
+  // Menu — dedicated section for OFFER_MENU (0=Yes, 1=No, 2=Bring menu, 3=English menu)
+  OFFER_MENU:          { section: "Menu", allowedIndices: [0, 1, 2, 3] },
+  // Food
+  READY_TO_ORDER:      { section: "Food", allowedIndices: [0, 1, 2] },
+  SPICE_ASK:           { section: "Food", allowedIndices: [0, 1, 2] },
+  SHARE_ASK:           { section: "Food", allowedIndices: [0, 1, 2] },
+  FOOD_SUGGEST:        { section: "Food", allowedIndices: [0, 1, 2] },
+  ANYTHING_ELSE:       { section: "Food", allowedIndices: [0, 1, 2] },
+  HOW_IS_EVERYTHING:   { section: "Arrival", allowedIndices: [0, 1] },
+  // Bill
+  BRING_CHECK:         { section: "Bill", allowedIndices: [0, 1, 2] },
+  HOW_PAY:             { section: "Bill", allowedIndices: [0, 1, 2] },
+  TOGETHER_OR_SEPARATE:{ section: "Bill", allowedIndices: [0, 1, 2] },
+  CHANGE:              { section: "Bill", allowedIndices: [0, 1, 2] },
+  // Tip
+  TIP_ASK:             { section: "Tip", allowedIndices: [0, 1, 2, 3] },
+  TIP_PERCENT:         { section: "Tip", allowedIndices: [0, 1] },
+  RECEIPT_ASK:         { section: "Tip", allowedIndices: [4, 5] },
+  TOTAL_AMOUNT:        { section: "Tip", allowedIndices: [4, 0, 1] },
+  CASH_OR_CARD:        { section: "Tip", allowedIndices: [2, 3] },
+};
 
 const intents: IntentDef[] = [
   // ── ARRIVAL ─────────────────────────────────────────────
@@ -88,10 +128,10 @@ const intents: IntentDef[] = [
     intent: "OFFER_MENU",
     theySaidEnglish: "Would you like a menu?",
     triggerGroups: [
-      ["menu", "carta", "la carta"],
-      ["quiere", "quieres", "gusta", "gustaria", "le traigo", "necesita", "desea", "quieren"],
+      ["menu", "carta", "la carta", "carta de comida", "para comer"],
+      ["quiere", "quieres", "gusta", "gustaria", "le traigo", "te traigo", "necesita", "desea", "quieren"],
     ],
-    section: "Food", phraseIndex: 0, weight: 0.88,
+    section: "Menu", phraseIndex: 0, weight: 0.92,
   },
 
   // ── DRINKS ──────────────────────────────────────────────
@@ -342,16 +382,20 @@ export function classifyIntent(
     }
   }
 
-  // If we have a match, return it
+  // If we have a match, return it — constrained to allowed replies for the intent
   if (best && best.score >= 0.35) {
     const sections = fastModePhrasesBySection[mode];
-    const section = sections.find((s) => s.label === best!.def.section);
+    const constraint = INTENT_REPLY_CONSTRAINTS[best.def.intent];
+    const sectionLabel = constraint?.section ?? best.def.section;
+    const section = sections.find((s) => s.label === sectionLabel);
     if (section) {
-      const phrase = section.phrases[best.def.phraseIndex] ?? section.phrases[0];
+      // Use first allowed reply index, falling back to the intent's default phraseIndex
+      const allowedIdx = constraint?.allowedIndices?.[0] ?? best.def.phraseIndex;
+      const phrase = section.phrases[allowedIdx] ?? section.phrases[0];
       if (phrase) {
         return {
           confidence: Math.round(best.score * 100) / 100,
-          section: best.def.section,
+          section: sectionLabel,
           intent: best.def.intent,
           phrase,
           theySaidEnglish: best.def.theySaidEnglish,
@@ -380,6 +424,23 @@ export function getSectionPhrases(sectionLabel: string, mode: SpeechMode): Phras
   const sections = fastModePhrasesBySection[mode];
   const section = sections.find((s) => s.label === sectionLabel);
   return section?.phrases ?? [];
+}
+
+/**
+ * Get allowed reply phrases for a specific intent, constrained to the allowed indices.
+ * Returns only the phrases that are valid for this intent.
+ */
+export function getConstrainedReplies(intent: string, mode: SpeechMode): Phrase[] {
+  const constraint = INTENT_REPLY_CONSTRAINTS[intent];
+  if (!constraint) return getSectionPhrases("Clarify", mode);
+
+  const sections = fastModePhrasesBySection[mode];
+  const section = sections.find((s) => s.label === constraint.section);
+  if (!section) return [];
+
+  return constraint.allowedIndices
+    .map((idx) => section.phrases[idx])
+    .filter((p): p is Phrase => !!p);
 }
 
 // ── Reply keys for LLM classification ───────────────────────────────────
