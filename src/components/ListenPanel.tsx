@@ -110,17 +110,16 @@ declare global {
 }
 
 /* ── Device detection ── */
-function isIOSSafari(): boolean {
-  const ua = navigator.userAgent;
-  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
-  return isIOS && isSafari;
+/** Check if SpeechRecognition is available (works on iOS Safari 14.5+, Chrome, Edge) */
+function hasSpeechRecognition(): boolean {
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
 function getDeviceInfo(): string {
   const ua = navigator.userAgent;
-  if (/iPhone/.test(ua)) return "iPhone Safari";
-  if (/iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "iPad Safari";
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
+  if (isIOS && isSafari) return "iPhone/iPad Safari";
   if (/Android/.test(ua)) return "Android";
   if (/Chrome/.test(ua)) return "Chrome Desktop";
   if (/Firefox/.test(ua)) return "Firefox";
@@ -216,8 +215,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
 
-  // Mode detection
-  const [captureMode] = useState(() => isIOSSafari());
+  // Mode detection — prefer SpeechRecognition on ALL platforms (including iOS Safari 14.5+)
+  // Only fall back to Whisper capture if SpeechRecognition is genuinely missing
+  const [captureMode] = useState(() => !hasSpeechRecognition());
   const [deviceInfo] = useState(() => getDeviceInfo());
 
   // Debug panel
@@ -365,37 +365,56 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         setState("processing");
         setInterimText("Transcribing...");
 
-        try {
-          const form = new FormData();
-          form.append("audio", blob, `audio.${mimeType.includes("mp4") ? "mp4" : "webm"}`);
-          form.append("model", "whisper-1");
-          form.append("language", "es");
-          form.append("prompt", "Conversacion en restaurante mexicano: menu, cerveza, cuenta, propina, adentro, afuera, mesa, tarjeta, efectivo.");
+        // Whisper transcription with retry/backoff for 429 rate limits
+        const MAX_RETRIES = 3;
+        let attempt = 0;
+        const transcribe = async (): Promise<void> => {
+          attempt++;
+          try {
+            const form = new FormData();
+            form.append("audio", blob, `audio.${mimeType.includes("mp4") ? "mp4" : "webm"}`);
+            form.append("model", "whisper-1");
+            form.append("language", "es");
+            form.append("prompt", "Conversacion en restaurante mexicano: menu, cerveza, cuenta, propina, adentro, afuera, mesa, tarjeta, efectivo.");
 
-          const resp = await fetch("/api/transcribe", { method: "POST", body: form });
-          const data = await resp.json();
+            const resp = await fetch("/api/transcribe", { method: "POST", body: form });
 
-          if (data.error) {
-            addLog("error", data.error);
-            setError(data.error);
+            // Handle 429 rate limit with retry
+            if (resp.status === 429 && attempt < MAX_RETRIES) {
+              const wait = attempt * 2000; // 2s, 4s, 6s
+              addLog("info", `Rate limited (429). Retrying in ${wait / 1000}s (attempt ${attempt}/${MAX_RETRIES})...`);
+              setInterimText(`Rate limited. Retrying in ${wait / 1000}s...`);
+              await new Promise((r) => setTimeout(r, wait));
+              return transcribe();
+            }
+
+            const data = await resp.json();
+
+            if (data.error) {
+              // If it's a 429 error string, show a friendlier message
+              const isRateLimit = typeof data.error === "string" && (data.error.includes("429") || data.error.toLowerCase().includes("rate"));
+              addLog("error", data.error);
+              setError(isRateLimit ? "API rate limit hit. Wait a moment and try again." : data.error);
+              setState("idle");
+              setInterimText("");
+              return;
+            }
+
+            const transcript = data.transcript || data.text || "";
+            addLog("final", `Whisper: "${transcript}"`);
+            setFinalText(transcript);
+            setInterimText("");
+            processTranscript(transcript);
+            setState("idle");
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Transcription failed";
+            addLog("error", msg);
+            setError(msg);
             setState("idle");
             setInterimText("");
-            return;
           }
-
-          const transcript = data.transcript || data.text || "";
-          addLog("final", `Whisper: "${transcript}"`);
-          setFinalText(transcript);
-          setInterimText("");
-          processTranscript(transcript);
-          setState("idle");
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : "Transcription failed";
-          addLog("error", msg);
-          setError(msg);
-          setState("idle");
-          setInterimText("");
-        }
+        };
+        await transcribe();
       };
 
       mediaRecorderRef.current = recorder;
@@ -579,7 +598,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {/* ── Mode indicator + Debug toggle ── */}
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-medium text-stone-400 dark:text-stone-500">
-          {captureMode ? "Capture mode (iOS)" : "Realtime mode"}{" \u00B7 "}{deviceInfo}
+          {captureMode ? "Capture mode (Whisper fallback)" : "Realtime mode"}{" \u00B7 "}{deviceInfo}
         </p>
         <button
           onClick={() => setShowDebug((p) => !p)}
@@ -778,9 +797,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {/* System info */}
           <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
             <p><span className="text-stone-400">Device: </span>{deviceInfo}</p>
-            <p><span className="text-stone-400">Mode: </span>{captureMode ? "Capture (Whisper)" : "Realtime (SpeechRecognition)"}</p>
+            <p><span className="text-stone-400">Mode: </span>{captureMode ? "Capture (Whisper fallback)" : "Realtime (SpeechRecognition)"}</p>
             <p><span className="text-stone-400">Lang: </span>es-MX</p>
-            <p><span className="text-stone-400">iOS Safari: </span>{isIOSSafari() ? "Yes" : "No"}</p>
+            <p><span className="text-stone-400">SpeechRecognition: </span>{hasSpeechRecognition() ? "Available" : "Unavailable"}</p>
             <p><span className="text-stone-400">UA: </span>{navigator.userAgent.slice(0, 100)}</p>
           </div>
 
