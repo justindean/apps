@@ -263,8 +263,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       {/* ── Error ── */}
       {error && (
-        <div className="rounded-xl bg-red-50 px-4 py-3 text-center dark:bg-red-950/30">
-          <p className="text-[12px] font-medium text-red-600 dark:text-red-400">{error}</p>
+        <div className="rounded-xl bg-red-50 px-4 py-3 dark:bg-red-950/30">
+          <p className="text-center text-[12px] font-medium text-red-600 dark:text-red-400">{error}</p>
+          {error.toLowerCase().includes("openai") && (
+            <p className="mt-1 text-center text-[11px] text-red-500/70 dark:text-red-400/50">
+              Check the Vars section in the sidebar to add your API key.
+            </p>
+          )}
         </div>
       )}
 

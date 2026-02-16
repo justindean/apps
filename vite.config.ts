@@ -1,17 +1,25 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 
 /** Dev-only middleware that proxies /api/realtime-token to OpenAI */
 function realtimeTokenPlugin(): Plugin {
+  let resolvedApiKey: string | undefined
+
   return {
     name: 'realtime-token-dev',
+    configResolved(config) {
+      // Load ALL env vars (including those without VITE_ prefix) for server-side use
+      const env = loadEnv(config.mode, process.cwd(), '')
+      resolvedApiKey = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+    },
     configureServer(server) {
       server.middlewares.use('/api/realtime-token', async (_req, res) => {
-        const apiKey = process.env.OPENAI_API_KEY
+        const apiKey = resolvedApiKey || process.env.OPENAI_API_KEY
+        console.log("[v0] Token endpoint hit. API key present:", !!apiKey, "resolved:", !!resolvedApiKey, "env:", !!process.env.OPENAI_API_KEY)
         if (!apiKey) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'Missing OPENAI_API_KEY' }))
+          res.end(JSON.stringify({ error: 'Missing OPENAI_API_KEY. Add it in the Vars section of the sidebar.' }))
           return
         }
         try {
