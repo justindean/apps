@@ -112,43 +112,11 @@ function classifyPlugin(): Plugin {
             }, new Uint8Array())
           )
 
-          const { transcript, replyKeys } = JSON.parse(bodyStr)
-          const replyKeysJson = JSON.stringify(replyKeys, null, 2)
+          const { transcript, systemPromptOverride } = JSON.parse(bodyStr)
 
-          const systemPrompt = `You are TapHabla Listen Mode for Restaurants in Mexico.
-Your job is to help an English speaker respond immediately.
-Given a Spanish transcript (may be imperfect), you MUST:
-1. Provide a clear English meaning of what was said.
-2. Choose the most likely intent from the allowed list.
-3. Choose the best reply from the provided reply keys.
-4. Provide 2 alternative reply keys.
-If uncertain, choose intent OTHER with low confidence and return a clarifying question reply key.
-Never return "no match." Always pick something.`
+          const systemPrompt = systemPromptOverride as string
 
-          const userPrompt = `Context: Restaurant in Mexico.
-Transcript (Spanish, imperfect): "${transcript}"
-
-Allowed intents:
-OFFER_MENU, READY_TO_ORDER, INSIDE_OUTSIDE, HOW_MANY, WAIT_TIME, DRINK_ORDER, DRINK_REFILL, FOOD_ORDER, SPICY_LEVEL, ANYTHING_ELSE, FOOD_SUGGEST, HOW_IS_EVERYTHING, CHECK_PLEASE, PAYMENT_CARD_CASH, TOGETHER_SEPARATE, TIP_OR_SERVICE, RECEIPT, CHANGE, OTHER
-
-Available replies (keys must be used exactly):
-${replyKeysJson}
-
-Return JSON only:
-{
-  "heard_es": "...",
-  "meaning_en": "...",
-  "intent": "...",
-  "confidence": 0.0,
-  "best_reply_key": "...",
-  "alt_reply_keys": ["...", "..."],
-  "clarifying_reply_key": "..."
-}
-
-Rules:
-- best_reply_key must always be one of the provided keys.
-- If intent is OTHER or confidence < 0.55, set clarifying_reply_key to a valid key (e.g. CLARIFY_REPEAT).
-- meaning_en should be natural, not word-for-word.`
+          const userPrompt = `Transcript: "${transcript}"\nTone: Neutral`
 
           const resp = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
