@@ -368,6 +368,55 @@ const INTENTS: IntentDef[] = [
     section: "Clarify",
     weight: 0.7,
   },
+
+  // ── Smalltalk: where are you from? ──
+  {
+    intent: "smalltalk_origin",
+    englishMeaning: "Where are you from?",
+    triggerGroups: [
+      ["de donde eres", "de donde vienes", "de donde son", "de donde viene", "de donde es"],
+    ],
+    replies: REPLY_SETS.smalltalk_origin,
+    section: "Smalltalk",
+    weight: 0.92,
+  },
+
+  // ── Smalltalk: do you live here? ──
+  {
+    intent: "smalltalk_live_here",
+    englishMeaning: "Do you live here?",
+    triggerGroups: [
+      ["vives aqui", "vive aqui", "viven aqui", "vives aca", "radicas aqui"],
+    ],
+    replies: REPLY_SETS.smalltalk_live_here,
+    section: "Smalltalk",
+    weight: 0.92,
+  },
+
+  // ── Smalltalk: is it your first time? ──
+  {
+    intent: "smalltalk_first_time",
+    englishMeaning: "Is it your first time here?",
+    triggerGroups: [
+      ["primera vez", "primer vez", "primera visita", "ya habias venido", "habias estado"],
+    ],
+    replies: REPLY_SETS.smalltalk_first_time,
+    section: "Smalltalk",
+    weight: 0.92,
+  },
+
+  // ── Smalltalk: are you enjoying it? ──
+  {
+    intent: "smalltalk_enjoying",
+    englishMeaning: "Are you enjoying Mexico?",
+    triggerGroups: [
+      ["te gusta", "te esta gustando", "les gusta", "les esta gustando", "que te parece", "como la estas pasando", "te encanta"],
+      ["mexico", "ciudad", "pais", "cdmx", "aqui"],
+    ],
+    replies: REPLY_SETS.smalltalk_enjoying,
+    section: "Smalltalk",
+    weight: 0.88,
+  },
 ];
 
 // ── Normalizer ──────────────────────────────────────────────────────────
@@ -394,6 +443,11 @@ const FAST_PATHS: { pattern: RegExp; intent: string; english: string }[] = [
   { pattern: /\b(la\s*cuenta|su\s*cuenta|les\s*traigo\s*la\s*cuenta)\b/i, intent: "bill_offer", english: "Here's the check." },
   { pattern: /\b(no\s*hay|se\s*termino|no\s*tenemos|ya\s*no\s*hay)\b/i, intent: "not_available", english: "Sorry, that's not available." },
   { pattern: /\b(recibo|factura|ticket|comprobante)\b/i, intent: "receipt", english: "Do you need a receipt?" },
+  // Smalltalk
+  { pattern: /\b(de\s+donde\s+eres|de\s+donde\s+vienes|de\s+donde\s+son|de\s+donde\s+es)\b/i, intent: "smalltalk_origin", english: "Where are you from?" },
+  { pattern: /\b(vives?\s+aqui|vives?\s+aca|viven\s+aqui)\b/i, intent: "smalltalk_live_here", english: "Do you live here?" },
+  { pattern: /\b(primera\s+vez|primer\s+vez|primera\s+visita)\b/i, intent: "smalltalk_first_time", english: "Is it your first time?" },
+  { pattern: /\b(te\s+gusta\s+mexico|te\s+esta\s+gustando|les\s+gusta\s+mexico|como\s+la\s+estas\s+pasando)\b/i, intent: "smalltalk_enjoying", english: "Are you enjoying Mexico?" },
 ];
 
 // ── Classifier ──────────────────────────────────────────────────────────
@@ -501,6 +555,8 @@ Rules:
 - If intent is clear, choose a reply even if transcript is messy.
 - Never pick a reply that doesn't fit the intent.
 - Use the provided allowed replies by intent exactly; do not paraphrase them.
+- Prefer restaurant-specific intents, BUT you MUST also handle common small-talk questions that happen in restaurants.
+- If transcript is a clear personal question (e.g., "De donde eres?"), do NOT return unknown. Use a smalltalk intent.
 - If no intent fits, use intent "unknown" and reply "Puede repetir, por favor?"
 
 INTENTS (choose exactly one):
@@ -519,6 +575,10 @@ INTENTS (choose exactly one):
 - receipt          ("Requiere factura/recibo?")
 - not_available    ("No hay", "Se termino", "No tenemos")
 - clarification    (they ask you to repeat/confirm)
+- smalltalk_origin      ("De donde eres?", "De donde vienes?")
+- smalltalk_live_here   ("Vives aqui?", "Vive aqui?")
+- smalltalk_first_time  ("Es tu primera vez?", "Primera vez en Mexico?")
+- smalltalk_enjoying    ("Te gusta Mexico?", "Te esta gustando?", "Como la estas pasando?")
 - unknown
 
 ALLOWED REPLIES BY INTENT (choose best + 2 alternates from the same intent list):
@@ -602,6 +662,30 @@ clarification:
 - "Mas despacio, por favor."
 - "No entiendo, puede decirlo de otra forma?"
 
+smalltalk_origin:
+- "Soy de Estados Unidos."
+- "Soy de California."
+- "Soy de Los Angeles."
+- "Y tu?"
+
+smalltalk_live_here:
+- "No, estoy de visita."
+- "Si, vivo aqui."
+- "Estoy aqui por unos dias."
+- "Y tu?"
+
+smalltalk_first_time:
+- "Si, es mi primera vez."
+- "No, ya he venido antes."
+- "Vine hace poco."
+- "Me gusta mucho."
+
+smalltalk_enjoying:
+- "Si, me encanta."
+- "Si, esta increible."
+- "Si, me gusta mucho."
+- "La comida esta buenisima."
+
 unknown:
 - "Puede repetir, por favor?"
 - "Mas despacio, por favor."
@@ -619,6 +703,91 @@ OUTPUT JSON SCHEMA:
 
 export function buildLLMUserPrompt(transcript: string): string {
   return `Transcript: "${transcript}"\nTone: Neutral`;
+}
+
+// ── Step 2: Reply Generator prompt (used when intent is already known) ──
+
+/** Build allowed replies section for a specific intent */
+function buildAllowedRepliesForIntent(intent: string): string {
+  const replies = REPLY_SETS[intent] ?? REPLY_SETS.unknown;
+  return replies.map((r) => `- "${r.spanish}"`).join("\n");
+}
+
+export function buildReplyGeneratorSystemPrompt(intent: string): string {
+  const allowedReplies = buildAllowedRepliesForIntent(intent);
+  return `You are TapHabla Reply Generator for Restaurant Listen Mode.
+
+You will be given:
+- intent (already determined)
+- transcript (Spanish, may be imperfect)
+- tone (Street/Neutral/Formal)
+
+Your job:
+1) Provide a short English meaning of what they said.
+2) Choose the best reply AND 2 alternates FROM THE ALLOWED REPLIES for that intent only.
+
+Hard rules:
+- Output valid JSON only.
+- Never output "unknown" or "not sure" if intent is not unknown.
+- If intent is "${intent}", you MUST pick replies from ${intent} ONLY.
+- Keep replies short, natural for Mexico.
+- No extra commentary.
+
+ALLOWED REPLIES for ${intent}:
+${allowedReplies}
+
+OUTPUT JSON:
+{
+  "english": "<short English meaning>",
+  "best_reply": "<one allowed reply>",
+  "alternates": ["<allowed reply>", "<allowed reply>"]
+}`;
+}
+
+export function buildReplyGeneratorUserPrompt(intent: string, transcript: string, tone: string = "Neutral"): string {
+  return `intent: ${intent}\ntranscript: "${transcript}"\ntone: ${tone}`;
+}
+
+/** Parse reply generator response into a ListenMatch */
+export function buildListenMatchFromReplyGenerator(
+  intent: string,
+  data: { english?: string; best_reply?: string; alternates?: string[]; error?: string },
+  fallbackEnglish: string,
+): ListenMatch {
+  const english = data.english ?? fallbackEnglish;
+  const section = INTENT_TO_SECTION[intent] ?? "Clarify";
+  const replies = REPLY_SETS[intent] ?? REPLY_SETS.unknown;
+
+  let bestReply = data.best_reply ? resolveReply(data.best_reply, intent) : null;
+  if (!bestReply) bestReply = replies[0];
+
+  const alternates: ListenReply[] = [];
+  if (data.alternates) {
+    for (const alt of data.alternates) {
+      const resolved = resolveReply(alt, intent);
+      if (resolved && resolved.spanish !== bestReply.spanish) {
+        alternates.push(resolved);
+      }
+    }
+  }
+  if (alternates.length < 2) {
+    for (const r of replies) {
+      if (r.spanish !== bestReply.spanish && !alternates.find((a) => a.spanish === r.spanish)) {
+        alternates.push(r);
+        if (alternates.length >= 2) break;
+      }
+    }
+  }
+
+  return {
+    intent,
+    english,
+    confidence: 90, // High confidence since intent is already known
+    keywords: [],
+    bestReply,
+    alternates: alternates.slice(0, 2),
+    section,
+  };
 }
 
 // ── Parse LLM response back into a ListenMatch ─────────────────────────

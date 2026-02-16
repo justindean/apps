@@ -163,6 +163,95 @@ function classifyPlugin(): Plugin {
   }
 }
 
+/**
+ * Dev-only middleware: /api/generate-reply — Step 2 of 2-step LLM flow.
+ * Takes a known intent + transcript, picks the best reply from allowed set.
+ */
+function replyGeneratorPlugin(): Plugin {
+  let apiKey: string | undefined
+
+  return {
+    name: 'reply-generator-dev',
+    configResolved(config) {
+      const env = loadEnv(config.mode, process.cwd(), '')
+      apiKey = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+    },
+    configureServer(server) {
+      server.middlewares.use('/api/generate-reply', async (req: IncomingMessage, res) => {
+        if (req.method !== 'POST') {
+          res.writeHead(405, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'POST required' }))
+          return
+        }
+
+        const key = apiKey || process.env.OPENAI_API_KEY
+        if (!key) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Missing OPENAI_API_KEY' }))
+          return
+        }
+
+        try {
+          const chunks: Uint8Array[] = []
+          for await (const chunk of req) {
+            chunks.push(typeof chunk === 'string' ? new TextEncoder().encode(chunk) : new Uint8Array(chunk))
+          }
+          const bodyStr = new TextDecoder().decode(
+            chunks.reduce((acc, c) => {
+              const merged = new Uint8Array(acc.length + c.length)
+              merged.set(acc, 0)
+              merged.set(c, acc.length)
+              return merged
+            }, new Uint8Array())
+          )
+
+          const { systemPrompt, userPrompt } = JSON.parse(bodyStr)
+
+          const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${key}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              temperature: 0.15,
+              max_tokens: 200,
+              response_format: { type: 'json_object' },
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+              ],
+            }),
+          })
+
+          if (!resp.ok) {
+            const errText = await resp.text()
+            res.writeHead(resp.status, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: `OpenAI: ${errText.slice(0, 200)}` }))
+            return
+          }
+
+          const data = await resp.json() as { choices?: { message?: { content?: string } }[] }
+          const content = data.choices?.[0]?.message?.content
+          if (!content) {
+            res.writeHead(500, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'No response from model' }))
+            return
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(content)
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Reply generation failed'
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: msg }))
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), transcribePlugin(), classifyPlugin()]
+  plugins: [react(), transcribePlugin(), classifyPlugin(), replyGeneratorPlugin()]
 })
