@@ -1,5 +1,17 @@
-// Restaurant intent classification for Listen mode
-// Maps overheard Spanish phrases a waiter might say → best response from our phrase dataset
+/**
+ * Restaurant intent classification for Listen mode
+ *
+ * Intent-first approach: every transcript is mapped to one of ~25 restaurant
+ * intents. Each intent returns:
+ *   - theySaidEnglish  (clear English meaning)
+ *   - intent           (machine-readable key)
+ *   - confidence        (0–1)
+ *   - best reply        (Phrase from our dataset)
+ *   - section           (dataset section for alternatives)
+ *
+ * NEVER returns null — if uncertain, returns a CLARIFY fallback with a
+ * Spanish clarifying question so the user always has something to say.
+ */
 
 import type { Phrase, SpeechMode } from "./phrases";
 import { fastModePhrasesBySection } from "./phrases";
@@ -9,25 +21,18 @@ export interface IntentMatch {
   section: string;
   intent: string;
   phrase: Phrase;
-  theySaidEnglish: string;   // What they said, in plain English for the user
+  theySaidEnglish: string;
 }
 
 // ── Intent definitions ──────────────────────────────────────────────────
-// Each entry maps a set of trigger patterns (words/fragments a waiter says)
-// to a section + phrase index in our fast-mode dataset, plus an English
-// translation of what the waiter likely meant.
 
 interface IntentDef {
   intent: string;
-  /** English summary of what the waiter is saying */
   theySaidEnglish: string;
-  /** Keywords to match (lowercased, accent-stripped). More matches = higher score */
-  triggers: string[];
-  /** Which fast-mode section label this maps to */
+  /** Keyword groups. Each group is a set of synonyms; matching any word in a group counts as 1 group hit. More group hits = higher confidence. */
+  triggerGroups: string[][];
   section: string;
-  /** Index into that section's phrase array */
   phraseIndex: number;
-  /** Base confidence weight (0-1) */
   weight: number;
 }
 
@@ -36,57 +41,94 @@ const intents: IntentDef[] = [
   {
     intent: "HOW_MANY",
     theySaidEnglish: "How many people?",
-    triggers: ["cuantos", "cuantas", "personas", "mesa para", "cuantos son", "cuantas personas"],
+    triggerGroups: [
+      ["cuantos", "cuantas"],
+      ["son", "personas", "para cuantos", "mesa para"],
+    ],
     section: "Arrival", phraseIndex: 0, weight: 0.92,
   },
   {
     intent: "WELCOME",
-    theySaidEnglish: "Welcome, come in.",
-    triggers: ["bienvenido", "bienvenida", "bienvenidos", "buenas tardes", "buenas noches", "hola", "pase", "pasen", "adelante"],
+    theySaidEnglish: "Welcome! Come on in.",
+    triggerGroups: [
+      ["bienvenido", "bienvenida", "bienvenidos"],
+      ["hola", "buenas", "buenas tardes", "buenas noches", "pase", "pasen", "adelante"],
+    ],
     section: "Arrival", phraseIndex: 1, weight: 0.7,
   },
   {
     intent: "INSIDE_OUTSIDE",
     theySaidEnglish: "Inside or outside?",
-    triggers: ["adentro", "afuera", "dentro", "fuera", "interior", "exterior", "terraza", "jardin", "salon"],
-    section: "Arrival", phraseIndex: 2, weight: 0.88,
+    triggerGroups: [
+      ["adentro", "dentro", "interior", "salon"],
+      ["afuera", "fuera", "exterior", "terraza", "jardin"],
+    ],
+    section: "Arrival", phraseIndex: 2, weight: 0.92,
   },
   {
-    intent: "THIS_TABLE",
-    theySaidEnglish: "How about this table?",
-    triggers: ["esta mesa", "aqui esta bien", "esta le gusta", "les parece", "esta bien aqui"],
+    intent: "THIS_TABLE_OK",
+    theySaidEnglish: "Is this table okay?",
+    triggerGroups: [
+      ["esta mesa", "esta bien", "les parece", "aqui esta", "le gusta esta"],
+    ],
     section: "Arrival", phraseIndex: 1, weight: 0.82,
   },
   {
     intent: "WAIT_TIME",
-    theySaidEnglish: "There's a wait.",
-    triggers: ["espera", "esperar", "minutos", "momento", "lista de espera", "no hay mesa", "lleno", "ocupado", "tarda"],
+    theySaidEnglish: "There will be a wait.",
+    triggerGroups: [
+      ["espera", "esperar", "lista de espera"],
+      ["minutos", "momento", "tarda", "lleno", "no hay mesa", "ocupado"],
+    ],
     section: "Arrival", phraseIndex: 4, weight: 0.85,
+  },
+
+  // ── OFFER MENU ──────────────────────────────────────────
+  {
+    intent: "OFFER_MENU",
+    theySaidEnglish: "Would you like a menu?",
+    triggerGroups: [
+      ["menu", "carta", "la carta"],
+      ["quiere", "quieres", "gusta", "gustaria", "le traigo", "necesita", "desea", "quieren"],
+    ],
+    section: "Food", phraseIndex: 0, weight: 0.88,
   },
 
   // ── DRINKS ──────────────────────────────────────────────
   {
     intent: "DRINK_ASK",
     theySaidEnglish: "What would you like to drink?",
-    triggers: ["tomar", "beber", "bebida", "algo de tomar", "para tomar", "que les traigo", "les ofrezco", "desea tomar", "quiere tomar", "van a tomar"],
+    triggerGroups: [
+      ["tomar", "beber", "bebida"],
+      ["algo de tomar", "para tomar", "que les traigo", "les ofrezco", "desea tomar", "quiere tomar", "van a tomar"],
+    ],
     section: "Drinks", phraseIndex: 0, weight: 0.92,
   },
   {
     intent: "DRINK_WATER",
-    theySaidEnglish: "Water?",
-    triggers: ["agua", "mineral", "natural", "agua natural", "agua mineral", "con gas", "sin gas"],
+    theySaidEnglish: "Would you like water?",
+    triggerGroups: [
+      ["agua"],
+      ["natural", "mineral", "con gas", "sin gas"],
+    ],
     section: "Drinks", phraseIndex: 1, weight: 0.82,
   },
   {
     intent: "DRINK_REFILL",
     theySaidEnglish: "Would you like another one?",
-    triggers: ["otra", "otro", "mas", "repito", "mismo", "misma", "le traigo otra", "le traigo otro", "quiere otra", "una mas"],
+    triggerGroups: [
+      ["otra", "otro", "mas", "mismo", "misma", "repito"],
+      ["le traigo otra", "quiere otra", "una mas"],
+    ],
     section: "Drinks", phraseIndex: 2, weight: 0.85,
   },
   {
     intent: "DRINK_BEER",
     theySaidEnglish: "What beer would you like?",
-    triggers: ["cerveza", "chela", "clara", "oscura", "de barril", "que cerveza", "cervezas"],
+    triggerGroups: [
+      ["cerveza", "chela", "cervezas"],
+      ["clara", "oscura", "de barril", "que cerveza"],
+    ],
     section: "Drinks", phraseIndex: 0, weight: 0.8,
   },
 
@@ -94,63 +136,88 @@ const intents: IntentDef[] = [
   {
     intent: "READY_TO_ORDER",
     theySaidEnglish: "Are you ready to order?",
-    triggers: ["ordenar", "pedir", "orden", "listo", "listos", "listo para", "van a ordenar", "ya saben", "les tomo la orden", "que van a pedir", "que desean", "que les traigo"],
+    triggerGroups: [
+      ["ordenar", "pedir", "orden"],
+      ["listo", "listos", "ya saben", "les tomo", "van a pedir", "que desean", "van a ordenar"],
+    ],
     section: "Food", phraseIndex: 0, weight: 0.92,
   },
   {
     intent: "SPICE_ASK",
-    theySaidEnglish: "Spicy okay?",
-    triggers: ["picante", "picoso", "chile", "salsa", "pica", "enchilado", "le pone salsa", "con chile"],
+    theySaidEnglish: "Is spicy okay?",
+    triggerGroups: [
+      ["picante", "picoso", "chile", "enchilado"],
+      ["salsa", "pica", "con chile", "le pone salsa"],
+    ],
     section: "Food", phraseIndex: 1, weight: 0.88,
   },
   {
     intent: "SHARE_ASK",
-    theySaidEnglish: "For sharing?",
-    triggers: ["compartir", "para compartir", "para los dos", "entre los dos", "a la mitad"],
+    theySaidEnglish: "Would you like to share?",
+    triggerGroups: [
+      ["compartir", "para compartir", "para los dos", "entre los dos", "a la mitad"],
+    ],
     section: "Food", phraseIndex: 2, weight: 0.82,
   },
   {
     intent: "FOOD_SUGGEST",
-    theySaidEnglish: "I recommend this dish.",
-    triggers: ["recomiendo", "especialidad", "le sugiero", "lo mas pedido", "plato del dia", "especial", "popular"],
+    theySaidEnglish: "I recommend this one.",
+    triggerGroups: [
+      ["recomiendo", "especialidad", "le sugiero", "lo mas pedido", "plato del dia", "especial", "popular"],
+    ],
     section: "Food", phraseIndex: 0, weight: 0.7,
   },
   {
-    intent: "ANYTHING_ELSE_FOOD",
+    intent: "ANYTHING_ELSE",
     theySaidEnglish: "Anything else?",
-    triggers: ["algo mas", "necesita", "necesitan", "ofrece", "le traigo algo", "otra cosa", "desea algo mas", "falta algo"],
+    triggerGroups: [
+      ["algo mas", "necesita", "necesitan", "otra cosa", "desea algo mas", "falta algo", "le traigo algo"],
+    ],
     section: "Food", phraseIndex: 0, weight: 0.65,
   },
   {
-    intent: "FOOD_HOW_IS_IT",
+    intent: "HOW_IS_EVERYTHING",
     theySaidEnglish: "How is everything?",
-    triggers: ["todo bien", "esta bien", "le gusta", "les gusta", "que tal", "como esta", "como va", "les gusto", "satisfecho"],
+    triggerGroups: [
+      ["todo bien", "le gusta", "les gusta", "que tal", "como esta", "como va", "les gusto", "satisfecho"],
+    ],
     section: "Arrival", phraseIndex: 1, weight: 0.55,
   },
 
   // ── BILL / PAYMENT ──────────────────────────────────────
   {
     intent: "BRING_CHECK",
-    theySaidEnglish: "Here's the check.",
-    triggers: ["cuenta", "aqui esta la cuenta", "su cuenta", "el total", "son", "pesos"],
+    theySaidEnglish: "Here is the check.",
+    triggerGroups: [
+      ["cuenta", "su cuenta", "aqui esta la cuenta"],
+      ["total", "son", "pesos"],
+    ],
     section: "Bill", phraseIndex: 0, weight: 0.88,
   },
   {
     intent: "HOW_PAY",
     theySaidEnglish: "How would you like to pay?",
-    triggers: ["pagar", "cobrar", "efectivo", "tarjeta", "como va a pagar", "forma de pago", "metodo de pago", "terminal"],
+    triggerGroups: [
+      ["pagar", "cobrar", "forma de pago", "metodo de pago"],
+      ["efectivo", "tarjeta", "terminal", "como va a pagar"],
+    ],
     section: "Bill", phraseIndex: 0, weight: 0.85,
   },
   {
-    intent: "SEPARATE_CHECK",
-    theySaidEnglish: "Together or separate?",
-    triggers: ["junto", "juntos", "una sola", "separado", "separada", "dividir", "dividimos", "separar la cuenta"],
+    intent: "TOGETHER_OR_SEPARATE",
+    theySaidEnglish: "Together or separate checks?",
+    triggerGroups: [
+      ["junto", "juntos", "separado", "separada", "dividir", "separar"],
+      ["una sola", "dividimos", "separar la cuenta"],
+    ],
     section: "Bill", phraseIndex: 1, weight: 0.88,
   },
   {
     intent: "CHANGE",
-    theySaidEnglish: "Here's your change.",
-    triggers: ["cambio", "vuelta", "su cambio", "aqui tiene", "le debo"],
+    theySaidEnglish: "Here is your change.",
+    triggerGroups: [
+      ["cambio", "vuelta", "su cambio", "aqui tiene", "le debo"],
+    ],
     section: "Bill", phraseIndex: 0, weight: 0.7,
   },
 
@@ -158,34 +225,69 @@ const intents: IntentDef[] = [
   {
     intent: "TIP_ASK",
     theySaidEnglish: "Would you like to add a tip?",
-    triggers: ["propina", "servicio", "agregar servicio", "dejar propina", "gusta agregar", "le pongo", "le agrego", "desea dejar", "con cuanto", "cuanto desea dejar"],
+    triggerGroups: [
+      ["propina", "servicio"],
+      ["agregar", "dejar", "gusta agregar", "le pongo", "le agrego", "desea dejar", "con cuanto"],
+    ],
     section: "Tip", phraseIndex: 0, weight: 0.92,
   },
   {
     intent: "TIP_PERCENT",
     theySaidEnglish: "Add 10%?",
-    triggers: ["el diez", "diez por ciento", "quince por ciento", "veinte por ciento", "porcentaje", "el 10", "el 15", "el 20"],
+    triggerGroups: [
+      ["diez", "quince", "veinte"],
+      ["por ciento", "porcentaje", "el 10", "el 15", "el 20"],
+    ],
     section: "Tip", phraseIndex: 0, weight: 0.9,
   },
   {
-    intent: "TIP_RECEIPT",
+    intent: "RECEIPT_ASK",
     theySaidEnglish: "Do you need a receipt?",
-    triggers: ["recibo", "factura", "ticket", "comprobante", "nota", "necesita factura", "requiere factura"],
+    triggerGroups: [
+      ["recibo", "factura", "ticket", "comprobante", "nota"],
+      ["necesita", "requiere", "le doy", "quiere"],
+    ],
     section: "Tip", phraseIndex: 5, weight: 0.85,
   },
   {
-    intent: "TIP_TOTAL",
+    intent: "TOTAL_AMOUNT",
     theySaidEnglish: "The total is...",
-    triggers: ["total", "total con propina", "total con servicio", "queda en", "serian"],
+    triggerGroups: [
+      ["total", "total con", "queda en", "serian"],
+      ["propina", "servicio"],
+    ],
     section: "Tip", phraseIndex: 4, weight: 0.8,
   },
   {
     intent: "CASH_OR_CARD",
     theySaidEnglish: "Cash or card?",
-    triggers: ["efectivo o tarjeta", "como paga", "forma de pago", "tarjeta o efectivo"],
+    triggerGroups: [
+      ["efectivo", "tarjeta"],
+      ["o tarjeta", "o efectivo", "como paga", "forma de pago"],
+    ],
     section: "Tip", phraseIndex: 2, weight: 0.88,
   },
 ];
+
+// ── Fallback "clarify" phrases — never show blank ───────────────────────
+
+const CLARIFY_PHRASES: Record<SpeechMode, Phrase[]> = {
+  street: [
+    { spanish: "Que dijo?", english: "What did you say?", pronunciation: "keh DEE-hoh" },
+    { spanish: "Otra vez?", english: "Again?", pronunciation: "OH-trah vehs" },
+    { spanish: "No entendi.", english: "I didn't get that.", pronunciation: "noh ehn-tehn-DEE" },
+  ],
+  neutral: [
+    { spanish: "Perdone, que dijo?", english: "Sorry, what did you say?", pronunciation: "pehr-DOH-neh, keh DEE-hoh" },
+    { spanish: "Me puede repetir?", english: "Can you repeat that?", pronunciation: "meh PWEH-deh reh-peh-TEER" },
+    { spanish: "No entendi, disculpe.", english: "I didn't understand, sorry.", pronunciation: "noh ehn-tehn-DEE, dees-KOOL-peh" },
+  ],
+  formal: [
+    { spanish: "Disculpe, podria repetir?", english: "Excuse me, could you repeat?", pronunciation: "dees-KOOL-peh, poh-DREE-ah reh-peh-TEER" },
+    { spanish: "Perdone, no le entendi.", english: "Sorry, I didn't catch that.", pronunciation: "pehr-DOH-neh, noh leh ehn-tehn-DEE" },
+    { spanish: "Me lo podria decir de nuevo?", english: "Could you say that again?", pronunciation: "meh loh poh-DREE-ah deh-SEER deh NWEH-voh" },
+  ],
+};
 
 // ── Normalizer ──────────────────────────────────────────────────────────
 
@@ -193,8 +295,9 @@ function normalize(text: string): string {
   return text
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")  // strip accents
-    .replace(/[.,!?;:]/g, "")          // strip punctuation
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[.,!?;:¿¡'"()]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -203,54 +306,77 @@ function normalize(text: string): string {
 export function classifyIntent(
   transcript: string,
   mode: SpeechMode,
-): IntentMatch | null {
+): IntentMatch {
   const normed = normalize(transcript);
-  const original = transcript.toLowerCase();
 
   let best: { def: IntentDef; score: number } | null = null;
 
   for (const def of intents) {
-    let hits = 0;
-    for (const trigger of def.triggers) {
-      const normedTrigger = normalize(trigger);
-      if (normed.includes(normedTrigger) || original.includes(trigger)) {
-        hits++;
+    let groupHits = 0;
+    let totalWordHits = 0;
+
+    for (const group of def.triggerGroups) {
+      let groupMatched = false;
+      for (const trigger of group) {
+        const normedTrigger = normalize(trigger);
+        if (normed.includes(normedTrigger)) {
+          groupMatched = true;
+          totalWordHits++;
+        }
       }
+      if (groupMatched) groupHits++;
     }
 
-    if (hits === 0) continue;
+    if (groupHits === 0) continue;
 
-    // Score = weight * (hits/totalTriggers) + bonus for multi-word matches
-    const ratio = hits / def.triggers.length;
-    const multiWordBonus = def.triggers.some(t => t.includes(" ") && normed.includes(normalize(t))) ? 0.1 : 0;
-    const score = Math.min(1, def.weight * ratio + 0.25 + multiWordBonus);
+    // Score rewards hitting more trigger groups (covering more semantic axes)
+    const groupRatio = groupHits / def.triggerGroups.length;
+    // Bonus for multi-word phrase matches
+    const multiWordBonus = totalWordHits > 1 ? 0.08 : 0;
+    // Bonus for matching ALL groups
+    const fullMatchBonus = groupHits === def.triggerGroups.length ? 0.12 : 0;
+    const score = Math.min(1, def.weight * groupRatio + 0.2 + multiWordBonus + fullMatchBonus);
 
     if (!best || score > best.score) {
       best = { def, score };
     }
   }
 
-  if (!best || best.score < 0.35) return null;
+  // If we have a match, return it
+  if (best && best.score >= 0.35) {
+    const sections = fastModePhrasesBySection[mode];
+    const section = sections.find((s) => s.label === best!.def.section);
+    if (section) {
+      const phrase = section.phrases[best.def.phraseIndex] ?? section.phrases[0];
+      if (phrase) {
+        return {
+          confidence: Math.round(best.score * 100) / 100,
+          section: best.def.section,
+          intent: best.def.intent,
+          phrase,
+          theySaidEnglish: best.def.theySaidEnglish,
+        };
+      }
+    }
+  }
 
-  const sections = fastModePhrasesBySection[mode];
-  const section = sections.find((s) => s.label === best!.def.section);
-  if (!section) return null;
-
-  const phrase = section.phrases[best.def.phraseIndex];
-  if (!phrase) return null;
+  // FALLBACK — never return null. Show a "Not sure" response with a clarifying question.
+  const clarifyPhrases = CLARIFY_PHRASES[mode];
+  const phrase = clarifyPhrases[Math.floor(Math.random() * clarifyPhrases.length)];
 
   return {
-    confidence: Math.round(best.score * 100) / 100,
-    section: best.def.section,
-    intent: best.def.intent,
+    confidence: 0.15,
+    section: "Clarify",
+    intent: "UNCLEAR",
     phrase,
-    theySaidEnglish: best.def.theySaidEnglish,
+    theySaidEnglish: "Not sure what they said.",
   };
 }
 
 // ── Section phrase getter ───────────────────────────────────────────────
 
 export function getSectionPhrases(sectionLabel: string, mode: SpeechMode): Phrase[] {
+  if (sectionLabel === "Clarify") return CLARIFY_PHRASES[mode];
   const sections = fastModePhrasesBySection[mode];
   const section = sections.find((s) => s.label === sectionLabel);
   return section?.phrases ?? [];

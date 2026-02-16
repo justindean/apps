@@ -50,6 +50,15 @@ function WaveformIcon({ size = 12 }: { size?: number }) {
   );
 }
 
+function GearIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
 /* ── SpeechRecognition type shim ── */
 interface SpeechRecognitionInstance {
   lang: string;
@@ -63,7 +72,6 @@ interface SpeechRecognitionInstance {
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
-  onaudiostart?: (() => void) | null;
 }
 
 interface SpeechRecognitionEvent {
@@ -73,14 +81,12 @@ interface SpeechRecognitionEvent {
 
 interface SpeechRecognitionResultList {
   readonly length: number;
-  item(index: number): SpeechRecognitionResult;
   [index: number]: SpeechRecognitionResult;
 }
 
 interface SpeechRecognitionResult {
   readonly length: number;
   readonly isFinal: boolean;
-  item(index: number): SpeechRecognitionAlternative;
   [index: number]: SpeechRecognitionAlternative;
 }
 
@@ -103,38 +109,31 @@ declare global {
   }
 }
 
-type ListenState = "idle" | "listening" | "processing";
-
-interface ListenPanelProps {
-  mode: SpeechMode;
-  onCopy: (text: string) => void;
-  onSpeak: (phrase: Phrase) => void;
+/* ── Device detection ── */
+function isIOSSafari(): boolean {
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
+  return isIOS && isSafari;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Restaurant hotword list — biases transcription toward these terms
-   ───────────────────────────────────────────────────────────────────────── */
-const RESTAURANT_HINTS = [
-  "afuera", "adentro", "mesa", "cuenta", "propina", "servicio",
-  "cerveza", "agua", "menu", "ordenar", "tarjeta", "efectivo",
-  "recibo", "firma", "picante", "chile", "salsa", "tomar",
-  "beber", "pedir", "separado", "junto", "pesos", "cambio",
-  "factura", "terraza", "bienvenido",
-];
+function getDeviceInfo(): string {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return "iPhone Safari";
+  if (/iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "iPad Safari";
+  if (/Android/.test(ua)) return "Android";
+  if (/Chrome/.test(ua)) return "Chrome Desktop";
+  if (/Firefox/.test(ua)) return "Firefox";
+  return "Unknown browser";
+}
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Second-pass "Spanish correction" — rewrites common STT mishearings
-   into the most likely Mexican-Spanish restaurant phrase
-   ───────────────────────────────────────────────────────────────────────── */
+/* ── Spanish corrections ── */
 const CORRECTIONS: [RegExp, string][] = [
-  // Common mis-hearings and normalisations
   [/\ba fuera\b/gi, "afuera"],
   [/\ba dentro\b/gi, "adentro"],
   [/\ba dent?ro? o a ?fuera?\b/gi, "adentro o afuera"],
   [/\bafuera? o ?a ?dent?ro?\b/gi, "afuera o adentro"],
-  [/\bqui[eé]n?es?\s?s[oó]n\b/gi, "cuantos son"],
   [/\bquienes? son\b/gi, "cuantos son"],
-  [/\bcuantos?\s?persona\b/gi, "cuantas personas"],
   [/\bla quenta\b/gi, "la cuenta"],
   [/\bsu quenta\b/gi, "su cuenta"],
   [/\bser[vb]esa\b/gi, "cerveza"],
@@ -146,18 +145,8 @@ const CORRECTIONS: [RegExp, string][] = [
   [/\bres[ie]bo\b/gi, "recibo"],
   [/\bfa[ck]tura\b/gi, "factura"],
   [/\bpi[ck]ante\b/gi, "picante"],
-  [/\bpi[ck]oso\b/gi, "picoso"],
   [/\bme ?nu\b/gi, "menu"],
   [/\borde[nm]ar\b/gi, "ordenar"],
-  [/\bagua\s*mineral\b/gi, "agua mineral"],
-  [/\bagua\s*natural\b/gi, "agua natural"],
-  [/\bqueltal\b/gi, "que tal"],
-  [/\bque ?tal\b/gi, "que tal"],
-  [/\besta bien a ?qu[ií]\b/gi, "esta bien aqui"],
-  [/\ble ?gusta?\b/gi, "le gusta"],
-  [/\brecomi[e]?ndo\b/gi, "recomiendo"],
-  [/\bes ?pecialidad\b/gi, "especialidad"],
-  // Google STT sometimes splits "algo de tomar" oddly
   [/\balgo\s*de\s*tom[ae]r\b/gi, "algo de tomar"],
   [/\bvan\s*a\s*tom[ae]r\b/gi, "van a tomar"],
   [/\bvan\s*a\s*ped[ie]r\b/gi, "van a pedir"],
@@ -172,15 +161,22 @@ function correctSpanish(raw: string): string {
   return corrected;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Section color mapping (mirrors FlowNavigator)
-   ───────────────────────────────────────────────────────────────────────── */
+/* ── Restaurant hotwords for grammar hints ── */
+const RESTAURANT_HINTS = [
+  "afuera", "adentro", "mesa", "cuenta", "propina", "servicio",
+  "cerveza", "agua", "menu", "ordenar", "tarjeta", "efectivo",
+  "recibo", "picante", "chile", "salsa", "tomar", "beber",
+  "pedir", "separado", "junto", "pesos", "cambio", "terraza",
+];
+
+/* ── Section colors ── */
 const sectionBorderColor: Record<string, string> = {
   Arrival: "border-sky-300/60 dark:border-sky-600/40",
   Drinks: "border-amber-300/60 dark:border-amber-600/40",
   Food: "border-orange-300/60 dark:border-orange-500/40",
   Bill: "border-emerald-300/60 dark:border-emerald-600/40",
   Tip: "border-violet-300/60 dark:border-violet-600/40",
+  Clarify: "border-stone-300/60 dark:border-stone-600/40",
 };
 
 const sectionBadgeColor: Record<string, string> = {
@@ -189,15 +185,22 @@ const sectionBadgeColor: Record<string, string> = {
   Food: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
   Bill: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
   Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
+  Clarify: "bg-stone-100 text-stone-600 dark:bg-stone-800/40 dark:text-stone-400",
 };
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Debug panel data
-   ───────────────────────────────────────────────────────────────────────── */
+/* ── Types ── */
+type ListenState = "idle" | "listening" | "recording" | "processing";
+
 interface DebugLog {
   time: string;
-  type: "partial" | "final" | "corrected" | "intent" | "error" | "info";
+  type: "partial" | "final" | "corrected" | "intent" | "error" | "info" | "capture";
   text: string;
+}
+
+interface ListenPanelProps {
+  mode: SpeechMode;
+  onCopy: (text: string) => void;
+  onSpeak: (phrase: Phrase) => void;
 }
 
 /* ═════════════════════════════════════════════════════════════════════════
@@ -211,58 +214,173 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [match, setMatch] = useState<IntentMatch | null>(null);
   const [altPhrases, setAltPhrases] = useState<Phrase[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [supported, setSupported] = useState(true);
 
-  // Audio constraint toggles
-  const [noiseSuppression, setNoiseSuppression] = useState(true);
-  const [echoCancellation, setEchoCancellation] = useState(true);
+  // Mode detection
+  const [captureMode] = useState(() => isIOSSafari());
+  const [deviceInfo] = useState(() => getDeviceInfo());
 
   // Debug panel
   const [showDebug, setShowDebug] = useState(false);
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
   const [micSettings, setMicSettings] = useState<string>("");
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Capture mode refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Realtime mode refs
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const finalTextRef = useRef("");
 
-  const addDebugLog = useCallback((type: DebugLog["type"], text: string) => {
-    const time = new Date().toLocaleTimeString("en-US", { hour12: false, fractionalSecondDigits: 1 } as Intl.DateTimeFormatOptions);
-    setDebugLogs((prev) => [...prev.slice(-50), { time, type, text }]);
+  const addLog = useCallback((type: DebugLog["type"], text: string) => {
+    const time = new Date().toLocaleTimeString("en-US", { hour12: false });
+    setDebugLogs((prev) => [...prev.slice(-60), { time, type, text }]);
   }, []);
 
-  useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) setSupported(false);
-  }, []);
-
+  /* ── Process transcript (shared by both modes) ── */
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
 
-      // Second-pass Spanish correction
       const corrected = correctSpanish(rawText);
       setCorrectedText(corrected);
-      addDebugLog("corrected", `"${rawText}" → "${corrected}"`);
+      if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      // Use corrected text for intent detection
       const intentMatch = classifyIntent(corrected, mode);
       setMatch(intentMatch);
+      addLog("intent", `${intentMatch.intent} [${intentMatch.section}] conf=${intentMatch.confidence}`);
 
-      if (intentMatch) {
-        addDebugLog("intent", `${intentMatch.intent} [${intentMatch.section}] conf=${intentMatch.confidence}`);
-        const all = getSectionPhrases(intentMatch.section, mode);
-        setAltPhrases(all.filter((p) => p.spanish !== intentMatch.phrase.spanish));
-      } else {
-        addDebugLog("intent", "No match");
-        setAltPhrases([]);
-      }
+      const all = getSectionPhrases(intentMatch.section, mode);
+      setAltPhrases(all.filter((p) => p.spanish !== intentMatch.phrase.spanish).slice(0, 4));
     },
-    [mode, addDebugLog],
+    [mode, addLog],
   );
 
-  const startListening = useCallback(async () => {
+  /* ═══════════════════════════════════════════════════════════════════════
+     CAPTURE MODE — iOS Safari: record audio blob -> server Whisper
+     ═══════════════════════════════════════════════════════════════════════ */
+  const startCapture = useCallback(async () => {
+    setError(null);
+    setInterimText("");
+    setFinalText("");
+    setCorrectedText("");
+    setMatch(null);
+    setAltPhrases([]);
+
+    addLog("capture", "Requesting mic (capture mode)...");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, sampleRate: { ideal: 44100 }, echoCancellation: true, noiseSuppression: true },
+      });
+
+      // Log mic settings
+      const track = stream.getAudioTracks()[0];
+      if (track) {
+        const s = track.getSettings();
+        setMicSettings(JSON.stringify(s, null, 2));
+        addLog("info", `Mic: ${track.label} sr=${s.sampleRate}`);
+      }
+
+      // Determine best supported mime type
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : "audio/webm";
+
+      addLog("capture", `Recording: ${mimeType}`);
+
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType });
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        addLog("capture", `Recorded ${(blob.size / 1024).toFixed(1)}KB`);
+
+        if (blob.size < 1000) {
+          setError("Recording too short. Try speaking louder.");
+          setState("idle");
+          return;
+        }
+
+        setState("processing");
+        setInterimText("Transcribing...");
+
+        try {
+          const form = new FormData();
+          form.append("audio", blob, `audio.${mimeType.includes("mp4") ? "mp4" : "webm"}`);
+          form.append("model", "whisper-1");
+          form.append("language", "es");
+          form.append("prompt", "Conversacion en restaurante mexicano: menu, cerveza, cuenta, propina, adentro, afuera, mesa, tarjeta, efectivo.");
+
+          const resp = await fetch("/api/transcribe", { method: "POST", body: form });
+          const data = await resp.json();
+
+          if (data.error) {
+            addLog("error", data.error);
+            setError(data.error);
+            setState("idle");
+            setInterimText("");
+            return;
+          }
+
+          const transcript = data.transcript || data.text || "";
+          addLog("final", `Whisper: "${transcript}"`);
+          setFinalText(transcript);
+          setInterimText("");
+          processTranscript(transcript);
+          setState("idle");
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Transcription failed";
+          addLog("error", msg);
+          setError(msg);
+          setState("idle");
+          setInterimText("");
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start(250); // chunk every 250ms
+      setState("recording");
+      addLog("capture", "Recording started (10s max)");
+
+      // Auto-stop after 12 seconds
+      captureTimerRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") {
+          addLog("capture", "Auto-stop (12s limit)");
+          mediaRecorderRef.current.stop();
+        }
+      }, 12000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Mic error: ${msg}`);
+      addLog("error", msg);
+    }
+  }, [addLog, processTranscript]);
+
+  const stopCapture = useCallback(() => {
+    if (captureTimerRef.current) {
+      clearTimeout(captureTimerRef.current);
+      captureTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+      addLog("capture", "Stopped by user");
+    }
+  }, [addLog]);
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     REALTIME MODE — Chrome/desktop: SpeechRecognition streaming
+     ═══════════════════════════════════════════════════════════════════════ */
+  const startRealtime = useCallback(async () => {
     setError(null);
     setInterimText("");
     setFinalText("");
@@ -273,37 +391,27 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setError("Speech recognition is not supported in this browser.");
+      setError("Speech recognition not supported. Try Chrome.");
       return;
     }
 
-    // Request high-quality audio with constraint toggles
+    // Request mic with quality constraints
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: { ideal: 48000, min: 44100 },
-          sampleSize: { ideal: 16 },
-          autoGainControl: true,
-          noiseSuppression,
-          echoCancellation,
-        },
+        audio: { channelCount: 1, sampleRate: { ideal: 48000 }, autoGainControl: true, noiseSuppression: true, echoCancellation: true },
       });
       mediaStreamRef.current = stream;
 
-      // Capture mic track settings for debug
       const track = stream.getAudioTracks()[0];
       if (track) {
-        const settings = track.getSettings();
-        const settingsStr = JSON.stringify(settings, null, 2);
-        setMicSettings(settingsStr);
-        addDebugLog("info", `Mic: ${track.label}`);
-        addDebugLog("info", `Settings: sampleRate=${settings.sampleRate}, ch=${settings.channelCount}, ns=${settings.noiseSuppression}, ec=${settings.echoCancellation}`);
+        const s = track.getSettings();
+        setMicSettings(JSON.stringify(s, null, 2));
+        addLog("info", `Mic: ${track.label} sr=${s.sampleRate} ns=${s.noiseSuppression} ec=${s.echoCancellation}`);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError(`Microphone error: ${msg}`);
-      addDebugLog("error", msg);
+      setError(`Mic error: ${msg}`);
+      addLog("error", msg);
       return;
     }
 
@@ -313,18 +421,15 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
-    // Hotword grammar hints — supported in Chrome via SpeechGrammarList
+    // Grammar hints (Chrome)
     const SGL = window.SpeechGrammarList || window.webkitSpeechGrammarList;
     if (SGL) {
       try {
-        const grammarList = new SGL();
-        const grammar = `#JSGF V1.0; grammar hints; public <hint> = ${RESTAURANT_HINTS.join(" | ")} ;`;
-        grammarList.addFromString(grammar, 1);
-        recognition.grammars = grammarList;
-        addDebugLog("info", `Grammar hints loaded: ${RESTAURANT_HINTS.length} terms`);
-      } catch {
-        addDebugLog("info", "SpeechGrammarList not fully supported, skipping hints");
-      }
+        const gl = new SGL();
+        gl.addFromString(`#JSGF V1.0; grammar hints; public <hint> = ${RESTAURANT_HINTS.join(" | ")} ;`, 1);
+        recognition.grammars = gl;
+        addLog("info", `Grammar hints: ${RESTAURANT_HINTS.length} terms`);
+      } catch { /* not supported */ }
     }
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -332,13 +437,12 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       let final = "";
 
       for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          final += result[0].transcript;
-          addDebugLog("final", `"${result[0].transcript}" conf=${(result[0].confidence * 100).toFixed(0)}%`);
+        const r = event.results[i];
+        if (r.isFinal) {
+          final += r[0].transcript;
+          addLog("final", `"${r[0].transcript}" conf=${(r[0].confidence * 100).toFixed(0)}%`);
         } else {
-          interim += result[0].transcript;
-          addDebugLog("partial", `"${result[0].transcript}"`);
+          interim += r[0].transcript;
         }
       }
 
@@ -347,29 +451,24 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         setFinalText(final);
         setInterimText("");
         processTranscript(final);
-      } else {
+      } else if (interim) {
         setInterimText(interim);
+        addLog("partial", `"${interim}"`);
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      addDebugLog("error", `STT error: ${event.error} ${event.message ?? ""}`);
+      addLog("error", `${event.error} ${event.message ?? ""}`);
       if (event.error === "no-speech" || event.error === "aborted") return;
-      setError(
-        event.error === "not-allowed"
-          ? "Microphone access denied. Please allow microphone permissions."
-          : `Recognition error: ${event.error}`,
-      );
+      setError(event.error === "not-allowed" ? "Microphone permission denied." : `Error: ${event.error}`);
       setState("idle");
     };
 
     recognition.onend = () => {
-      // Release mic
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
       }
-
       if (finalTextRef.current.trim()) {
         setState("processing");
         processTranscript(finalTextRef.current);
@@ -380,116 +479,74 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     };
 
     recognitionRef.current = recognition;
-
     try {
       recognition.start();
       setState("listening");
-      addDebugLog("info", "Started listening (es-MX)");
+      addLog("info", "Listening (es-MX, realtime)");
     } catch {
-      setError("Could not start speech recognition.");
+      setError("Could not start recognition.");
     }
-  }, [processTranscript, noiseSuppression, echoCancellation, addDebugLog]);
+  }, [processTranscript, addLog]);
 
-  const stopListening = useCallback(() => {
+  const stopRealtime = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
   }, []);
 
+  /* ── Unified start/stop ── */
+  const startListening = captureMode ? startCapture : startRealtime;
+  const stopListening = captureMode ? stopCapture : stopRealtime;
+  const isActive = state === "listening" || state === "recording" || state === "processing";
+
+  /* ── Cleanup ── */
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-        recognitionRef.current = null;
-      }
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-        mediaStreamRef.current = null;
-      }
+      recognitionRef.current?.abort();
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+      if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
     };
   }, []);
 
-  const handleSuggestedPhrase = useCallback(
-    (phrase: Phrase) => {
-      speakPhrase(phrase.spanish);
-      onSpeak(phrase);
-    },
-    [onSpeak],
-  );
+  const handleSuggestedPhrase = useCallback((phrase: Phrase) => {
+    speakPhrase(phrase.spanish);
+    onSpeak(phrase);
+  }, [onSpeak]);
 
-  // Long-press handler for debug panel
-  const handleMicPointerDown = useCallback(() => {
-    longPressTimer.current = setTimeout(() => {
-      setShowDebug((p) => !p);
-    }, 800);
-  }, []);
-
-  const handleMicPointerUp = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  }, []);
-
-  const isActive = state === "listening" || state === "processing";
   const displayText = finalText || interimText;
   const isInterim = !finalText && !!interimText;
-  const hasResults = !!finalText && state === "idle";
+  const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ── Unsupported browser ── */
-  if (!supported) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-8">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-stone-200 dark:bg-stone-700">
-          <MicIcon size={28} className="text-stone-400 dark:text-stone-500" />
-        </div>
-        <p className="max-w-[260px] text-center text-[13px] text-stone-400 dark:text-stone-500">
-          Speech recognition is not available in this browser. Try Chrome or Safari on mobile.
-        </p>
-      </div>
-    );
-  }
-
+  /* ═════════════════════════════════════════════════════════════════════
+     RENDER
+     ═════════════════════════════════════════════════════════════════════ */
   return (
     <div className="flex flex-col gap-5">
-      {/* ══════════════════════════════════════════════════════════════════
-          AUDIO CONSTRAINT TOGGLES
-          ══════════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-center gap-4">
-        <label className="flex cursor-pointer items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={noiseSuppression}
-            onChange={(e) => setNoiseSuppression(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-stone-300 accent-[#D94F2A]"
-            disabled={isActive}
-          />
-          <span className="text-[11px] font-medium text-stone-400 dark:text-stone-500">Noise suppression</span>
-        </label>
-        <label className="flex cursor-pointer items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={echoCancellation}
-            onChange={(e) => setEchoCancellation(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-stone-300 accent-[#D94F2A]"
-            disabled={isActive}
-          />
-          <span className="text-[11px] font-medium text-stone-400 dark:text-stone-500">Echo cancellation</span>
-        </label>
+
+      {/* ── Mode indicator + Debug toggle ── */}
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium text-stone-400 dark:text-stone-500">
+          {captureMode ? "Capture mode (iOS)" : "Realtime mode"}{" \u00B7 "}{deviceInfo}
+        </p>
+        <button
+          onClick={() => setShowDebug((p) => !p)}
+          className={`rounded-lg p-1.5 transition ${showDebug ? "bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200" : "text-stone-300 hover:text-stone-500 dark:text-stone-600 dark:hover:text-stone-400"}`}
+          aria-label="Toggle debug panel"
+        >
+          <GearIcon size={16} />
+        </button>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════
-          MIC BUTTON (long-press to toggle debug)
+          MIC BUTTON
           ══════════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col items-center gap-2.5">
         <button
-          onClick={isActive ? stopListening : startListening}
-          onPointerDown={handleMicPointerDown}
-          onPointerUp={handleMicPointerUp}
-          onPointerLeave={handleMicPointerUp}
+          onClick={isActive && state !== "processing" ? stopListening : !isActive ? startListening : undefined}
           className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
-            state === "listening"
+            state === "listening" || state === "recording"
               ? "bg-red-500 text-white shadow-lg shadow-red-500/30 active:scale-95"
               : state === "processing"
                 ? "bg-stone-300 text-stone-500 dark:bg-stone-600 dark:text-stone-400"
@@ -498,23 +555,26 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           disabled={state === "processing"}
           aria-label={isActive ? "Stop listening" : "Start listening"}
         >
-          {state === "listening" && (
+          {(state === "listening" || state === "recording") && (
             <span className="absolute inset-0 animate-ping rounded-full bg-red-500/30" />
           )}
-          {state === "listening" ? <StopIcon size={24} /> : <MicIcon size={28} />}
+          {state === "listening" || state === "recording" ? <StopIcon size={24} /> : <MicIcon size={28} />}
         </button>
 
         <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">
           {state === "idle" && !displayText && "Tap to listen"}
-          {state === "listening" && "Listening... tap to stop"}
-          {state === "processing" && "Processing..."}
           {state === "idle" && displayText && "Tap to listen again"}
+          {state === "listening" && "Listening... tap to stop"}
+          {state === "recording" && "Recording... tap to stop"}
+          {state === "processing" && "Processing..."}
         </p>
+
+        {captureMode && state === "recording" && (
+          <p className="text-[11px] text-stone-300 dark:text-stone-600">Auto-stops after 12 seconds</p>
+        )}
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════
-          ERROR
-          ══════════════════════════════════════════════════════════════════ */}
+      {/* ── Error ── */}
       {error && (
         <div className="rounded-xl bg-red-50 px-4 py-3 dark:bg-red-950/30">
           <p className="text-center text-[12px] font-medium text-red-600 dark:text-red-400">{error}</p>
@@ -522,63 +582,66 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-          THEY SAID — English first, Spanish underneath
+          THEY SAID — English meaning first, Spanish heard underneath
           ══════════════════════════════════════════════════════════════════ */}
       {displayText && (
         <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${match ? sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40" : "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-              They said
-            </p>
-            {match && (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They said</p>
+            {match && match.section !== "Clarify" && (
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
                 {match.section}
               </span>
             )}
           </div>
 
-          {/* English meaning — large and prominent */}
+          {/* English meaning */}
           {match && hasResults ? (
             <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
               {`\u201C${match.theySaidEnglish}\u201D`}
             </p>
           ) : (
             <p className={`text-[15px] font-bold leading-tight text-stone-700 dark:text-stone-300 ${isInterim ? "opacity-50" : ""}`}>
-              Interpreting...
+              {state === "processing" ? "Interpreting..." : "Listening..."}
             </p>
           )}
 
-          {/* Original Spanish — smaller, secondary */}
+          {/* Spanish heard */}
           <p className={`mt-1.5 text-[13px] leading-snug text-stone-400 dark:text-stone-500 ${isInterim ? "opacity-50" : ""}`}>
             <span className="font-medium text-stone-500/60 dark:text-stone-600">{"Heard: "}</span>
             {`\u201C${displayText}\u201D`}
           </p>
 
-          {/* Show correction if different */}
           {correctedText && correctedText !== finalText && hasResults && (
             <p className="mt-1 text-[11px] text-stone-300 dark:text-stone-600">
               {"Corrected: \u201C"}{correctedText}{"\u201D"}
             </p>
           )}
 
-          {isInterim && (
-            <p className="mt-1 text-[10px] text-stone-300 dark:text-stone-600">Still listening...</p>
+          {/* Confidence dot */}
+          {match && hasResults && (
+            <div className="mt-2 flex items-center gap-1.5">
+              <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 0.6 ? "bg-emerald-400" : match.confidence >= 0.4 ? "bg-amber-400" : "bg-stone-300"}`} />
+              <span className={`text-[10px] font-semibold ${match.confidence >= 0.6 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
+                {match.confidence >= 0.6 ? "Strong match" : match.confidence >= 0.4 ? "Likely match" : match.section === "Clarify" ? "Not sure" : "Best guess"}
+              </span>
+            </div>
           )}
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-          BEST REPLY — the main response card
+          BEST REPLY — always shown when we have results (never blank)
           ══════════════════════════════════════════════════════════════════ */}
       {match && hasResults && (
         <div className="animate-fade-in">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            Say this
+            {match.section === "Clarify" ? "Ask them to repeat" : "Say this"}
           </p>
 
           <button
             onClick={() => handleSuggestedPhrase(match.phrase)}
-            className={`group relative flex w-full flex-col overflow-hidden rounded-[18px] border-2 bg-gradient-to-b from-white to-warm-50 p-4 text-left shadow-card-elevated card-highlight transition-all duration-150 active:translate-y-px active:shadow-card-press dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-[#D94F2A]/30 dark:border-[#E8734F]/30"}`}
+            className={`group relative flex w-full flex-col overflow-hidden rounded-[18px] border-2 bg-gradient-to-b from-white to-warm-50 p-4 text-left shadow-card-elevated card-highlight transition-all duration-150 active:translate-y-px active:shadow-card-press dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-300/60"}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
@@ -597,21 +660,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                 <span className="text-[12px] font-extrabold">Speak</span>
               </div>
             </div>
-
-            {/* Confidence + intent badge */}
-            <div className="mt-3 flex items-center gap-2">
-              <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 0.7 ? "bg-emerald-400" : match.confidence >= 0.5 ? "bg-amber-400" : "bg-stone-300"}`} />
-              <span className={`text-[10px] font-semibold ${match.confidence >= 0.7 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 0.5 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
-                {match.confidence >= 0.7 ? "Strong match" : match.confidence >= 0.5 ? "Likely match" : "Best guess"}
-              </span>
-              <span className="text-[9px] text-stone-300 dark:text-stone-600">|</span>
-              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? "bg-stone-100 text-stone-600"}`}>
-                {match.intent.replace(/_/g, " ")}
-              </span>
-            </div>
           </button>
 
-          {/* Copy button */}
+          {/* Copy */}
           <div className="mt-1.5 flex justify-end">
             <button
               onClick={() => onCopy(match.phrase.spanish)}
@@ -621,7 +672,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             </button>
           </div>
 
-          {/* ── Alternative phrases from same section ── */}
+          {/* ── Alternative phrases ── */}
           {altPhrases.length > 0 && (
             <div className="mt-3">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
@@ -655,47 +706,55 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-          NO MATCH — guidance
-          ══════════════════════════════════════════════════════════════════ */}
-      {finalText && !match && state === "idle" && (
-        <div className="animate-fade-in rounded-xl bg-amber-50/60 px-4 py-3 dark:bg-amber-900/15">
-          <p className="text-center text-[13px] font-medium text-amber-700/70 dark:text-amber-400/60">
-            {"Couldn\u2019t match that to a known phrase. Try listening again or switch to Fast mode for common responses."}
-          </p>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════
-          DEBUG PANEL — toggle with long-press on mic
+          DEBUG PANEL
           ══════════════════════════════════════════════════════════════════ */}
       {showDebug && (
         <div className="rounded-2xl border border-stone-200/60 bg-stone-50 p-4 text-left font-mono text-[10px] leading-relaxed text-stone-500 dark:border-stone-700/40 dark:bg-stone-900 dark:text-stone-400">
           <div className="mb-2 flex items-center justify-between">
             <span className="font-sans text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-300">Debug Panel</span>
-            <button onClick={() => { setDebugLogs([]); setMicSettings(""); }} className="font-sans text-[10px] font-semibold text-stone-400 hover:text-stone-600">Clear</button>
+            <button onClick={() => setDebugLogs([])} className="font-sans text-[10px] font-semibold text-stone-400 hover:text-stone-600">Clear</button>
           </div>
 
-          {/* Browser + device */}
+          {/* System info */}
           <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
-            <p><span className="text-stone-400">UA: </span>{navigator.userAgent.slice(0, 80)}...</p>
-            <p><span className="text-stone-400">Lang: </span>es-MX (forced)</p>
-            <p><span className="text-stone-400">Noise supp: </span>{noiseSuppression ? "ON" : "OFF"}</p>
-            <p><span className="text-stone-400">Echo cancel: </span>{echoCancellation ? "ON" : "OFF"}</p>
+            <p><span className="text-stone-400">Device: </span>{deviceInfo}</p>
+            <p><span className="text-stone-400">Mode: </span>{captureMode ? "Capture (Whisper)" : "Realtime (SpeechRecognition)"}</p>
+            <p><span className="text-stone-400">Lang: </span>es-MX</p>
+            <p><span className="text-stone-400">iOS Safari: </span>{isIOSSafari() ? "Yes" : "No"}</p>
+            <p><span className="text-stone-400">UA: </span>{navigator.userAgent.slice(0, 100)}</p>
           </div>
 
-          {/* Mic track settings */}
+          {/* Mic settings */}
           {micSettings && (
             <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
-              <p className="font-bold text-stone-600 dark:text-stone-300">Mic Track Settings:</p>
+              <p className="font-bold text-stone-600 dark:text-stone-300">Mic Track:</p>
               <pre className="whitespace-pre-wrap text-[9px]">{micSettings}</pre>
             </div>
           )}
 
-          {/* Event logs */}
+          {/* Transcript + intent summary */}
+          {(finalText || correctedText || match) && (
+            <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
+              <p className="font-bold text-stone-600 dark:text-stone-300">Last Result:</p>
+              {finalText && <p><span className="text-stone-400">Raw: </span>{`"${finalText}"`}</p>}
+              {correctedText && correctedText !== finalText && <p><span className="text-amber-500">Corrected: </span>{`"${correctedText}"`}</p>}
+              {match && <p><span className="text-sky-500">Intent: </span>{match.intent} [{match.section}] conf={match.confidence}</p>}
+              {match && <p><span className="text-sky-500">English: </span>{match.theySaidEnglish}</p>}
+              {match && <p><span className="text-emerald-500">Reply: </span>{match.phrase.spanish} ({match.phrase.english})</p>}
+            </div>
+          )}
+
+          {/* Event log */}
           <div className="max-h-48 overflow-y-auto scrollbar-hide">
-            {debugLogs.length === 0 && <p className="text-stone-400">No events yet. Tap mic to start.</p>}
+            {debugLogs.length === 0 && <p className="text-stone-400">No events yet.</p>}
             {debugLogs.map((log, i) => (
-              <p key={i} className={log.type === "error" ? "text-red-500" : log.type === "final" ? "text-emerald-600 dark:text-emerald-400" : log.type === "corrected" ? "text-amber-600 dark:text-amber-400" : log.type === "intent" ? "text-sky-600 dark:text-sky-400" : ""}>
+              <p key={i} className={
+                log.type === "error" ? "text-red-500" :
+                log.type === "final" ? "text-emerald-600 dark:text-emerald-400" :
+                log.type === "corrected" ? "text-amber-600 dark:text-amber-400" :
+                log.type === "intent" ? "text-sky-600 dark:text-sky-400" :
+                log.type === "capture" ? "text-violet-600 dark:text-violet-400" : ""
+              }>
                 <span className="text-stone-400">{log.time} </span>
                 <span className="font-bold uppercase">[{log.type}] </span>
                 {log.text}
