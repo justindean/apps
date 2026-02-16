@@ -381,3 +381,131 @@ export function getSectionPhrases(sectionLabel: string, mode: SpeechMode): Phras
   const section = sections.find((s) => s.label === sectionLabel);
   return section?.phrases ?? [];
 }
+
+// ── Reply keys for LLM classification ───────────────────────────────────
+
+/**
+ * Build a map of reply keys to their display text (Spanish + English) for
+ * sending to the LLM in the classify prompt.
+ */
+export function getReplyKeys(mode: SpeechMode): Record<string, string> {
+  const keys: Record<string, string> = {};
+  const sections = fastModePhrasesBySection[mode];
+  for (const section of sections) {
+    for (let i = 0; i < section.phrases.length; i++) {
+      const p = section.phrases[i];
+      const key = `${section.label.toUpperCase()}_${i}`;
+      keys[key] = `${p.spanish} (${p.english})`;
+    }
+  }
+  // Add clarify keys
+  const clarify = CLARIFY_PHRASES[mode];
+  for (let i = 0; i < clarify.length; i++) {
+    const p = clarify[i];
+    keys[`CLARIFY_${i === 0 ? "REPEAT" : i === 1 ? "AGAIN" : "SORRY"}`] = `${p.spanish} (${p.english})`;
+  }
+  return keys;
+}
+
+/**
+ * Resolve a reply key back to a Phrase.
+ */
+function resolveReplyKey(key: string, mode: SpeechMode): Phrase | null {
+  // Parse section and index: e.g. "ARRIVAL_0", "DRINKS_2", "CLARIFY_REPEAT"
+  if (key.startsWith("CLARIFY_")) {
+    const clarify = CLARIFY_PHRASES[mode];
+    if (key === "CLARIFY_REPEAT") return clarify[0] ?? null;
+    if (key === "CLARIFY_AGAIN") return clarify[1] ?? null;
+    if (key === "CLARIFY_SORRY") return clarify[2] ?? null;
+    return clarify[0] ?? null;
+  }
+
+  const lastUnderscore = key.lastIndexOf("_");
+  if (lastUnderscore === -1) return null;
+
+  const sectionKey = key.substring(0, lastUnderscore);
+  const idx = parseInt(key.substring(lastUnderscore + 1), 10);
+  if (isNaN(idx)) return null;
+
+  const sections = fastModePhrasesBySection[mode];
+  const section = sections.find((s) => s.label.toUpperCase() === sectionKey);
+  if (!section) return null;
+
+  return section.phrases[idx] ?? section.phrases[0] ?? null;
+}
+
+/** Infer section from reply key */
+function sectionFromKey(key: string): string {
+  if (key.startsWith("CLARIFY_")) return "Clarify";
+  const lastUnderscore = key.lastIndexOf("_");
+  if (lastUnderscore === -1) return "Clarify";
+  const sectionKey = key.substring(0, lastUnderscore);
+  // Map back from uppercase key to proper label
+  const map: Record<string, string> = {
+    ARRIVAL: "Arrival", DRINKS: "Drinks", FOOD: "Food", BILL: "Bill", TIP: "Tip",
+  };
+  return map[sectionKey] ?? "Clarify";
+}
+
+/**
+ * Build an IntentMatch from the LLM classification JSON response.
+ * Always returns something usable — never null.
+ */
+export interface LLMClassifyResponse {
+  heard_es?: string;
+  meaning_en?: string;
+  intent?: string;
+  confidence?: number;
+  best_reply_key?: string;
+  alt_reply_keys?: string[];
+  clarifying_reply_key?: string;
+}
+
+export function buildIntentMatchFromLLM(
+  llmResponse: LLMClassifyResponse,
+  mode: SpeechMode,
+): { match: IntentMatch; altPhrases: Phrase[] } {
+  const confidence = Math.min(1, Math.max(0, llmResponse.confidence ?? 0.3));
+  const intent = llmResponse.intent ?? "OTHER";
+  const meaningEn = llmResponse.meaning_en ?? "Not sure what they said.";
+
+  // Resolve best reply
+  const bestKey = llmResponse.best_reply_key ?? "CLARIFY_REPEAT";
+  let phrase = resolveReplyKey(bestKey, mode);
+  let section = sectionFromKey(bestKey);
+
+  // If couldn't resolve, use clarify
+  if (!phrase) {
+    phrase = CLARIFY_PHRASES[mode][0];
+    section = "Clarify";
+  }
+
+  // Resolve alternatives
+  const altPhrases: Phrase[] = [];
+  const altKeys = llmResponse.alt_reply_keys ?? [];
+  for (const altKey of altKeys) {
+    const altPhrase = resolveReplyKey(altKey, mode);
+    if (altPhrase && altPhrase.spanish !== phrase.spanish) {
+      altPhrases.push(altPhrase);
+    }
+  }
+
+  // If low confidence and we have a clarifying key, add it
+  if (confidence < 0.55 && llmResponse.clarifying_reply_key) {
+    const clarifyPhrase = resolveReplyKey(llmResponse.clarifying_reply_key, mode);
+    if (clarifyPhrase && !altPhrases.find((p) => p.spanish === clarifyPhrase.spanish) && clarifyPhrase.spanish !== phrase.spanish) {
+      altPhrases.push(clarifyPhrase);
+    }
+  }
+
+  return {
+    match: {
+      confidence,
+      section,
+      intent,
+      phrase,
+      theySaidEnglish: meaningEn,
+    },
+    altPhrases: altPhrases.slice(0, 4),
+  };
+}
