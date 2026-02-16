@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { classifyIntent, getRepliesForIntent, LLM_SYSTEM_PROMPT, buildLLMUserPrompt, buildListenMatchFromLLM } from "../data/restaurantIntents";
+import { classifyIntent, LLM_SYSTEM_PROMPT, buildListenMatchFromLLM } from "../data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
