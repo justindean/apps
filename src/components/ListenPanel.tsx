@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { classifyIntent, getSectionPhrases } from "../data/restaurantIntents";
-import type { IntentMatch } from "../data/restaurantIntents";
+import { classifyIntent, getSectionPhrases, getReplyKeys, buildIntentMatchFromLLM } from "../data/restaurantIntents";
+import type { IntentMatch, LLMClassifyResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
 function speakPhrase(text: string) {
@@ -214,6 +214,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [match, setMatch] = useState<IntentMatch | null>(null);
   const [altPhrases, setAltPhrases] = useState<Phrase[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [llmClassifying, setLlmClassifying] = useState(false);
 
   // Mode detection
   const [captureMode] = useState(() => isIOSSafari());
@@ -240,6 +241,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }, []);
 
   /* ── Process transcript (shared by both modes) ── */
+  /* PASS 1: Fast deterministic keyword matching
+     PASS 2: If confidence < 0.6, fire LLM classifier in background to refine */
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
@@ -248,12 +251,60 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setCorrectedText(corrected);
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      const intentMatch = classifyIntent(corrected, mode);
-      setMatch(intentMatch);
-      addLog("intent", `${intentMatch.intent} [${intentMatch.section}] conf=${intentMatch.confidence}`);
+      // ── PASS 1: Deterministic keyword classifier ──
+      const keywordMatch = classifyIntent(corrected, mode);
+      setMatch(keywordMatch);
+      addLog("intent", `[keyword] ${keywordMatch.intent} [${keywordMatch.section}] conf=${keywordMatch.confidence}`);
 
-      const all = getSectionPhrases(intentMatch.section, mode);
-      setAltPhrases(all.filter((p) => p.spanish !== intentMatch.phrase.spanish).slice(0, 4));
+      const all = getSectionPhrases(keywordMatch.section, mode);
+      setAltPhrases(all.filter((p) => p.spanish !== keywordMatch.phrase.spanish).slice(0, 4));
+
+      // ── PASS 2: LLM classifier if keyword match is uncertain ──
+      if (keywordMatch.confidence < 0.6) {
+        addLog("info", `Low confidence (${keywordMatch.confidence}), running LLM classifier...`);
+        setLlmClassifying(true);
+
+        const replyKeys = getReplyKeys(mode);
+
+        fetch("/api/classify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: corrected, replyKeys }),
+        })
+          .then((r) => r.json())
+          .then((data: LLMClassifyResponse & { error?: string }) => {
+            if (data.error) {
+              addLog("error", `LLM: ${data.error}`);
+              // Keep keyword match -- it's still better than nothing
+              return;
+            }
+
+            addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply_key}`);
+            addLog("info", `[LLM] meaning: "${data.meaning_en}"`);
+
+            const llmResult = buildIntentMatchFromLLM(data, mode);
+
+            // Only upgrade if LLM is more confident or keyword was UNCLEAR
+            if (
+              keywordMatch.intent === "UNCLEAR" ||
+              (data.confidence ?? 0) > keywordMatch.confidence
+            ) {
+              setMatch(llmResult.match);
+              if (llmResult.altPhrases.length > 0) {
+                setAltPhrases(llmResult.altPhrases);
+              }
+              addLog("info", `[LLM] Upgraded from keyword (${keywordMatch.intent} ${keywordMatch.confidence}) to LLM (${llmResult.match.intent} ${llmResult.match.confidence})`);
+            } else {
+              addLog("info", `[LLM] Kept keyword match (higher confidence)`);
+            }
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : "LLM classify failed";
+            addLog("error", `LLM: ${msg}`);
+            // Keep the keyword match
+          })
+          .finally(() => setLlmClassifying(false));
+      }
     },
     [mode, addLog],
   );
@@ -618,13 +669,18 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             </p>
           )}
 
-          {/* Confidence dot */}
+          {/* Confidence + LLM status */}
           {match && hasResults && (
-            <div className="mt-2 flex items-center gap-1.5">
-              <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 0.6 ? "bg-emerald-400" : match.confidence >= 0.4 ? "bg-amber-400" : "bg-stone-300"}`} />
-              <span className={`text-[10px] font-semibold ${match.confidence >= 0.6 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
-                {match.confidence >= 0.6 ? "Strong match" : match.confidence >= 0.4 ? "Likely match" : match.section === "Clarify" ? "Not sure" : "Best guess"}
-              </span>
+            <div className="mt-2 flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 0.6 ? "bg-emerald-400" : match.confidence >= 0.4 ? "bg-amber-400" : "bg-stone-300"}`} />
+                <span className={`text-[10px] font-semibold ${match.confidence >= 0.6 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
+                  {match.confidence >= 0.6 ? "Strong match" : match.confidence >= 0.4 ? "Likely match" : "Best guess"}
+                </span>
+              </div>
+              {llmClassifying && (
+                <span className="animate-pulse text-[10px] font-medium text-sky-500 dark:text-sky-400">Refining...</span>
+              )}
             </div>
           )}
         </div>
@@ -636,7 +692,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {match && hasResults && (
         <div className="animate-fade-in">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            {match.section === "Clarify" ? "Ask them to repeat" : "Say this"}
+            {match.section === "Clarify"
+              ? "Not sure \u2014 try asking"
+              : match.confidence < 0.5
+                ? `Sounds like ${match.section.toLowerCase()} \u2014 try saying`
+                : "Say this"}
           </p>
 
           <button
@@ -705,7 +765,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════
+      {/* ═══════════════════════════════════════���══════════════════════════
           DEBUG PANEL
           ══════════════════════════════════════════════════════════════════ */}
       {showDebug && (
