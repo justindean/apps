@@ -3,7 +3,7 @@ import type { Phrase, SpeechMode } from "../data/phrases";
 import { classifyIntent, getSectionPhrases } from "../data/restaurantIntents";
 import type { IntentMatch } from "../data/restaurantIntents";
 
-/* ── TTS helper (duplicated for self-containment) ── */
+/* ── TTS helper ── */
 function speakPhrase(text: string) {
   if ("speechSynthesis" in window) {
     const u = new SpeechSynthesisUtterance(text);
@@ -50,7 +50,55 @@ function WaveformIcon({ size = 12 }: { size?: number }) {
   );
 }
 
-type ListenState = "idle" | "connecting" | "listening" | "processing";
+/* ── SpeechRecognition type shim ── */
+type SpeechRecognitionInstance = InstanceType<typeof window.SpeechRecognition> & {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+};
+
+interface SpeechRecognitionEvent {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  readonly length: number;
+  readonly isFinal: boolean;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+
+interface SpeechRecognitionErrorEvent {
+  error: string;
+  message?: string;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
+  }
+}
+
+type ListenState = "idle" | "listening" | "processing";
 
 interface ListenPanelProps {
   mode: SpeechMode;
@@ -60,170 +108,153 @@ interface ListenPanelProps {
 
 export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
-  const [transcript, setTranscript] = useState("");
+  const [interimText, setInterimText] = useState("");
+  const [finalText, setFinalText] = useState("");
   const [match, setMatch] = useState<IntentMatch | null>(null);
   const [altPhrases, setAltPhrases] = useState<Phrase[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [supported, setSupported] = useState(true);
 
-  // WebRTC refs
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const dcRef = useRef<RTCDataChannel | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const finalTextRef = useRef("");
 
-  const cleanup = useCallback(() => {
-    if (dcRef.current) {
-      dcRef.current.close();
-      dcRef.current = null;
+  // Check browser support on mount
+  useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) setSupported(false);
+  }, []);
+
+  const processTranscript = useCallback(
+    (text: string) => {
+      if (!text.trim()) return;
+      const intentMatch = classifyIntent(text, mode);
+      setMatch(intentMatch);
+      if (intentMatch) {
+        setAltPhrases(getSectionPhrases(intentMatch.section, mode));
+      } else {
+        setAltPhrases([]);
+      }
+    },
+    [mode],
+  );
+
+  const startListening = useCallback(() => {
+    setError(null);
+    setInterimText("");
+    setFinalText("");
+    setMatch(null);
+    setAltPhrases([]);
+    finalTextRef.current = "";
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setError("Speech recognition is not supported in this browser.");
+      return;
     }
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
+
+    const recognition = new SR();
+    recognition.lang = "es-MX";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = "";
+      let final = "";
+
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          final += result[0].transcript;
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+
+      if (final) {
+        finalTextRef.current = final;
+        setFinalText(final);
+        setInterimText("");
+        // Process immediately on each final result so user gets live feedback
+        processTranscript(final);
+      } else {
+        setInterimText(interim);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      // "no-speech" and "aborted" are normal when user stops
+      if (event.error === "no-speech" || event.error === "aborted") return;
+      setError(event.error === "not-allowed"
+        ? "Microphone access denied. Please allow microphone permissions."
+        : `Recognition error: ${event.error}`);
+      setState("idle");
+    };
+
+    recognition.onend = () => {
+      // If we have accumulated text, do a final classification pass
+      if (finalTextRef.current.trim()) {
+        setState("processing");
+        processTranscript(finalTextRef.current);
+        // Brief delay so the user sees "Processing" before results
+        setTimeout(() => setState("idle"), 300);
+      } else if (state === "listening") {
+        setState("idle");
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+      setState("listening");
+    } catch {
+      setError("Could not start speech recognition.");
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+  }, [mode, processTranscript, state]);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
+    // onend handler will set state to processing → idle
   }, []);
 
   // Cleanup on unmount
-  useEffect(() => cleanup, [cleanup]);
-
-  const startListening = useCallback(async () => {
-    setError(null);
-    setTranscript("");
-    setMatch(null);
-    setAltPhrases([]);
-    setState("connecting");
-
-    try {
-      // 1. Get ephemeral token
-      const tokenRes = await fetch("/api/realtime-token");
-      if (!tokenRes.ok) {
-        const err = await tokenRes.json().catch(() => ({}));
-        throw new Error(err.error || `Token request failed (${tokenRes.status})`);
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+        recognitionRef.current = null;
       }
-      const tokenData = await tokenRes.json();
-      const ephemeralKey = tokenData.client_secret?.value;
-      if (!ephemeralKey) throw new Error("No ephemeral key returned");
+    };
+  }, []);
 
-      // 2. Get microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+  const handleSuggestedPhrase = useCallback(
+    (phrase: Phrase) => {
+      speakPhrase(phrase.spanish);
+      onSpeak(phrase);
+    },
+    [onSpeak],
+  );
 
-      // 3. Create WebRTC peer connection
-      const pc = new RTCPeerConnection();
-      pcRef.current = pc;
+  const isActive = state === "listening" || state === "processing";
+  const displayText = finalText || interimText;
+  const isInterim = !finalText && !!interimText;
 
-      // Add mic track
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-      // Create data channel for events
-      const dc = pc.createDataChannel("oai-events");
-      dcRef.current = dc;
-
-      let fullTranscript = "";
-
-      dc.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-
-          // Accumulate transcription
-          if (msg.type === "response.audio_transcript.delta" || msg.type === "conversation.item.input_audio_transcription.delta") {
-            const delta = msg.delta || "";
-            fullTranscript += delta;
-            setTranscript(fullTranscript);
-          }
-
-          // Final transcription
-          if (
-            msg.type === "conversation.item.input_audio_transcription.completed" ||
-            msg.type === "response.audio_transcript.done"
-          ) {
-            const finalText = msg.transcript || fullTranscript;
-            setTranscript(finalText);
-
-            // Classify intent
-            const intentMatch = classifyIntent(finalText, mode);
-            setMatch(intentMatch);
-            if (intentMatch) {
-              setAltPhrases(getSectionPhrases(intentMatch.section, mode));
-            }
-            setState("idle");
-          }
-
-          // Handle errors
-          if (msg.type === "error") {
-            setError(msg.error?.message || "Realtime API error");
-            setState("idle");
-          }
-        } catch {
-          // Ignore non-JSON messages
-        }
-      };
-
-      dc.onopen = () => {
-        setState("listening");
-        // Configure session for input transcription
-        dc.send(JSON.stringify({
-          type: "session.update",
-          session: {
-            input_audio_transcription: {
-              model: "whisper-1",
-            },
-          },
-        }));
-      };
-
-      dc.onclose = () => {
-        if (state === "listening") setState("idle");
-      };
-
-      // 4. Create and set local SDP offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      // 5. Send SDP to OpenAI Realtime API
-      const sdpRes = await fetch(
-        `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${ephemeralKey}`,
-            "Content-Type": "application/sdp",
-          },
-          body: offer.sdp,
-        }
-      );
-
-      if (!sdpRes.ok) throw new Error(`SDP exchange failed (${sdpRes.status})`);
-
-      const answerSdp = await sdpRes.text();
-      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
-
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Connection failed";
-      setError(message);
-      setState("idle");
-      cleanup();
-    }
-  }, [mode, cleanup, state]);
-
-  const stopListening = useCallback(() => {
-    setState("processing");
-    // Brief delay to let any final transcription come through
-    setTimeout(() => {
-      cleanup();
-      setState("idle");
-    }, 500);
-  }, [cleanup]);
-
-  const handleSuggestedPhrase = useCallback((phrase: Phrase) => {
-    speakPhrase(phrase.spanish);
-    onSpeak(phrase);
-    onCopy(phrase.spanish);
-  }, [onSpeak, onCopy]);
-
-  const isActive = state === "listening" || state === "connecting" || state === "processing";
+  // Unsupported browser
+  if (!supported) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-stone-200 dark:bg-stone-700">
+          <MicIcon size={28} className="text-stone-400 dark:text-stone-500" />
+        </div>
+        <p className="max-w-[260px] text-center text-[13px] text-stone-400 dark:text-stone-500">
+          Speech recognition is not available in this browser. Try Chrome or Safari on mobile.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -234,30 +265,28 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
             state === "listening"
               ? "bg-red-500 text-white shadow-lg shadow-red-500/30 active:scale-95"
-              : state === "connecting" || state === "processing"
+              : state === "processing"
               ? "bg-stone-300 text-stone-500 dark:bg-stone-600 dark:text-stone-400"
               : "bg-[#D94F2A] text-white shadow-lg shadow-[#D94F2A]/25 active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
           }`}
-          disabled={state === "connecting" || state === "processing"}
+          disabled={state === "processing"}
           aria-label={isActive ? "Stop listening" : "Start listening"}
         >
-          {/* Pulsing ring when listening */}
           {state === "listening" && (
             <span className="absolute inset-0 animate-ping rounded-full bg-red-500/30" />
           )}
           {state === "listening" ? (
             <StopIcon size={24} />
           ) : (
-            <MicIcon size={28} className={state === "connecting" ? "animate-pulse" : ""} />
+            <MicIcon size={28} />
           )}
         </button>
 
         <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">
-          {state === "idle" && !transcript && "Tap to listen"}
-          {state === "connecting" && "Connecting..."}
-          {state === "listening" && "Listening..."}
+          {state === "idle" && !displayText && "Tap to listen"}
+          {state === "listening" && "Listening... tap to stop"}
           {state === "processing" && "Processing..."}
-          {state === "idle" && transcript && "Tap to listen again"}
+          {state === "idle" && displayText && "Tap to listen again"}
         </p>
       </div>
 
@@ -265,23 +294,21 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {error && (
         <div className="rounded-xl bg-red-50 px-4 py-3 dark:bg-red-950/30">
           <p className="text-center text-[12px] font-medium text-red-600 dark:text-red-400">{error}</p>
-          {error.toLowerCase().includes("openai") && (
-            <p className="mt-1 text-center text-[11px] text-red-500/70 dark:text-red-400/50">
-              Check the Vars section in the sidebar to add your API key.
-            </p>
-          )}
         </div>
       )}
 
       {/* ── Live Transcript ── */}
-      {transcript && (
+      {displayText && (
         <div className="animate-fade-in rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
           <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             They said
           </p>
-          <p className="text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
-            {`"${transcript}"`}
+          <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${isInterim ? "opacity-60" : ""}`}>
+            {`\u201C${displayText}\u201D`}
           </p>
+          {isInterim && (
+            <p className="mt-1 text-[10px] text-stone-400 dark:text-stone-500">Still listening...</p>
+          )}
         </div>
       )}
 
@@ -352,10 +379,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       )}
 
       {/* ── No match state ── */}
-      {transcript && !match && state === "idle" && (
+      {displayText && !match && !isInterim && state === "idle" && (
         <div className="animate-fade-in rounded-xl bg-amber-50/60 px-4 py-3 text-center dark:bg-amber-900/15">
           <p className="text-[12px] font-medium text-amber-700/70 dark:text-amber-400/60">
-            Could not match a response. Try listening again or use the phrases above.
+            {"Didn't catch a match. Try listening again or switch to Fast mode."}
           </p>
         </div>
       )}
