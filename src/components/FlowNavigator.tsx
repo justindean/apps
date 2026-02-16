@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { FlowStage, Phrase, StuckQuestion, SpeechMode } from "../data/phrases";
 import { flowUtilityPhrases, fastModePhrasesBySection } from "../data/phrases";
+import { ListenPanel } from "./ListenPanel";
 
 interface FlowNavigatorProps {
   stages: FlowStage[];
@@ -9,7 +10,7 @@ interface FlowNavigatorProps {
   mode: SpeechMode;
 }
 
-type ViewMode = "fast" | "full";
+type ViewMode = "fast" | "full" | "listen";
 
 /* ── Brand accent ── */
 const ACCENT = "bg-brand";
@@ -87,6 +88,15 @@ function ListIcon({ size = 16 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
       <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  );
+}
+
+function MicSmallIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
     </svg>
   );
 }
@@ -547,7 +557,7 @@ function ModeToggle({ viewMode, onToggle }: { viewMode: ViewMode; onToggle: (m: 
       <div className="flex items-center gap-1 rounded-2xl border border-white/20 bg-white/80 p-1.5 shadow-glass backdrop-blur-xl dark:border-stone-600/25 dark:bg-stone-900/80">
         <button
           onClick={() => onToggle("fast")}
-          className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-extrabold tracking-wide transition-all duration-200 ease-out ${
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-extrabold tracking-wide transition-all duration-200 ease-out ${
             viewMode === "fast"
               ? "bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/25 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
               : "text-stone-400 hover:text-stone-600 active:bg-stone-100/60 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800/60"
@@ -557,8 +567,19 @@ function ModeToggle({ viewMode, onToggle }: { viewMode: ViewMode; onToggle: (m: 
           FAST
         </button>
         <button
+          onClick={() => onToggle("listen")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-extrabold tracking-wide transition-all duration-200 ease-out ${
+            viewMode === "listen"
+              ? "bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/25 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
+              : "text-stone-400 hover:text-stone-600 active:bg-stone-100/60 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800/60"
+          }`}
+        >
+          <MicSmallIcon size={15} />
+          LISTEN
+        </button>
+        <button
           onClick={() => onToggle("full")}
-          className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-extrabold tracking-wide transition-all duration-200 ease-out ${
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-extrabold tracking-wide transition-all duration-200 ease-out ${
             viewMode === "full"
               ? "bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/25 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
               : "text-stone-400 hover:text-stone-600 active:bg-stone-100/60 dark:text-stone-500 dark:hover:text-stone-300 dark:active:bg-stone-800/60"
@@ -635,18 +656,30 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
   return (
     <div className="flex flex-col gap-0">
       {/* ── Pinned bar: Quick Help + Section Nav (Full Mode only) ── */}
-      <div className="sticky top-[57px] z-20 -mx-4 border-b border-stone-200/50 bg-warm-50/90 px-4 pb-2 pt-2 backdrop-blur-xl dark:border-stone-800/50 dark:bg-warm-950/90">
-        <QuickHelp />
-        {viewMode === "full" && (
-          <div className="mt-2">
-            <SectionNav stages={stages} activeKey={activeKey} onSelect={handleNavSelect} />
-          </div>
-        )}
-      </div>
+      {viewMode !== "listen" && (
+        <div className="sticky top-[57px] z-20 -mx-4 border-b border-stone-200/50 bg-warm-50/90 px-4 pb-2 pt-2 backdrop-blur-xl dark:border-stone-800/50 dark:bg-warm-950/90">
+          <QuickHelp />
+          {viewMode === "full" && (
+            <div className="mt-2">
+              <SectionNav stages={stages} activeKey={activeKey} onSelect={handleNavSelect} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Main content area ── */}
       {viewMode === "fast" ? (
         <FastModeView mode={mode} onCopy={onCopy} onSpeak={addRecent} recentPhrases={recentPhrases} />
+      ) : viewMode === "listen" ? (
+        <div className="flex flex-col gap-6 pb-28 pt-3">
+          {/* Listen mode header */}
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Listen Mode</h2>
+            <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Hear them speak, get the right response.</p>
+          </div>
+
+          <ListenPanel mode={mode} onCopy={onCopy} onSpeak={addRecent} />
+        </div>
       ) : (
         <div className="mt-4 flex flex-col gap-6 pb-28">
           {/* Full mode header */}
