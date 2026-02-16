@@ -55,12 +55,15 @@ interface SpeechRecognitionInstance {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
+  maxAlternatives?: number;
+  grammars?: unknown;
   start(): void;
   stop(): void;
   abort(): void;
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
+  onaudiostart?: (() => void) | null;
 }
 
 interface SpeechRecognitionEvent {
@@ -95,6 +98,8 @@ declare global {
   interface Window {
     SpeechRecognition: { new(): SpeechRecognitionInstance };
     webkitSpeechRecognition: { new(): SpeechRecognitionInstance };
+    SpeechGrammarList: { new(): { addFromString(s: string, w: number): void } };
+    webkitSpeechGrammarList: { new(): { addFromString(s: string, w: number): void } };
   }
 }
 
@@ -104,6 +109,67 @@ interface ListenPanelProps {
   mode: SpeechMode;
   onCopy: (text: string) => void;
   onSpeak: (phrase: Phrase) => void;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Restaurant hotword list — biases transcription toward these terms
+   ───────────────────────────────────────────────────────────────────────── */
+const RESTAURANT_HINTS = [
+  "afuera", "adentro", "mesa", "cuenta", "propina", "servicio",
+  "cerveza", "agua", "menu", "ordenar", "tarjeta", "efectivo",
+  "recibo", "firma", "picante", "chile", "salsa", "tomar",
+  "beber", "pedir", "separado", "junto", "pesos", "cambio",
+  "factura", "terraza", "bienvenido",
+];
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Second-pass "Spanish correction" — rewrites common STT mishearings
+   into the most likely Mexican-Spanish restaurant phrase
+   ───────────────────────────────────────────────────────────────────────── */
+const CORRECTIONS: [RegExp, string][] = [
+  // Common mis-hearings and normalisations
+  [/\ba fuera\b/gi, "afuera"],
+  [/\ba dentro\b/gi, "adentro"],
+  [/\ba dent?ro? o a ?fuera?\b/gi, "adentro o afuera"],
+  [/\bafuera? o ?a ?dent?ro?\b/gi, "afuera o adentro"],
+  [/\bqui[eé]n?es?\s?s[oó]n\b/gi, "cuantos son"],
+  [/\bquienes? son\b/gi, "cuantos son"],
+  [/\bcuantos?\s?persona\b/gi, "cuantas personas"],
+  [/\bla quenta\b/gi, "la cuenta"],
+  [/\bsu quenta\b/gi, "su cuenta"],
+  [/\bser[vb]esa\b/gi, "cerveza"],
+  [/\bser[vb]esas\b/gi, "cervezas"],
+  [/\bpro?pina?\b/gi, "propina"],
+  [/\bser[vb]i[cs]io\b/gi, "servicio"],
+  [/\btar[gj]eta\b/gi, "tarjeta"],
+  [/\befe[ck]tivo\b/gi, "efectivo"],
+  [/\bres[ie]bo\b/gi, "recibo"],
+  [/\bfa[ck]tura\b/gi, "factura"],
+  [/\bpi[ck]ante\b/gi, "picante"],
+  [/\bpi[ck]oso\b/gi, "picoso"],
+  [/\bme ?nu\b/gi, "menu"],
+  [/\borde[nm]ar\b/gi, "ordenar"],
+  [/\bagua\s*mineral\b/gi, "agua mineral"],
+  [/\bagua\s*natural\b/gi, "agua natural"],
+  [/\bqueltal\b/gi, "que tal"],
+  [/\bque ?tal\b/gi, "que tal"],
+  [/\besta bien a ?qu[ií]\b/gi, "esta bien aqui"],
+  [/\ble ?gusta?\b/gi, "le gusta"],
+  [/\brecomi[e]?ndo\b/gi, "recomiendo"],
+  [/\bes ?pecialidad\b/gi, "especialidad"],
+  // Google STT sometimes splits "algo de tomar" oddly
+  [/\balgo\s*de\s*tom[ae]r\b/gi, "algo de tomar"],
+  [/\bvan\s*a\s*tom[ae]r\b/gi, "van a tomar"],
+  [/\bvan\s*a\s*ped[ie]r\b/gi, "van a pedir"],
+  [/\bvan\s*a\s*orden[ae]r\b/gi, "van a ordenar"],
+];
+
+function correctSpanish(raw: string): string {
+  let corrected = raw;
+  for (const [pattern, replacement] of CORRECTIONS) {
+    corrected = corrected.replace(pattern, replacement);
+  }
+  return corrected;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -125,6 +191,15 @@ const sectionBadgeColor: Record<string, string> = {
   Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
 };
 
+/* ─────────────────────────────────────────────────────────────────────────
+   Debug panel data
+   ───────────────────────────────────────────────────────────────────────── */
+interface DebugLog {
+  time: string;
+  type: "partial" | "final" | "corrected" | "intent" | "error" | "info";
+  text: string;
+}
+
 /* ═════════════════════════════════════════════════════════════════════════
    ListenPanel
    ═════════════════════════════════════════════════════════════════════════ */
@@ -132,13 +207,30 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
+  const [correctedText, setCorrectedText] = useState("");
   const [match, setMatch] = useState<IntentMatch | null>(null);
   const [altPhrases, setAltPhrases] = useState<Phrase[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState(true);
 
+  // Audio constraint toggles
+  const [noiseSuppression, setNoiseSuppression] = useState(true);
+  const [echoCancellation, setEchoCancellation] = useState(true);
+
+  // Debug panel
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
+  const [micSettings, setMicSettings] = useState<string>("");
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const finalTextRef = useRef("");
+
+  const addDebugLog = useCallback((type: DebugLog["type"], text: string) => {
+    const time = new Date().toLocaleTimeString("en-US", { hour12: false, fractionalSecondDigits: 1 } as Intl.DateTimeFormatOptions);
+    setDebugLogs((prev) => [...prev.slice(-50), { time, type, text }]);
+  }, []);
 
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -146,25 +238,35 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }, []);
 
   const processTranscript = useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
-      const intentMatch = classifyIntent(text, mode);
+    (rawText: string) => {
+      if (!rawText.trim()) return;
+
+      // Second-pass Spanish correction
+      const corrected = correctSpanish(rawText);
+      setCorrectedText(corrected);
+      addDebugLog("corrected", `"${rawText}" → "${corrected}"`);
+
+      // Use corrected text for intent detection
+      const intentMatch = classifyIntent(corrected, mode);
       setMatch(intentMatch);
+
       if (intentMatch) {
-        // Get all phrases from the matched section, excluding the primary
+        addDebugLog("intent", `${intentMatch.intent} [${intentMatch.section}] conf=${intentMatch.confidence}`);
         const all = getSectionPhrases(intentMatch.section, mode);
         setAltPhrases(all.filter((p) => p.spanish !== intentMatch.phrase.spanish));
       } else {
+        addDebugLog("intent", "No match");
         setAltPhrases([]);
       }
     },
-    [mode],
+    [mode, addDebugLog],
   );
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
     setError(null);
     setInterimText("");
     setFinalText("");
+    setCorrectedText("");
     setMatch(null);
     setAltPhrases([]);
     finalTextRef.current = "";
@@ -175,10 +277,55 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       return;
     }
 
+    // Request high-quality audio with constraint toggles
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: { ideal: 48000, min: 44100 },
+          sampleSize: { ideal: 16 },
+          autoGainControl: true,
+          noiseSuppression,
+          echoCancellation,
+        },
+      });
+      mediaStreamRef.current = stream;
+
+      // Capture mic track settings for debug
+      const track = stream.getAudioTracks()[0];
+      if (track) {
+        const settings = track.getSettings();
+        const settingsStr = JSON.stringify(settings, null, 2);
+        setMicSettings(settingsStr);
+        addDebugLog("info", `Mic: ${track.label}`);
+        addDebugLog("info", `Settings: sampleRate=${settings.sampleRate}, ch=${settings.channelCount}, ns=${settings.noiseSuppression}, ec=${settings.echoCancellation}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Microphone error: ${msg}`);
+      addDebugLog("error", msg);
+      return;
+    }
+
     const recognition = new SR();
     recognition.lang = "es-MX";
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    // Hotword grammar hints — supported in Chrome via SpeechGrammarList
+    const SGL = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+    if (SGL) {
+      try {
+        const grammarList = new SGL();
+        const grammar = `#JSGF V1.0; grammar hints; public <hint> = ${RESTAURANT_HINTS.join(" | ")} ;`;
+        grammarList.addFromString(grammar, 1);
+        recognition.grammars = grammarList;
+        addDebugLog("info", `Grammar hints loaded: ${RESTAURANT_HINTS.length} terms`);
+      } catch {
+        addDebugLog("info", "SpeechGrammarList not fully supported, skipping hints");
+      }
+    }
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = "";
@@ -188,8 +335,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         const result = event.results[i];
         if (result.isFinal) {
           final += result[0].transcript;
+          addDebugLog("final", `"${result[0].transcript}" conf=${(result[0].confidence * 100).toFixed(0)}%`);
         } else {
           interim += result[0].transcript;
+          addDebugLog("partial", `"${result[0].transcript}"`);
         }
       }
 
@@ -197,7 +346,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         finalTextRef.current = final;
         setFinalText(final);
         setInterimText("");
-        // Classify on every final result so the user sees live intent updates
         processTranscript(final);
       } else {
         setInterimText(interim);
@@ -205,6 +353,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      addDebugLog("error", `STT error: ${event.error} ${event.message ?? ""}`);
       if (event.error === "no-speech" || event.error === "aborted") return;
       setError(
         event.error === "not-allowed"
@@ -215,6 +364,12 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     };
 
     recognition.onend = () => {
+      // Release mic
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+      }
+
       if (finalTextRef.current.trim()) {
         setState("processing");
         processTranscript(finalTextRef.current);
@@ -229,10 +384,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     try {
       recognition.start();
       setState("listening");
+      addDebugLog("info", "Started listening (es-MX)");
     } catch {
       setError("Could not start speech recognition.");
     }
-  }, [processTranscript]);
+  }, [processTranscript, noiseSuppression, echoCancellation, addDebugLog]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -247,6 +403,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         recognitionRef.current.abort();
         recognitionRef.current = null;
       }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+      }
     };
   }, []);
 
@@ -257,6 +417,20 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     },
     [onSpeak],
   );
+
+  // Long-press handler for debug panel
+  const handleMicPointerDown = useCallback(() => {
+    longPressTimer.current = setTimeout(() => {
+      setShowDebug((p) => !p);
+    }, 800);
+  }, []);
+
+  const handleMicPointerUp = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
 
   const isActive = state === "listening" || state === "processing";
   const displayText = finalText || interimText;
@@ -280,11 +454,40 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   return (
     <div className="flex flex-col gap-5">
       {/* ══════════════════════════════════════════════════════════════════
-          MIC BUTTON
+          AUDIO CONSTRAINT TOGGLES
+          ══════════════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-center gap-4">
+        <label className="flex cursor-pointer items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={noiseSuppression}
+            onChange={(e) => setNoiseSuppression(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-stone-300 accent-[#D94F2A]"
+            disabled={isActive}
+          />
+          <span className="text-[11px] font-medium text-stone-400 dark:text-stone-500">Noise suppression</span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={echoCancellation}
+            onChange={(e) => setEchoCancellation(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-stone-300 accent-[#D94F2A]"
+            disabled={isActive}
+          />
+          <span className="text-[11px] font-medium text-stone-400 dark:text-stone-500">Echo cancellation</span>
+        </label>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════
+          MIC BUTTON (long-press to toggle debug)
           ══════════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col items-center gap-2.5">
         <button
           onClick={isActive ? stopListening : startListening}
+          onPointerDown={handleMicPointerDown}
+          onPointerUp={handleMicPointerUp}
+          onPointerLeave={handleMicPointerUp}
           className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
             state === "listening"
               ? "bg-red-500 text-white shadow-lg shadow-red-500/30 active:scale-95"
@@ -347,9 +550,17 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
           {/* Original Spanish — smaller, secondary */}
           <p className={`mt-1.5 text-[13px] leading-snug text-stone-400 dark:text-stone-500 ${isInterim ? "opacity-50" : ""}`}>
-            <span className="font-medium text-stone-500/60 dark:text-stone-600">Heard: </span>
+            <span className="font-medium text-stone-500/60 dark:text-stone-600">{"Heard: "}</span>
             {`\u201C${displayText}\u201D`}
           </p>
+
+          {/* Show correction if different */}
+          {correctedText && correctedText !== finalText && hasResults && (
+            <p className="mt-1 text-[11px] text-stone-300 dark:text-stone-600">
+              {"Corrected: \u201C"}{correctedText}{"\u201D"}
+            </p>
+          )}
+
           {isInterim && (
             <p className="mt-1 text-[10px] text-stone-300 dark:text-stone-600">Still listening...</p>
           )}
@@ -451,6 +662,46 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           <p className="text-center text-[13px] font-medium text-amber-700/70 dark:text-amber-400/60">
             {"Couldn\u2019t match that to a known phrase. Try listening again or switch to Fast mode for common responses."}
           </p>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          DEBUG PANEL — toggle with long-press on mic
+          ══════════════════════════════════════════════════════════════════ */}
+      {showDebug && (
+        <div className="rounded-2xl border border-stone-200/60 bg-stone-50 p-4 text-left font-mono text-[10px] leading-relaxed text-stone-500 dark:border-stone-700/40 dark:bg-stone-900 dark:text-stone-400">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-sans text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-300">Debug Panel</span>
+            <button onClick={() => { setDebugLogs([]); setMicSettings(""); }} className="font-sans text-[10px] font-semibold text-stone-400 hover:text-stone-600">Clear</button>
+          </div>
+
+          {/* Browser + device */}
+          <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
+            <p><span className="text-stone-400">UA: </span>{navigator.userAgent.slice(0, 80)}...</p>
+            <p><span className="text-stone-400">Lang: </span>es-MX (forced)</p>
+            <p><span className="text-stone-400">Noise supp: </span>{noiseSuppression ? "ON" : "OFF"}</p>
+            <p><span className="text-stone-400">Echo cancel: </span>{echoCancellation ? "ON" : "OFF"}</p>
+          </div>
+
+          {/* Mic track settings */}
+          {micSettings && (
+            <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
+              <p className="font-bold text-stone-600 dark:text-stone-300">Mic Track Settings:</p>
+              <pre className="whitespace-pre-wrap text-[9px]">{micSettings}</pre>
+            </div>
+          )}
+
+          {/* Event logs */}
+          <div className="max-h-48 overflow-y-auto scrollbar-hide">
+            {debugLogs.length === 0 && <p className="text-stone-400">No events yet. Tap mic to start.</p>}
+            {debugLogs.map((log, i) => (
+              <p key={i} className={log.type === "error" ? "text-red-500" : log.type === "final" ? "text-emerald-600 dark:text-emerald-400" : log.type === "corrected" ? "text-amber-600 dark:text-amber-400" : log.type === "intent" ? "text-sky-600 dark:text-sky-400" : ""}>
+                <span className="text-stone-400">{log.time} </span>
+                <span className="font-bold uppercase">[{log.type}] </span>
+                {log.text}
+              </p>
+            ))}
+          </div>
         </div>
       )}
     </div>
