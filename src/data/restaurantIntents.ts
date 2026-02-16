@@ -54,8 +54,9 @@ const INTENT_REPLY_CONSTRAINTS: Record<string, { section: string; allowedIndices
   DRINK_WATER:         { section: "Drinks", allowedIndices: [0, 1, 2] },
   DRINK_REFILL:        { section: "Drinks", allowedIndices: [0, 1, 2] },
   DRINK_BEER:          { section: "Drinks", allowedIndices: [0, 1, 2] },
-  // Food — OFFER_MENU is special: only "yes please" / "no thanks" / "bring menu"
-  OFFER_MENU:          { section: "Food", allowedIndices: [0, 1] },
+  // Menu — dedicated section for OFFER_MENU (0=Yes, 1=No, 2=Bring menu, 3=English menu)
+  OFFER_MENU:          { section: "Menu", allowedIndices: [0, 1, 2, 3] },
+  // Food
   READY_TO_ORDER:      { section: "Food", allowedIndices: [0, 1, 2] },
   SPICE_ASK:           { section: "Food", allowedIndices: [0, 1, 2] },
   SHARE_ASK:           { section: "Food", allowedIndices: [0, 1, 2] },
@@ -127,10 +128,10 @@ const intents: IntentDef[] = [
     intent: "OFFER_MENU",
     theySaidEnglish: "Would you like a menu?",
     triggerGroups: [
-      ["menu", "carta", "la carta"],
-      ["quiere", "quieres", "gusta", "gustaria", "le traigo", "necesita", "desea", "quieren"],
+      ["menu", "carta", "la carta", "carta de comida", "para comer"],
+      ["quiere", "quieres", "gusta", "gustaria", "le traigo", "te traigo", "necesita", "desea", "quieren"],
     ],
-    section: "Food", phraseIndex: 0, weight: 0.88,
+    section: "Menu", phraseIndex: 0, weight: 0.92,
   },
 
   // ── DRINKS ──────────────────────────────────────────────
