@@ -32,12 +32,18 @@ function transcribePlugin(): Plugin {
         }
 
         try {
-          // Collect raw body
-          const chunks: Buffer[] = []
+          // Collect raw body without using Buffer type directly
+          const chunks: Uint8Array[] = []
           for await (const chunk of req) {
-            chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+            chunks.push(typeof chunk === 'string' ? new TextEncoder().encode(chunk) : new Uint8Array(chunk))
           }
-          const body = Buffer.concat(chunks)
+          const totalLength = chunks.reduce((sum, c) => sum + c.length, 0)
+          const body = new Uint8Array(totalLength)
+          let offset = 0
+          for (const chunk of chunks) {
+            body.set(chunk, offset)
+            offset += chunk.length
+          }
 
           // Parse multipart boundary from content-type header
           const contentType = req.headers['content-type'] ?? ''
