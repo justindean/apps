@@ -106,6 +106,28 @@ interface ListenPanelProps {
   onSpeak: (phrase: Phrase) => void;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   Section color mapping (mirrors FlowNavigator)
+   ───────────────────────────────────────────────────────────────────────── */
+const sectionBorderColor: Record<string, string> = {
+  Arrival: "border-sky-300/60 dark:border-sky-600/40",
+  Drinks: "border-amber-300/60 dark:border-amber-600/40",
+  Food: "border-orange-300/60 dark:border-orange-500/40",
+  Bill: "border-emerald-300/60 dark:border-emerald-600/40",
+  Tip: "border-violet-300/60 dark:border-violet-600/40",
+};
+
+const sectionBadgeColor: Record<string, string> = {
+  Arrival: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
+  Drinks: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+  Food: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
+  Bill: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
+  Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
+};
+
+/* ═════════════════════════════════════════════════════════════════════════
+   ListenPanel
+   ═════════════════════════════════════════════════════════════════════════ */
 export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
@@ -118,7 +140,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const finalTextRef = useRef("");
 
-  // Check browser support on mount
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) setSupported(false);
@@ -130,7 +151,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       const intentMatch = classifyIntent(text, mode);
       setMatch(intentMatch);
       if (intentMatch) {
-        setAltPhrases(getSectionPhrases(intentMatch.section, mode));
+        // Get all phrases from the matched section, excluding the primary
+        const all = getSectionPhrases(intentMatch.section, mode);
+        setAltPhrases(all.filter((p) => p.spanish !== intentMatch.phrase.spanish));
       } else {
         setAltPhrases([]);
       }
@@ -174,7 +197,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         finalTextRef.current = final;
         setFinalText(final);
         setInterimText("");
-        // Process immediately on each final result so user gets live feedback
+        // Classify on every final result so the user sees live intent updates
         processTranscript(final);
       } else {
         setInterimText(interim);
@@ -182,22 +205,21 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      // "no-speech" and "aborted" are normal when user stops
       if (event.error === "no-speech" || event.error === "aborted") return;
-      setError(event.error === "not-allowed"
-        ? "Microphone access denied. Please allow microphone permissions."
-        : `Recognition error: ${event.error}`);
+      setError(
+        event.error === "not-allowed"
+          ? "Microphone access denied. Please allow microphone permissions."
+          : `Recognition error: ${event.error}`,
+      );
       setState("idle");
     };
 
     recognition.onend = () => {
-      // If we have accumulated text, do a final classification pass
       if (finalTextRef.current.trim()) {
         setState("processing");
         processTranscript(finalTextRef.current);
-        // Brief delay so the user sees "Processing" before results
-        setTimeout(() => setState("idle"), 300);
-      } else if (state === "listening") {
+        setTimeout(() => setState("idle"), 200);
+      } else {
         setState("idle");
       }
     };
@@ -210,17 +232,15 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     } catch {
       setError("Could not start speech recognition.");
     }
-  }, [mode, processTranscript, state]);
+  }, [processTranscript]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
-    // onend handler will set state to processing → idle
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
@@ -241,8 +261,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isActive = state === "listening" || state === "processing";
   const displayText = finalText || interimText;
   const isInterim = !finalText && !!interimText;
+  const hasResults = !!finalText && state === "idle";
 
-  // Unsupported browser
+  /* ── Unsupported browser ── */
   if (!supported) {
     return (
       <div className="flex flex-col items-center gap-3 py-8">
@@ -257,17 +278,19 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* ── Mic Button ── */}
-      <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col gap-5">
+      {/* ══════════════════════════════════════════════════════════════════
+          MIC BUTTON
+          ══════════════════════════════════════════════════════════════════ */}
+      <div className="flex flex-col items-center gap-2.5">
         <button
           onClick={isActive ? stopListening : startListening}
           className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
             state === "listening"
               ? "bg-red-500 text-white shadow-lg shadow-red-500/30 active:scale-95"
               : state === "processing"
-              ? "bg-stone-300 text-stone-500 dark:bg-stone-600 dark:text-stone-400"
-              : "bg-[#D94F2A] text-white shadow-lg shadow-[#D94F2A]/25 active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
+                ? "bg-stone-300 text-stone-500 dark:bg-stone-600 dark:text-stone-400"
+                : "bg-[#D94F2A] text-white shadow-lg shadow-[#D94F2A]/25 active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
           }`}
           disabled={state === "processing"}
           aria-label={isActive ? "Stop listening" : "Start listening"}
@@ -275,11 +298,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {state === "listening" && (
             <span className="absolute inset-0 animate-ping rounded-full bg-red-500/30" />
           )}
-          {state === "listening" ? (
-            <StopIcon size={24} />
-          ) : (
-            <MicIcon size={28} />
-          )}
+          {state === "listening" ? <StopIcon size={24} /> : <MicIcon size={28} />}
         </button>
 
         <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">
@@ -290,99 +309,147 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </p>
       </div>
 
-      {/* ── Error ── */}
+      {/* ══════════════════════════════════════════════════════════════════
+          ERROR
+          ══════════════════════════════════════════════════════════════════ */}
       {error && (
         <div className="rounded-xl bg-red-50 px-4 py-3 dark:bg-red-950/30">
           <p className="text-center text-[12px] font-medium text-red-600 dark:text-red-400">{error}</p>
         </div>
       )}
 
-      {/* ── Live Transcript ── */}
+      {/* ══════════════════════════════════════════════════════════════════
+          THEY SAID — English first, Spanish underneath
+          ══════════════════════════════════════════════════════════════════ */}
       {displayText && (
-        <div className="animate-fade-in rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            They said
-          </p>
-          <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${isInterim ? "opacity-60" : ""}`}>
+        <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${match ? sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40" : "border-stone-200/60 dark:border-stone-700/40"}`}>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
+              They said
+            </p>
+            {match && (
+              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
+                {match.section}
+              </span>
+            )}
+          </div>
+
+          {/* English meaning — large and prominent */}
+          {match && hasResults ? (
+            <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
+              {`\u201C${match.theySaidEnglish}\u201D`}
+            </p>
+          ) : (
+            <p className={`text-[15px] font-bold leading-tight text-stone-700 dark:text-stone-300 ${isInterim ? "opacity-50" : ""}`}>
+              Interpreting...
+            </p>
+          )}
+
+          {/* Original Spanish — smaller, secondary */}
+          <p className={`mt-1.5 text-[13px] leading-snug text-stone-400 dark:text-stone-500 ${isInterim ? "opacity-50" : ""}`}>
+            <span className="font-medium text-stone-500/60 dark:text-stone-600">Heard: </span>
             {`\u201C${displayText}\u201D`}
           </p>
           {isInterim && (
-            <p className="mt-1 text-[10px] text-stone-400 dark:text-stone-500">Still listening...</p>
+            <p className="mt-1 text-[10px] text-stone-300 dark:text-stone-600">Still listening...</p>
           )}
         </div>
       )}
 
-      {/* ── Suggested Response ── */}
-      {match && (
+      {/* ══════════════════════════════════════════════════════════════════
+          BEST REPLY — the main response card
+          ══════════════════════════════════════════════════════════════════ */}
+      {match && hasResults && (
         <div className="animate-fade-in">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             Say this
           </p>
 
-          {/* Primary suggestion */}
           <button
             onClick={() => handleSuggestedPhrase(match.phrase)}
-            className="group relative flex w-full flex-col overflow-hidden rounded-[18px] border-2 border-[#D94F2A]/30 bg-gradient-to-b from-white to-warm-50 p-4 text-left shadow-card-elevated card-highlight transition-all duration-150 active:translate-y-px active:shadow-card-press dark:border-[#E8734F]/30 dark:from-stone-800/90 dark:to-stone-800/70"
+            className={`group relative flex w-full flex-col overflow-hidden rounded-[18px] border-2 bg-gradient-to-b from-white to-warm-50 p-4 text-left shadow-card-elevated card-highlight transition-all duration-150 active:translate-y-px active:shadow-card-press dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-[#D94F2A]/30 dark:border-[#E8734F]/30"}`}
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-col">
-                <p className="text-[19px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
+              <div className="flex min-w-0 flex-col">
+                <p className="text-[20px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
                   {match.phrase.spanish}
                 </p>
-                <p className="mt-1.5 text-[13px] leading-snug text-stone-400 dark:text-stone-500">
+                <p className="mt-1 text-[14px] leading-snug text-stone-500 dark:text-stone-400">
                   {match.phrase.english}
                 </p>
-                <p className="mt-1 font-mono text-[10.5px] leading-snug tracking-tight text-stone-300 dark:text-stone-600">
+                <p className="mt-1 font-mono text-[11px] leading-snug tracking-tight text-stone-300 dark:text-stone-600">
                   {match.phrase.pronunciation}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-3 py-1.5 text-white shadow-md shadow-[#D94F2A]/25 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20">
-                <WaveformIcon size={12} />
-                <span className="text-[11px] font-extrabold">Speak</span>
+              <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-3.5 py-2 text-white shadow-md shadow-[#D94F2A]/25 transition-transform active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20">
+                <WaveformIcon size={13} />
+                <span className="text-[12px] font-extrabold">Speak</span>
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                {Math.round(match.confidence * 100)}% match
+
+            {/* Confidence + intent badge */}
+            <div className="mt-3 flex items-center gap-2">
+              <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 0.7 ? "bg-emerald-400" : match.confidence >= 0.5 ? "bg-amber-400" : "bg-stone-300"}`} />
+              <span className={`text-[10px] font-semibold ${match.confidence >= 0.7 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 0.5 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
+                {match.confidence >= 0.7 ? "Strong match" : match.confidence >= 0.5 ? "Likely match" : "Best guess"}
               </span>
-              <span className="text-[10px] text-stone-400 dark:text-stone-500">
-                {match.section}
+              <span className="text-[9px] text-stone-300 dark:text-stone-600">|</span>
+              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? "bg-stone-100 text-stone-600"}`}>
+                {match.intent.replace(/_/g, " ")}
               </span>
             </div>
           </button>
 
-          {/* Alternative phrases from same section */}
-          {altPhrases.length > 1 && (
+          {/* Copy button */}
+          <div className="mt-1.5 flex justify-end">
+            <button
+              onClick={() => onCopy(match.phrase.spanish)}
+              className="rounded-md px-2 py-0.5 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 active:scale-95 dark:text-stone-500 dark:hover:text-stone-300"
+            >
+              Copy
+            </button>
+          </div>
+
+          {/* ── Alternative phrases from same section ── */}
+          {altPhrases.length > 0 && (
             <div className="mt-3">
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
                 Or try
               </p>
-              <div className="flex flex-wrap gap-2">
-                {altPhrases
-                  .filter((p) => p.spanish !== match.phrase.spanish)
-                  .map((phrase) => (
-                    <button
-                      key={phrase.spanish}
-                      onClick={() => handleSuggestedPhrase(phrase)}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 px-3 py-1.5 shadow-sm transition-all duration-150 active:scale-[0.96] active:shadow-none dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70"
-                    >
-                      <VolumeIcon size={10} />
-                      <span className="text-[11px] font-semibold text-stone-700 dark:text-stone-300">{phrase.spanish}</span>
-                      <span className="text-[10px] text-stone-400 dark:text-stone-500">{phrase.english}</span>
-                    </button>
-                  ))}
+              <div className="flex flex-col gap-2">
+                {altPhrases.map((phrase) => (
+                  <button
+                    key={phrase.spanish}
+                    onClick={() => handleSuggestedPhrase(phrase)}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 px-3.5 py-2.5 text-left shadow-sm card-highlight transition-all duration-150 active:scale-[0.98] active:shadow-none dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70"
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <p className="text-[14px] font-bold leading-tight text-stone-800 dark:text-stone-200">
+                        {phrase.spanish}
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-stone-400 dark:text-stone-500">
+                        {phrase.english}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 text-stone-400 dark:text-stone-500">
+                      <VolumeIcon size={12} />
+                      <span className="text-[10px] font-semibold">Speak</span>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ── No match state ── */}
-      {displayText && !match && !isInterim && state === "idle" && (
-        <div className="animate-fade-in rounded-xl bg-amber-50/60 px-4 py-3 text-center dark:bg-amber-900/15">
-          <p className="text-[12px] font-medium text-amber-700/70 dark:text-amber-400/60">
-            {"Didn't catch a match. Try listening again or switch to Fast mode."}
+      {/* ══════════════════════════════════════════════════════════════════
+          NO MATCH — guidance
+          ══════════════════════════════════════════════════════════════════ */}
+      {finalText && !match && state === "idle" && (
+        <div className="animate-fade-in rounded-xl bg-amber-50/60 px-4 py-3 dark:bg-amber-900/15">
+          <p className="text-center text-[13px] font-medium text-amber-700/70 dark:text-amber-400/60">
+            {"Couldn\u2019t match that to a known phrase. Try listening again or switch to Fast mode for common responses."}
           </p>
         </div>
       )}
