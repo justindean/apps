@@ -72,6 +72,14 @@ export const fastModePhrasesBySection: Record<"street" | "neutral" | "formal", F
       { spanish: "Todo junto.", english: "All together.", pronunciation: "TOH-doh HOON-toh" },
       { spanish: "Separado.", english: "Separate.", pronunciation: "seh-pah-RAH-doh" },
     ]},
+    { label: "Tip", phrases: [
+      { spanish: "Si, el diez.", english: "Yes, 10%.", pronunciation: "see, el dee-EHS" },
+      { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+      { spanish: "En efectivo.", english: "In cash.", pronunciation: "ehn eh-fehk-TEE-voh" },
+      { spanish: "Con tarjeta.", english: "By card.", pronunciation: "kohn tar-HEH-tah" },
+      { spanish: "Cuanto es el total?", english: "What's the total?", pronunciation: "KWAHN-toh ehs el toh-TAHL" },
+      { spanish: "Si, recibo por favor.", english: "Yes, receipt please.", pronunciation: "see, reh-SEE-boh por fah-VOR" },
+    ]},
   ],
   neutral: [
     { label: "Arrival", phrases: [
@@ -96,6 +104,14 @@ export const fastModePhrasesBySection: Record<"street" | "neutral" | "formal", F
       { spanish: "Todo junto.", english: "All together.", pronunciation: "TOH-doh HOON-toh" },
       { spanish: "Cuentas separadas.", english: "Separate checks.", pronunciation: "KWEHN-tahs seh-pah-RAH-dahs" },
     ]},
+    { label: "Tip", phrases: [
+      { spanish: "Si, agregueme el diez, por favor.", english: "Yes, add 10% please.", pronunciation: "see, ah-GREH-geh-meh el dee-EHS, por fah-VOR" },
+      { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+      { spanish: "En efectivo, por favor.", english: "In cash, please.", pronunciation: "ehn eh-fehk-TEE-voh, por fah-VOR" },
+      { spanish: "Con tarjeta, por favor.", english: "By card, please.", pronunciation: "kohn tar-HEH-tah, por fah-VOR" },
+      { spanish: "Me puede decir el total?", english: "Can you tell me the total?", pronunciation: "meh PWEH-deh deh-SEER el toh-TAHL" },
+      { spanish: "Si, recibo por favor.", english: "Yes, receipt please.", pronunciation: "see, reh-SEE-boh por fah-VOR" },
+    ]},
   ],
   formal: [
     { label: "Arrival", phrases: [
@@ -119,6 +135,14 @@ export const fastModePhrasesBySection: Record<"street" | "neutral" | "formal", F
       { spanish: "Nos trae la cuenta, por favor.", english: "Could you bring the check?", pronunciation: "nohs TRAH-eh lah KWEHN-tah, por fah-VOR" },
       { spanish: "Una sola cuenta.", english: "One check.", pronunciation: "OO-nah SOH-lah KWEHN-tah" },
       { spanish: "Podria dividir la cuenta?", english: "Could you split the check?", pronunciation: "poh-DREE-ah dee-vee-DEER lah KWEHN-tah" },
+    ]},
+    { label: "Tip", phrases: [
+      { spanish: "Si, agregueme el diez por ciento, por favor.", english: "Yes, add 10% please.", pronunciation: "see, ah-GREH-geh-meh el dee-EHS por see-EHN-toh, por fah-VOR" },
+      { spanish: "No, muchas gracias.", english: "No, thank you.", pronunciation: "noh, MOO-chahs GRAH-see-ahs" },
+      { spanish: "En efectivo, por favor.", english: "In cash, please.", pronunciation: "ehn eh-fehk-TEE-voh, por fah-VOR" },
+      { spanish: "Con tarjeta, por favor.", english: "By card, please.", pronunciation: "kohn tar-HEH-tah, por fah-VOR" },
+      { spanish: "Me podria decir el total con propina?", english: "Could you tell me the total with tip?", pronunciation: "meh poh-DREE-ah deh-SEER el toh-TAHL kohn proh-PEE-nah" },
+      { spanish: "Si, recibo por favor.", english: "Yes, receipt please.", pronunciation: "see, reh-SEE-boh por fah-VOR" },
     ]},
   ],
 }
