@@ -9,8 +9,6 @@
  * LLM fallback uses the exact same intent list + reply sets.
  */
 
-import type { Phrase, SpeechMode } from "./phrases";
-
 // ── Core types ──────────────────────────────────────────────────────────
 
 export interface ListenReply {
@@ -129,6 +127,32 @@ const REPLY_SETS: Record<string, ListenReply[]> = {
     { spanish: "Mas despacio, por favor.", english: "Slower, please.", pronunciation: "mahs dehs-PAH-see-oh, por fah-VOR" },
     { spanish: "No entiendo, puede decirlo de otra forma?", english: "I don't understand, can you say it differently?", pronunciation: "noh ehn-tee-EHN-doh, PWEH-deh deh-SEER-loh deh OH-trah FOR-mah" },
   ],
+
+  // ── Smalltalk ──
+  smalltalk_origin: [
+    { spanish: "Soy de Estados Unidos.", english: "I'm from the US.", pronunciation: "soy deh ehs-TAH-dohs oo-NEE-dohs" },
+    { spanish: "Soy de California.", english: "I'm from California.", pronunciation: "soy deh kah-lee-FOR-nee-ah" },
+    { spanish: "Soy de Los Angeles.", english: "I'm from Los Angeles.", pronunciation: "soy deh lohs AHN-heh-lehs" },
+    { spanish: "Y tu?", english: "And you?", pronunciation: "ee too" },
+  ],
+  smalltalk_live_here: [
+    { spanish: "No, estoy de visita.", english: "No, I'm visiting.", pronunciation: "noh, ehs-TOY deh vee-SEE-tah" },
+    { spanish: "Si, vivo aqui.", english: "Yes, I live here.", pronunciation: "see, VEE-voh ah-KEE" },
+    { spanish: "Estoy aqui por unos dias.", english: "I'm here for a few days.", pronunciation: "ehs-TOY ah-KEE por OO-nohs DEE-ahs" },
+    { spanish: "Y tu?", english: "And you?", pronunciation: "ee too" },
+  ],
+  smalltalk_first_time: [
+    { spanish: "Si, es mi primera vez.", english: "Yes, it's my first time.", pronunciation: "see, ehs mee pree-MEH-rah vehs" },
+    { spanish: "No, ya he venido antes.", english: "No, I've been before.", pronunciation: "noh, yah eh veh-NEE-doh AHN-tehs" },
+    { spanish: "Vine hace poco.", english: "I came recently.", pronunciation: "VEE-neh AH-seh POH-koh" },
+    { spanish: "Me gusta mucho.", english: "I like it a lot.", pronunciation: "meh GOOS-tah MOO-choh" },
+  ],
+  smalltalk_enjoying: [
+    { spanish: "Si, me encanta.", english: "Yes, I love it.", pronunciation: "see, meh ehn-KAHN-tah" },
+    { spanish: "Si, esta increible.", english: "Yes, it's incredible.", pronunciation: "see, ehs-TAH een-kreh-EE-bleh" },
+    { spanish: "Si, me gusta mucho.", english: "Yes, I like it a lot.", pronunciation: "see, meh GOOS-tah MOO-choh" },
+    { spanish: "La comida esta buenisima.", english: "The food is amazing.", pronunciation: "lah koh-MEE-dah ehs-TAH bweh-NEE-see-mah" },
+  ],
 };
 
 // ── Section mapping for UI colors ───────────────────────────────────────
@@ -150,6 +174,10 @@ const INTENT_TO_SECTION: Record<string, string> = {
   not_available: "Food",
   clarification: "Clarify",
   unknown: "Clarify",
+  smalltalk_origin: "Smalltalk",
+  smalltalk_live_here: "Smalltalk",
+  smalltalk_first_time: "Smalltalk",
+  smalltalk_enjoying: "Smalltalk",
 };
 
 // ── Intent definitions with trigger groups ───────────────────────────────
