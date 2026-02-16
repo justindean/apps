@@ -51,7 +51,7 @@ function WaveformIcon({ size = 12 }: { size?: number }) {
 }
 
 /* ── SpeechRecognition type shim ── */
-type SpeechRecognitionInstance = InstanceType<typeof window.SpeechRecognition> & {
+interface SpeechRecognitionInstance {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
@@ -61,7 +61,7 @@ type SpeechRecognitionInstance = InstanceType<typeof window.SpeechRecognition> &
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
-};
+}
 
 interface SpeechRecognitionEvent {
   results: SpeechRecognitionResultList;
@@ -93,8 +93,8 @@ interface SpeechRecognitionErrorEvent {
 
 declare global {
   interface Window {
-    SpeechRecognition: new () => SpeechRecognitionInstance;
-    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
+    SpeechRecognition: { new(): SpeechRecognitionInstance };
+    webkitSpeechRecognition: { new(): SpeechRecognitionInstance };
   }
 }
 
