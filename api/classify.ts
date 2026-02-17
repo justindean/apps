@@ -21,8 +21,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { transcript, systemPromptOverride } = req.body as {
+    const { transcript, tone, systemPromptOverride } = req.body as {
       transcript: string;
+      tone?: string;
       systemPromptOverride: string;
     };
 
@@ -30,10 +31,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Missing transcript" });
     }
 
-    console.log(`[classify] Received transcript: "${transcript}"`);
+    const activeTone = tone || "neutral";
+    console.log(`[classify] transcript: "${transcript}" tone: ${activeTone}`);
 
     const systemPrompt = systemPromptOverride;
-    const userPrompt = `Transcript: "${transcript}"\nTone: Neutral`;
+    const userPrompt = `Transcript: "${transcript}"`;
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

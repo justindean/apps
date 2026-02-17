@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
+import { getLLMSystemPrompt, LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
@@ -431,8 +431,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               transcript: corrected,
-              tone: mode === "formal" ? "Formal" : mode === "street" ? "Street" : "Neutral",
-              systemPromptOverride: LLM_SYSTEM_PROMPT,
+              tone: mode,
+              systemPromptOverride: getLLMSystemPrompt(mode),
             }),
           });
 
@@ -782,7 +782,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ══════════════════════════���═════════════════��══════════════════════════
+  /* ══════════════════════════���═════════════════��════════════���═════════════
      RENDER
      ══════════════════════════════════════════════════════���════════════════ */
   return (
