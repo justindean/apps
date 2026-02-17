@@ -494,7 +494,7 @@ export function validateAndBuildFromLLM(
   // Sanity check: is intent in our allowed list?
   const section = INTENT_TO_SECTION[intent];
   if (!section) {
-    return buildUnknown({ rejectedReason: \`AI returned unknown intent: \${intent}\` });
+    return buildUnknown({ rejectedReason: "AI returned unknown intent: " + intent });
   }
 
   // Validate evidence tokens appear in transcript
