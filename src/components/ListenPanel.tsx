@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { classifyIntent, LLM_SYSTEM_PROMPT, buildListenMatchFromLLM } from "../data/restaurantIntents";
+import { classifyIntent, LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
@@ -195,6 +195,7 @@ const INTENT_LABELS: Record<string, string> = {
   order_items: "ORDER",
   doneness_preference: "STEAK",
   drinks_offer: "DRINKS",
+  drinks_hot_offer: "HOT DRINKS",
   anything_else: "MORE?",
   check_in_food: "CHECK-IN",
   bill_offer: "BILL",
@@ -271,7 +272,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     setDebugLogs((prev) => [...prev.slice(-60), { time, type, text }]);
   }, []);
 
-  /* ── Process transcript (shared by both modes) ── */
+  /* ── Process transcript (shared by both modes) ──
+   * GROUNDED architecture: every call produces a fresh ListenMatch.
+   * No stale state reuse. AI responses are post-validated against constraints.
+   */
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
@@ -280,14 +284,16 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setCorrectedText(corrected);
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      // ── PASS 1: Deterministic classifier (includes fast-path regex shortcuts) ──
-      const keywordMatch = classifyIntent(corrected);
-      setMatch(keywordMatch);
-      addLog("intent", `[keyword] ${keywordMatch.intent} conf=${keywordMatch.confidence} keywords=[${keywordMatch.keywords.join(", ")}]`);
+      const normed = normalizeTranscript(corrected);
 
-      // ── PASS 2: LLM classifier if keyword match is low confidence ──
-      if (keywordMatch.confidence < 60) {
-        addLog("info", `Low confidence (${keywordMatch.confidence}), running LLM classifier...`);
+      // ── PASS 1: Deterministic classifier (constraint-validated) ──
+      const detMatch = classifyIntent(corrected);
+      setMatch(detMatch);
+      addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
+
+      // ── PASS 2: LLM fallback only if deterministic is low confidence ──
+      if (detMatch.confidence < 60) {
+        addLog("info", `Low confidence (${detMatch.confidence}), running LLM classifier...`);
         setLlmClassifying(true);
 
         fetch("/api/classify", {
@@ -305,20 +311,26 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
               return;
             }
 
-            addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply="${data.best_reply}"`);
-            addLog("info", `[LLM] meaning: "${data.english}"`);
+            addLog("intent", `[LLM raw] ${data.intent} conf=${data.confidence} evidence=[${(data.evidence ?? data.keywords ?? []).join(", ")}]`);
 
-            const llmMatch = buildListenMatchFromLLM(data);
+            // POST-VALIDATION: validate AI output against transcript constraints
+            const validatedMatch = validateAndBuildFromLLM(data, normed);
 
-            // Upgrade if LLM is more confident or keyword was unknown
-            if (
-              keywordMatch.intent === "unknown" ||
-              (llmMatch.confidence ?? 0) > keywordMatch.confidence
-            ) {
-              setMatch(llmMatch);
-              addLog("info", `[LLM] Upgraded from ${keywordMatch.intent}(${keywordMatch.confidence}) to ${llmMatch.intent}(${llmMatch.confidence})`);
+            if (validatedMatch.debug?.rejectedReason) {
+              addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
             } else {
-              addLog("info", `[LLM] Kept keyword match (higher confidence)`);
+              addLog("info", `[LLM validated] ${validatedMatch.intent} conf=${validatedMatch.confidence}`);
+            }
+
+            // Upgrade if validated LLM is better than deterministic
+            if (
+              detMatch.intent === "unknown" ||
+              (validatedMatch.intent !== "unknown" && validatedMatch.confidence > detMatch.confidence)
+            ) {
+              setMatch(validatedMatch);
+              addLog("info", `Upgraded: ${detMatch.intent}(${detMatch.confidence}) -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
+            } else {
+              addLog("info", `Kept deterministic: ${detMatch.intent}(${detMatch.confidence})`);
             }
           })
           .catch((err: unknown) => {
@@ -731,20 +743,32 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             </p>
           )}
 
-          {/* Confidence + LLM status */}
-          {match && hasResults && (
-            <div className="mt-2 flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 85 ? "bg-emerald-400" : match.confidence >= 60 ? "bg-amber-400" : "bg-stone-300"}`} />
-                <span className={`text-[10px] font-semibold ${match.confidence >= 85 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 60 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
-                  {match.confidence >= 85 ? "Strong match" : match.confidence >= 60 ? "Best guess" : "Unsure"}
-                </span>
+          {/* Confidence + LLM status — grounded logic */}
+          {match && hasResults && (() => {
+            const isStrong = match.source === "deterministic"
+              ? match.confidence >= 85
+              : match.source === "ai" && match.confidence >= 85 && match.evidence.length > 0;
+            const isBestGuess = !isStrong && match.confidence >= 60;
+            const label = isStrong ? "Strong match" : isBestGuess ? "Best guess" : "Unsure";
+            const dotColor = isStrong ? "bg-emerald-400" : isBestGuess ? "bg-amber-400" : "bg-stone-300";
+            const textColor = isStrong ? "text-emerald-600 dark:text-emerald-400" : isBestGuess ? "text-amber-600 dark:text-amber-400" : "text-stone-400";
+            return (
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <div className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
+                  <span className={`text-[10px] font-semibold ${textColor}`}>{label}</span>
+                  {match.evidence.length > 0 && (
+                    <span className="text-[9px] text-stone-400 dark:text-stone-500">
+                      {`[${match.evidence.slice(0, 3).join(", ")}]`}
+                    </span>
+                  )}
+                </div>
+                {llmClassifying && (
+                  <span className="animate-pulse text-[10px] font-medium text-sky-500 dark:text-sky-400">Refining...</span>
+                )}
               </div>
-              {llmClassifying && (
-                <span className="animate-pulse text-[10px] font-medium text-sky-500 dark:text-sky-400">Refining...</span>
-              )}
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -858,7 +882,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
               {match && <p><span className="text-sky-500">Intent: </span>{match.intent} [{match.section}] conf={match.confidence} src={match.source}</p>}
               {match && <p><span className="text-sky-500">English: </span>{match.english}</p>}
               {match && <p><span className="text-emerald-500">Reply: </span>{match.bestReply.spanish} ({match.bestReply.english})</p>}
-              {match && match.keywords.length > 0 && <p><span className="text-violet-500">Keywords: </span>{match.keywords.join(", ")}</p>}
+              {match && match.evidence.length > 0 && <p><span className="text-violet-500">Evidence: </span>{match.evidence.join(", ")}</p>}
+              {match?.debug?.matchedRule && <p><span className="text-cyan-500">Rule: </span>{match.debug.matchedRule}</p>}
+              {match?.debug?.rejectedReason && <p><span className="text-red-500">Rejected: </span>{match.debug.rejectedReason}</p>}
             </div>
           )}
 
