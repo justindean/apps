@@ -326,6 +326,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const lastTranscriptAtRef = useRef(0);
   const speechStartedRef = useRef(false);
   const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const processedFinalRef = useRef(false); // prevents double processTranscript calls
 
   const addLog = useCallback((type: DebugLog["type"], text: string) => {
     const time = new Date().toLocaleTimeString("en-US", { hour12: false });
@@ -362,6 +363,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setLlmClassifying(true);
       addLog("info", `LLM classifying: "${corrected}" (det: ${detMatch.intent} conf=${detMatch.confidence})`);
 
+      console.log("[v0] LLM fetch starting for:", corrected);
       fetch("/api/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -371,6 +373,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         }),
       })
         .then((r) => {
+          console.log("[v0] /api/classify status:", r.status);
           if (!r.ok) {
             return r.text().then((t) => {
               throw new Error(`API ${r.status}: ${t.slice(0, 200)}`);
@@ -379,6 +382,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           return r.json();
         })
         .then((data: LLMListenResponse & { error?: string }) => {
+          console.log("[v0] LLM response data:", JSON.stringify(data).slice(0, 500));
           if (data.error) {
             addLog("error", `LLM error: ${data.error}`);
             return;
@@ -387,7 +391,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           addLog("intent", `[LLM raw] intent=${data.intent} conf=${data.confidence} evidence=[${(data.evidence ?? data.keywords ?? []).join(", ")}] reply=${data.best_reply}`);
 
           // POST-VALIDATION: validate AI output against transcript constraints
+          console.log("[v0] Running validateAndBuildFromLLM with normed:", normed);
           const validatedMatch = validateAndBuildFromLLM(data, normed);
+          console.log("[v0] validateAndBuildFromLLM result:", JSON.stringify({ intent: validatedMatch.intent, confidence: validatedMatch.confidence, rejected: validatedMatch.debug?.rejectedReason }));
 
           if (validatedMatch.debug?.rejectedReason) {
             addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
@@ -397,9 +403,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           addLog("info", `[LLM validated] ${validatedMatch.intent} conf=${validatedMatch.confidence}`);
 
           // ── UPGRADE LOGIC ──
-          // The LLM always wins EXCEPT when:
-          // - LLM returns "unknown" and deterministic has a real match
-          // - LLM confidence is very low AND deterministic is very high
           const llmWins =
             validatedMatch.intent !== "unknown" ||
             detMatch.intent === "unknown";
@@ -408,6 +411,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             detMatch.confidence >= 90 &&
             validatedMatch.intent !== "ai_understood" &&
             validatedMatch.confidence < 50;
+
+          console.log("[v0] Upgrade logic:", { llmWins, detIsStronger, detIntent: detMatch.intent, detConf: detMatch.confidence, llmIntent: validatedMatch.intent, llmConf: validatedMatch.confidence });
 
           if (llmWins && !detIsStronger) {
             setMatch(validatedMatch);
@@ -418,8 +423,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         })
         .catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : "LLM classify failed";
+          console.log("[v0] LLM CATCH:", msg, err);
           addLog("error", `LLM: ${msg}`);
-          // On error, keep deterministic result (already set above)
         })
         .finally(() => setLlmClassifying(false));
     },
@@ -634,7 +639,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         finalTextRef.current = final;
         setFinalText(final);
         setInterimText("");
-        processTranscript(final);
+        if (!processedFinalRef.current) {
+          processedFinalRef.current = true;
+          processTranscript(final);
+        }
       } else if (interim) {
         setInterimText(interim);
         addLog("partial", `"${interim}"`);
@@ -657,7 +665,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
       }
-      if (finalTextRef.current.trim()) {
+      // Only process on end if we never got a final result during onresult
+      if (finalTextRef.current.trim() && !processedFinalRef.current) {
+        processedFinalRef.current = true;
         setState("processing");
         processTranscript(finalTextRef.current);
         setTimeout(() => setState("idle"), 200);
@@ -669,6 +679,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     recognitionRef.current = recognition;
     speechStartedRef.current = false;
     lastTranscriptAtRef.current = 0;
+    processedFinalRef.current = false;
 
     try {
       recognition.start();
