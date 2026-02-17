@@ -170,7 +170,7 @@ const ES_EN: Record<string, string> = {
   puede: "can", puedo: "I can", le: "you", les: "you all",
   traer: "bring", traigo: "I bring", servir: "serve",
   recomienda: "recommend", recomendar: "recommend",
-  probar: "try", quiere: "want",
+  probar: "try",
   // restaurant nouns
   mesa: "table", silla: "chair", menu: "menu", carta: "menu",
   cuenta: "check", propina: "tip", servicio: "service", recibo: "receipt",
@@ -203,7 +203,7 @@ const ES_EN: Record<string, string> = {
   primera: "first", vez: "time", visita: "visit", vives: "do you live",
   // seating
   adentro: "inside", afuera: "outside", terraza: "terrace",
-  personas: "people", cuantos: "how many",
+  personas: "people",
   // payment
   tarjeta: "card", efectivo: "cash", pagar: "pay",
 };
@@ -782,7 +782,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ══════════════════════════���════════════════════════════════════════════
+  /* ══════════════════════════���═════════════════��══════════════════════════
      RENDER
      ══════════════════════════════════════════════════════���════════════════ */
   return (
