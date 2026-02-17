@@ -361,6 +361,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         setLlmClassifying(true);
 
         console.log("[v0] LLM fallback firing for:", corrected);
+        addLog("info", `Calling /api/classify with transcript: "${corrected}"`);
         fetch("/api/classify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -371,16 +372,24 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         })
           .then((r) => {
             console.log("[v0] /api/classify response status:", r.status);
+            addLog("info", `/api/classify status: ${r.status}`);
+            if (!r.ok) {
+              return r.text().then((t) => {
+                throw new Error(`API ${r.status}: ${t.slice(0, 200)}`);
+              });
+            }
             return r.json();
           })
           .then((data: LLMListenResponse & { error?: string }) => {
-            console.log("[v0] LLM response data:", JSON.stringify(data).slice(0, 300));
+            console.log("[v0] LLM response data:", JSON.stringify(data).slice(0, 500));
+            addLog("info", `LLM raw response: ${JSON.stringify(data).slice(0, 200)}`);
+
             if (data.error) {
-              addLog("error", `LLM: ${data.error}`);
+              addLog("error", `LLM error: ${data.error}`);
               return;
             }
 
-            addLog("intent", `[LLM raw] ${data.intent} conf=${data.confidence} evidence=[${(data.evidence ?? data.keywords ?? []).join(", ")}]`);
+            addLog("intent", `[LLM raw] intent=${data.intent} conf=${data.confidence} evidence=[${(data.evidence ?? data.keywords ?? []).join(", ")}] reply=${data.best_reply}`);
 
             // POST-VALIDATION: validate AI output against transcript constraints
             const validatedMatch = validateAndBuildFromLLM(data, normed);
@@ -407,7 +416,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : "LLM classify failed";
             console.log("[v0] LLM CATCH error:", msg, err);
-            addLog("error", `LLM: ${msg}`);
+            addLog("error", `LLM FAILED: ${msg}`);
             // On error, keep deterministic result (already set above)
           })
           .finally(() => setLlmClassifying(false));
