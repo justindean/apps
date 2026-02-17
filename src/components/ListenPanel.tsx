@@ -356,34 +356,20 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setMatch(detMatch);
       addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
 
-      // ── PASS 2: ALWAYS fire LLM in parallel ──
-      // Direct OpenAI call from client. Vite middleware /api/* routing does not
-      // work in this sandbox. Will move to a proper server proxy for production.
+      // ── PASS 2: ALWAYS fire LLM in parallel (server-side proxy) ──
+      // Uses /_llm/classify (NOT /api/) to avoid Vercel Sandbox serverless interception.
+      // API key stays server-side only.
       setLlmClassifying(true);
 
       (async () => {
         try {
-          const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-          if (!apiKey) {
-            addLog("error", "LLM: no API key available");
-            return;
-          }
-
-          const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+          const resp = await fetch("/_llm/classify", {
             method: "POST",
-            headers: {
-              "Authorization": `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "gpt-4o-mini",
-              temperature: 0.2,
-              max_tokens: 300,
-              response_format: { type: "json_object" },
-              messages: [
-                { role: "system", content: LLM_SYSTEM_PROMPT },
-                { role: "user", content: `Transcript: "${corrected}"\nTone: ${mode === "formal" ? "Formal" : mode === "street" ? "Street" : "Neutral"}` },
-              ],
+              transcript: corrected,
+              tone: mode === "formal" ? "Formal" : mode === "street" ? "Street" : "Neutral",
+              systemPromptOverride: LLM_SYSTEM_PROMPT,
             }),
           });
 
@@ -393,14 +379,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             return;
           }
 
-          const raw = await resp.json();
-          const content = raw.choices?.[0]?.message?.content;
-          if (!content) {
-            addLog("error", "LLM: empty response");
-            return;
-          }
-
-          const data: LLMListenResponse = JSON.parse(content);
+          const data: LLMListenResponse = await resp.json();
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
           const validatedMatch = validateAndBuildFromLLM(data, normed);

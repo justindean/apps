@@ -78,7 +78,8 @@ function classifyPlugin(): Plugin {
   return {
     name: 'classify-dev',
     configureServer(server) {
-      server.middlewares.use('/api/classify', async (req: IncomingMessage, res) => {
+      // Use /_llm/ prefix (NOT /api/) because Vercel Sandbox intercepts /api/* for serverless functions
+      server.middlewares.use('/_llm/classify', async (req: IncomingMessage, res) => {
         console.log(`[classify] HIT: ${req.method} ${req.url}`)
         if (req.method !== 'POST') {
           res.writeHead(405, { 'Content-Type': 'application/json' })
@@ -343,12 +344,6 @@ function openaiPingPlugin(): Plugin {
   }
 }
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  return {
-    plugins: [react(), transcribePlugin(), classifyPlugin(), replyGeneratorPlugin(), openaiPingPlugin()],
-    define: {
-      'import.meta.env.VITE_OPENAI_API_KEY': JSON.stringify(env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || ''),
-    },
-  }
+export default defineConfig({
+  plugins: [react(), transcribePlugin(), classifyPlugin(), replyGeneratorPlugin(), openaiPingPlugin()],
 })
