@@ -210,7 +210,7 @@ const INTENT_CONSTRAINTS: Record<string, string[]> = {
   doneness_preference: [
     "carne", "bistec", "steak", "termino", "termine", "coccion", "cocido",
     "tres cuartos", "poco hecho", "rojo", "filete", "corte",
-    "arrachera", "res", "jugoso", "bien cocido",
+    "arrachera", "carne de res", "jugoso", "bien cocido",
   ],
   soups_available: [
     "sopa", "sopas", "caldo", "caldos", "consome", "consomé",
@@ -256,6 +256,23 @@ export function normalizeTranscript(text: string): string {
     .trim();
 }
 
+// ── Word-boundary matcher ──────────────────────────────────────────────
+// CRITICAL FIX: uses \b word boundaries to prevent substring false positives.
+// e.g. "eres" must NOT match constraint "res", "dulces" must NOT match "es".
+
+/** Escape regex special chars in a token string */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Test if `token` appears as a whole-word match inside `normed` */
+function wordMatch(token: string, normed: string): boolean {
+  // For multi-word tokens (e.g. "bien cocido"), match the whole phrase
+  // For single words, use word boundaries
+  const pattern = new RegExp(`(?:^|\\s|\\b)${escapeRegex(token)}(?:\\s|\\b|$)`, "i");
+  return pattern.test(normed);
+}
+
 // ── Constraint checker ──────────────────────────────────────────────────
 
 /** Check if transcript satisfies constraints for intent. Returns matched tokens. */
@@ -264,7 +281,7 @@ function checkConstraints(intent: string, normed: string): string[] {
   if (!constraints) return []; // No constraints = always valid (evidence empty)
   const matched: string[] = [];
   for (const token of constraints) {
-    if (normed.includes(token)) {
+    if (wordMatch(token, normed)) {
       matched.push(token);
     }
   }
@@ -356,8 +373,8 @@ const INTENTS: IntentDef[] = [
     englishMeaning: "How would you like your meat cooked?",
     // NO "quieres" here — that's generic. Only meat-specific words.
     triggerGroups: [
-      ["carne", "bistec", "steak", "res", "filete", "corte", "arrachera"],
-      ["termino", "medio", "tres cuartos", "bien cocido", "poco hecho", "rojo", "coccion", "como lo quiere", "como la quiere", "a que termino"],
+      ["carne", "bistec", "steak", "filete", "corte", "arrachera", "carne de res"],
+      ["termino", "tres cuartos", "bien cocido", "poco hecho", "rojo", "coccion", "como lo quiere", "como la quiere", "a que termino"],
     ],
     replies: REPLY_SETS.doneness_preference, section: "Food", weight: 0.96,
   },
@@ -551,7 +568,7 @@ export function classifyIntent(transcript: string): ListenMatch {
       let groupMatched = false;
       for (const trigger of group) {
         const normedTrigger = normalizeTranscript(trigger);
-        if (normed.includes(normedTrigger)) {
+        if (wordMatch(normedTrigger, normed)) {
           groupMatched = true;
           matchedWords.push(trigger);
         }
@@ -603,7 +620,7 @@ export function classifyIntent(transcript: string): ListenMatch {
   return buildUnknown();
 }
 
-// ── Get replies for a specific intent ───────────────────────────────────
+// ── Get replies for a specific intent ───────────────��───────────────────
 
 export function getRepliesForIntent(intent: string): ListenReply[] {
   return REPLY_SETS[intent] ?? REPLY_SETS.unknown;
@@ -869,11 +886,11 @@ export function validateAndBuildFromLLM(
     return buildUnknown({ rejectedReason: `AI returned unknown intent: ${intent}` });
   }
 
-  // ── CHECK 2: Validate evidence tokens actually appear in transcript ──
+  // ── CHECK 2: Validate evidence tokens actually appear in transcript (word-boundary) ──
   const validEvidence: string[] = [];
   for (const token of aiEvidence) {
     const normedToken = normalizeTranscript(token);
-    if (normalizedTranscript.includes(normedToken)) {
+    if (wordMatch(normedToken, normalizedTranscript)) {
       validEvidence.push(token);
     }
   }
