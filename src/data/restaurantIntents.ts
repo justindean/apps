@@ -85,7 +85,9 @@ const REPLY_SETS: Record<string, ListenReply[]> = {
   ],
   drinks_offer: [
     { spanish: "Agua, por favor.", english: "Water, please.", pronunciation: "AH-gwah, por fah-VOR" },
+    { spanish: "Un jugo, por favor.", english: "A juice, please.", pronunciation: "oon HOO-goh, por fah-VOR" },
     { spanish: "Una cerveza, por favor.", english: "A beer, please.", pronunciation: "OO-nah ser-VEH-sah, por fah-VOR" },
+    { spanish: "Si, por favor.", english: "Yes, please.", pronunciation: "see, por fah-VOR" },
     { spanish: "Nada, gracias.", english: "Nothing, thanks.", pronunciation: "NAH-dah, GRAH-see-ahs" },
   ],
   drinks_hot_offer: [
@@ -221,7 +223,8 @@ const INTENT_CONSTRAINTS: Record<string, string[]> = {
   ],
   drinks_offer: [
     "tomar", "beber", "bebida", "cerveza", "chela", "agua", "refresco",
-    "jugo", "limonada", "copa", "vino", "mezcal", "tequila",
+    "jugo", "jugos", "juegos", "limonada", "copa", "vino", "mezcal", "tequila",
+    "leche", "horchata", "naranjada", "jamaica", "michelada", "margarita",
     "algo de tomar", "para tomar",
   ],
   menu_offer: [
@@ -309,6 +312,9 @@ const FAST_PATHS: FastPath[] = [
   { pattern: /\b(sopas?|caldo[s]?|consom[eé])\b/i, intent: "soups_available", english: "What soups do you have?", rule: "soups-regex" },
   // Hot drinks — MUST come before generic drinks_offer
   { pattern: /\b(cafe\s+o\s+te|te\s+o\s+cafe|quieres?\s+cafe|quieres?\s+te|un\s+cafe|un\s+te|capuchino|americano|latte)\b/i, intent: "drinks_hot_offer", english: "Would you like coffee or tea?", rule: "hot-drinks-regex" },
+  // Cold drinks / generic drink words — fast match on specific beverage nouns
+  { pattern: /\b(leche|jugo[s]?|juegos?|limonada|horchata|naranjada|jamaica|cerveza|chela|michelada|refresco|vino|mezcal|tequila|margarita|copa)\b/i, intent: "drinks_offer", english: "What would you like to drink?", rule: "drinks-noun-regex" },
+  { pattern: /\b(algo\s+de\s+tomar|para\s+tomar|quieres?\s+tomar|desea\s+tomar|van\s+a\s+tomar|que\s+va[sn]?\s+a\s+tomar)\b/i, intent: "drinks_offer", english: "What would you like to drink?", rule: "drinks-phrase-regex" },
   // Doneness — explicit doneness phrases only (NO bare "quieres")
   { pattern: /\b(como\s+quieres?\s+(tu|la|el)\s+carne|a\s+que\s+termin|que\s+termin|como\s+lo\s+quiere|como\s+la\s+quiere|termino\s+medio|tres\s+cuartos|bien\s+cocid[oa]|poco\s+hech[oa]|medio\s+rojo|rojo\s+por\s+dentro)\b/i, intent: "doneness_preference", english: "How would you like your meat cooked?", rule: "doneness-regex" },
   // Anything else
@@ -406,8 +412,11 @@ const INTENTS: IntentDef[] = [
     intent: "drinks_offer",
     englishMeaning: "What would you like to drink?",
     triggerGroups: [
-      ["tomar", "beber", "bebida", "cerveza", "chela"],
-      ["algo de tomar", "para tomar", "les traigo", "les ofrezco", "desea tomar", "quiere tomar", "van a tomar"],
+      ["tomar", "beber", "bebida", "cerveza", "chela", "agua", "refresco",
+       "jugo", "jugos", "juegos", "limonada", "leche", "horchata",
+       "naranjada", "jamaica", "michelada", "copa", "vino", "mezcal", "tequila", "margarita"],
+      ["algo de tomar", "para tomar", "les traigo", "les ofrezco", "desea tomar", "quiere tomar", "van a tomar",
+       "quieres", "quiere", "quieren", "gustaria"],
     ],
     replies: REPLY_SETS.drinks_offer, section: "Drinks", weight: 0.92,
   },
@@ -670,9 +679,11 @@ Rules:
 - Never pick a reply that doesn't fit the intent.
 - Use the provided allowed replies by intent exactly; do not paraphrase them.
 - CRITICAL: "evidence" must contain ONLY tokens that literally appear in the transcript. Never hallucinate evidence.
-- CRITICAL: If transcript mentions "cafe", "te", "capuchino", or other hot drinks, use drinks_hot_offer, NOT doneness_preference.
-- CRITICAL: doneness_preference is ONLY for meat/steak words: "carne", "bistec", "termino", "coccion", etc.
+- CRITICAL: If transcript mentions any BEVERAGE (leche, jugo, agua, cerveza, refresco, limonada, horchata, etc.), use drinks_offer.
+- CRITICAL: If transcript mentions "cafe", "te", "capuchino", or other HOT drinks specifically, use drinks_hot_offer.
+- CRITICAL: doneness_preference is ONLY for meat/steak words: "carne", "bistec", "termino", "coccion". NEVER for drinks or food questions.
 - menu_offer is ONLY for "menu", "carta", or offering a printed menu.
+- IMPORTANT: "juegos" is a common mis-transcription of "jugos" (juices). Treat "juegos" as "jugos" in restaurant context.
 - Prefer restaurant-specific intents, BUT also handle common small-talk questions.
 - If no intent fits, use intent "unknown" and reply "Puede repetir, por favor?"
 
@@ -684,9 +695,9 @@ INTENTS (choose exactly one):
 - order_ready
 - order_items
 - doneness_preference  (ONLY for meat: "carne", "bistec", "termino", NOT for generic "quieres")
-- soups_available      (IMPORTANT: "sopa", "sopas", "caldo", "consomé" — what soups/broths are available)
-- drinks_offer         (cold drinks, beer, water)
-- drinks_hot_offer     (IMPORTANT: coffee, tea, capuchino — "quieres cafe o te?")
+- soups_available      ("sopa", "sopas", "caldo", "consomé")
+- drinks_offer         (ANY drink: leche, jugo, agua, cerveza, refresco, limonada, vino, horchata, etc.)
+- drinks_hot_offer     (HOT drinks only: cafe, te, capuchino — "quieres cafe o te?")
 - anything_else        ("algo mas?", "nada mas?")
 - check_in_food        ("todo bien?", "como esta todo?")
 - bill_offer
@@ -751,7 +762,9 @@ soups_available:
 
 drinks_offer:
 - "Agua, por favor."
+- "Un jugo, por favor."
 - "Una cerveza, por favor."
+- "Si, por favor."
 - "Nada, gracias."
 
 drinks_hot_offer:
@@ -895,20 +908,27 @@ export function validateAndBuildFromLLM(
     }
   }
 
-  // ── CHECK 3: Intent constraints satisfied by transcript ──
+  // ── CHECK 3: Intent constraints ──
+  // For DETERMINISTIC path, constraints are hard gates.
+  // For AI path, constraints are advisory: if the LLM returns high confidence
+  // AND at least some evidence tokens validated, trust it even if no constraint
+  // token was found. The LLM knows "leche" is a drink even if our constraint
+  // list doesn't include it.
   const constraintEvidence = checkConstraints(intent, normalizedTranscript);
-  if (INTENT_CONSTRAINTS[intent] && constraintEvidence.length === 0) {
-    return buildUnknown({
-      rejectedReason: `AI chose ${intent} but no constraint tokens found in transcript`,
-    });
-  }
+  const hasConstraints = !!INTENT_CONSTRAINTS[intent];
+  const constraintsSatisfied = !hasConstraints || constraintEvidence.length > 0;
 
-  // ── CHECK 4: If evidence was required but none validated ──
-  // For constrained intents, at least one evidence token must check out
-  if (INTENT_CONSTRAINTS[intent] && validEvidence.length === 0 && constraintEvidence.length === 0) {
-    return buildUnknown({
-      rejectedReason: `AI chose ${intent} with no valid evidence`,
-    });
+  if (hasConstraints && !constraintsSatisfied) {
+    // Constraint tokens missing — but check if LLM is confident with evidence
+    if (rawConfidence >= 75 && validEvidence.length > 0) {
+      // LLM is confident AND provided evidence that we verified exists in transcript.
+      // Trust the LLM — it likely knows vocabulary our constraint list doesn't cover.
+      // (e.g., "leche" is a drink but wasn't in our drinks_offer constraint list)
+    } else {
+      return buildUnknown({
+        rejectedReason: `AI chose ${intent} but no constraint tokens found (conf=${rawConfidence}, evidence=${validEvidence.length})`,
+      });
+    }
   }
 
   // Merge evidence
