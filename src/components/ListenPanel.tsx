@@ -389,21 +389,38 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             return;
           }
 
-          const llmWins =
-            validatedMatch.intent !== "unknown" ||
-            detMatch.intent === "unknown";
+          // ── UPGRADE DECISION ──
+          // The deterministic result already provides a known intent (or unknown).
+          // The LLM should only override in specific cases:
+          const detHasKnownIntent = detMatch.intent !== "unknown";
+          const llmHasKnownIntent = validatedMatch.intent !== "unknown" && validatedMatch.intent !== "ai_understood";
+          const llmIsAiUnderstood = validatedMatch.intent === "ai_understood";
 
-          // Only trust deterministic over LLM when it has genuinely strong
-          // multi-word evidence (not a single keyword match)
-          const detIsStronger =
-            detMatch.confidence >= 85 &&
-            detMatch.evidence.length >= 2 &&
-            validatedMatch.intent !== "ai_understood" &&
-            validatedMatch.confidence < 50;
+          let shouldUpgrade = false;
 
-          if (llmWins && !detIsStronger) {
+          if (detMatch.intent === "unknown") {
+            // Det had nothing -- any LLM result is better
+            shouldUpgrade = validatedMatch.intent !== "unknown";
+          } else if (llmHasKnownIntent && validatedMatch.intent !== detMatch.intent) {
+            // LLM mapped to a DIFFERENT known intent -- trust LLM's contextual understanding
+            // e.g., det said "drinks_offer" but LLM correctly identified "milk_type" context
+            shouldUpgrade = validatedMatch.confidence > 60;
+          } else if (llmIsAiUnderstood && !detHasKnownIntent) {
+            // LLM understood something det didn't -- use it
+            shouldUpgrade = true;
+          } else if (llmIsAiUnderstood && detHasKnownIntent) {
+            // LLM returned a freeform guess but det already has a known intent.
+            // ONLY override if det confidence is very low (single-keyword guess)
+            // and LLM confidence is high. Never override a decent det match with
+            // a literal translation of garbled speech.
+            shouldUpgrade = detMatch.confidence < 50 && validatedMatch.confidence >= 80;
+          }
+
+          if (shouldUpgrade) {
             setMatch(validatedMatch);
-            addLog("info", `LLM: ${detMatch.intent} -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
+            addLog("info", `LLM: ${detMatch.intent}(${detMatch.confidence}) -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
+          } else {
+            addLog("info", `Kept det: ${detMatch.intent}(${detMatch.confidence}), LLM was ${validatedMatch.intent}(${validatedMatch.confidence})`);
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";

@@ -727,6 +727,11 @@ Rules:
 - CRITICAL: "evidence" must contain ONLY tokens that literally appear in the transcript.
 - CRITICAL: doneness_preference is ONLY for meat/steak words: "carne", "bistec", "termino". NEVER for drinks or food questions.
 - "juegos" is a common mis-transcription of "jugos" (juices) in restaurant context.
+- CRITICAL: Speech recognition often garbles words. Interpret what the waiter LIKELY MEANT, not
+  what the words literally say. "que eres una menu" is garbled "quieres un menu" (do you want a menu),
+  NOT "are you a menu". Always ask: "Would a waiter realistically say this?" If not, it's garbled speech.
+- CRITICAL: When you recognize keywords like "menu", "cuenta", "propina", etc., prefer the matching
+  fixed intent over ai_understood. Use ai_understood ONLY when no fixed intent fits.
 
 WHEN TO USE FIXED INTENTS vs ai_understood:
 - If the transcript clearly matches a fixed intent below, use that intent and its allowed replies.
