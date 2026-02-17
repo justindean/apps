@@ -220,8 +220,11 @@ const INTENT_CONSTRAINTS: Record<string, string[]> = {
     "sopa", "sopas", "caldo", "caldos", "consome", "consomé",
   ],
   drinks_hot_offer: [
-    "cafe", "te", "capuchino", "capuccino", "americano", "latte",
+    "cafe", "capuchino", "capuccino", "americano", "latte",
     "chocolate", "infusion",
+    // NOTE: bare "te" removed — it's the pronoun "you" in 99% of cases.
+    // "te" as tea is only valid in multi-word phrases like "cafe o te", "un te", etc.
+    // Those phrases are caught by the fast-path regex instead.
   ],
   drinks_offer: [
     "tomar", "beber", "bebida", "cerveza", "chela", "agua", "refresco",
@@ -346,6 +349,16 @@ const FAST_PATHS: FastPath[] = [
   { pattern: /\b(te\s+gusta\s+mexico|te\s+esta\s+gustando|les\s+gusta\s+mexico|como\s+la\s+estas\s+pasando)\b/i, intent: "smalltalk_enjoying", english: "Are you enjoying Mexico?", rule: "enjoying-regex" },
 ];
 
+// ── Stop words: generic verbs/words that appear in many Spanish sentences ──
+// These should NOT be the SOLE evidence for a match. They're valid as 
+// supporting evidence alongside a topic-specific word, but alone they
+// cause massive false positives.
+const STOP_WORDS = new Set([
+  "quieres", "quiere", "quieren", "gustaria", "gusta", "desea",
+  "te", "le", "les", "lo", "la", "un", "una", "el",
+  "si", "no", "que", "como", "con", "para", "por",
+]);
+
 // ── Keyword trigger groups ──────────────────────────────────────────────
 
 interface IntentDef {
@@ -396,8 +409,9 @@ const INTENTS: IntentDef[] = [
     intent: "drinks_hot_offer",
     englishMeaning: "Would you like coffee or tea?",
     triggerGroups: [
-      ["cafe", "te", "capuchino", "americano", "latte", "chocolate"],
-      ["quiere", "quieres", "gusta", "gustaria", "le traigo", "te traigo", "desea", "quieren"],
+      // bare "te" REMOVED — it matches the pronoun "you" in nearly every sentence
+      ["cafe", "capuchino", "americano", "latte", "chocolate", "cafe o te", "te o cafe", "un te"],
+      ["quiere", "quieres", "gusta", "gustaria", "le traigo", "desea", "quieren"],
     ],
     replies: REPLY_SETS.drinks_hot_offer, section: "Drinks", weight: 0.94,
   },
@@ -406,7 +420,6 @@ const INTENTS: IntentDef[] = [
     englishMeaning: "Would you like a menu?",
     triggerGroups: [
       ["menu", "carta", "la carta"],
-      ["quiere", "quieres", "gusta", "gustaria", "le traigo", "te traigo", "necesita", "desea", "quieren"],
     ],
     replies: REPLY_SETS.menu_offer, section: "Menu", weight: 0.92,
   },
@@ -417,8 +430,7 @@ const INTENTS: IntentDef[] = [
       ["tomar", "beber", "bebida", "cerveza", "chela", "agua", "refresco",
        "jugo", "jugos", "juegos", "limonada", "leche", "horchata",
        "naranjada", "jamaica", "michelada", "copa", "vino", "mezcal", "tequila", "margarita"],
-      ["algo de tomar", "para tomar", "les traigo", "les ofrezco", "desea tomar", "quiere tomar", "van a tomar",
-       "quieres", "quiere", "quieren", "gustaria"],
+      ["algo de tomar", "para tomar", "les traigo", "les ofrezco", "desea tomar", "quiere tomar", "van a tomar"],
     ],
     replies: REPLY_SETS.drinks_offer, section: "Drinks", weight: 0.92,
   },
@@ -594,10 +606,20 @@ export function classifyIntent(transcript: string): ListenMatch {
       continue; // Skip — constraints not met
     }
 
+    // Check if ALL matched words are stop words (generic verbs/pronouns)
+    const hasSubstantiveEvidence = matchedWords.some(
+      (w) => !STOP_WORDS.has(normalizeTranscript(w))
+    );
+    
     const groupRatio = groupHits / def.triggerGroups.length;
     const multiWordBonus = matchedWords.length > 1 ? 0.08 : 0;
     const fullMatchBonus = groupHits === def.triggerGroups.length ? 0.12 : 0;
-    const score = Math.min(1, def.weight * groupRatio + 0.2 + multiWordBonus + fullMatchBonus);
+    // CRITICAL: If ALL evidence is stop words, cap score at 0.35 (conf=35)
+    // so the LLM fallback will fire and give a proper classification
+    let score = Math.min(1, def.weight * groupRatio + 0.2 + multiWordBonus + fullMatchBonus);
+    if (!hasSubstantiveEvidence) {
+      score = Math.min(score, 0.35);
+    }
 
     if (!best || score > best.score) {
       best = { def, score, matchedWords };
