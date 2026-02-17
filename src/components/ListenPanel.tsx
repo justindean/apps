@@ -763,7 +763,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </div>
       )}
 
-      {/* ── CARD 1: WHAT WE HEARD ── */}
+      {/* ── CARD 1: WHAT WE HEARD (Spanish + literal English) ── */}
       {displayText && (
         <div className="animate-fade-in rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
@@ -772,15 +772,29 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${isInterim ? "opacity-60" : ""}`}>
             {`\u201C${displayText}\u201D`}
           </p>
-          {llmClassifying && !isInterim && (
-            <p className="mt-2 animate-pulse text-[13px] font-semibold text-sky-600 dark:text-sky-400">
-              Translating...
+          {/* Literal English translation -- shown once LLM responds */}
+          {match && match.literalEnglish && !llmClassifying && (
+            <p className="mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
+              {match.literalEnglish}
             </p>
           )}
         </div>
       )}
 
       {/* ── CARD 2: WHAT THEY MEANT (LLM interpretation) ── */}
+      {/* Show loading placeholder while LLM is working */}
+      {llmClassifying && !isInterim && displayText && (
+        <div className="animate-fade-in rounded-2xl border border-dashed border-stone-300/60 bg-gradient-to-b from-stone-50/50 to-stone-100/30 p-4 dark:border-stone-600/40 dark:from-stone-800/50 dark:to-stone-800/30">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They likely meant</p>
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
+            <p className="animate-pulse text-[14px] font-semibold text-sky-600 dark:text-sky-400">
+              Checking what they most likely meant...
+            </p>
+          </div>
+        </div>
+      )}
+      {/* Show actual interpretation once LLM responds */}
       {match && hasResults && !llmClassifying && (
         <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">

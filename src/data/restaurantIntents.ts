@@ -24,6 +24,7 @@ export type RouterPath = "deterministic" | "ai" | "fallback-unknown";
 export interface ListenMatch {
   intent: string;
   english: string;
+  literalEnglish: string; // word-for-word translation of what was heard
   confidence: number;     // 0–100
   source: ListenMatchSource;
   routerPath: RouterPath;
@@ -98,6 +99,7 @@ function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
   return {
     intent: "unknown",
     english: "Not sure what they said.",
+    literalEnglish: "",
     confidence: 0,
     source: "none",
     routerPath: "fallback-unknown",
@@ -152,7 +154,8 @@ export const LLM_SYSTEM_PROMPT = [
   "OUTPUT JSON:",
   "{",
   '  "intent": "<one intent>",',
-  '  "english": "<short natural English meaning of what THEY said>",',
+  '  "literal_english": "<word-for-word English translation of the raw Spanish heard>",',
+  '  "english": "<natural English interpretation of what they MEANT, correcting for garbled speech>",',
   '  "evidence": ["<token from transcript>"],',
   "  \"confidence\": 0-100,",
   '  "best_reply": "<contextual Spanish reply>",',
@@ -169,6 +172,7 @@ export const LLM_SYSTEM_PROMPT = [
 export interface LLMListenResponse {
   intent?: string;
   english?: string;
+  literal_english?: string;
   evidence?: string[];
   keywords?: string[];
   confidence?: number;
@@ -188,6 +192,7 @@ export function validateAndBuildFromLLM(
 ): ListenMatch {
   const intent = data.intent ?? "unknown";
   const english = data.english ?? "Not sure what they said.";
+  const literalEnglish = data.literal_english ?? english;
   const rawConfidence = Math.max(0, Math.min(100, data.confidence ?? 15));
   const aiEvidence = data.evidence ?? data.keywords ?? [];
 
@@ -228,6 +233,7 @@ export function validateAndBuildFromLLM(
   return {
     intent,
     english,
+    literalEnglish,
     confidence: rawConfidence,
     source: "ai",
     routerPath: "ai" as RouterPath,
