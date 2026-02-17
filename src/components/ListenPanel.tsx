@@ -356,53 +356,54 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setMatch(detMatch);
       addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
 
-      // ── PASS 2: ALWAYS fire LLM in parallel ──
-      // Show deterministic result immediately (already set above), but let
-      // the LLM verify, correct, or enhance it. The LLM is the source of truth
-      // for understanding context — the deterministic path is just a fast preview.
+      // ── PASS 2: ALWAYS fire LLM in parallel (direct OpenAI call) ──
       setLlmClassifying(true);
-      addLog("info", `LLM classifying: "${corrected}" (det: ${detMatch.intent} conf=${detMatch.confidence})`);
+      addLog("info", `LLM calling for: "${corrected}"`);
 
-      console.log("[v0] LLM fetch starting for:", corrected);
-      fetch("/api/llm-classify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transcript: corrected,
-          systemPromptOverride: LLM_SYSTEM_PROMPT,
-        }),
-      })
-        .then((r) => {
-          console.log("[v0] /api/classify status:", r.status);
-          if (!r.ok) {
-            return r.text().then((t) => {
-              throw new Error(`API ${r.status}: ${t.slice(0, 200)}`);
-            });
-          }
-          return r.json();
-        })
-        .then((data: LLMListenResponse & { error?: string }) => {
-          console.log("[v0] LLM response data:", JSON.stringify(data).slice(0, 500));
-          if (data.error) {
-            addLog("error", `LLM error: ${data.error}`);
+      (async () => {
+        try {
+          const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "gpt-4o-mini",
+              temperature: 0.2,
+              max_tokens: 300,
+              response_format: { type: "json_object" },
+              messages: [
+                { role: "system", content: LLM_SYSTEM_PROMPT },
+                { role: "user", content: `Transcript: "${corrected}"\nTone: ${mode === "formal" ? "Formal" : mode === "street" ? "Street" : "Neutral"}` },
+              ],
+            }),
+          });
+
+          if (!resp.ok) {
+            const errText = await resp.text();
+            addLog("error", `LLM API ${resp.status}: ${errText.slice(0, 100)}`);
             return;
           }
 
-          addLog("intent", `[LLM raw] intent=${data.intent} conf=${data.confidence} evidence=[${(data.evidence ?? data.keywords ?? []).join(", ")}] reply=${data.best_reply}`);
+          const raw = await resp.json();
+          const content = raw.choices?.[0]?.message?.content;
+          if (!content) {
+            addLog("error", "LLM: no content in response");
+            return;
+          }
 
-          // POST-VALIDATION: validate AI output against transcript constraints
-          console.log("[v0] Running validateAndBuildFromLLM with normed:", normed);
+          const data: LLMListenResponse = JSON.parse(content);
+          addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
+
           const validatedMatch = validateAndBuildFromLLM(data, normed);
-          console.log("[v0] validateAndBuildFromLLM result:", JSON.stringify({ intent: validatedMatch.intent, confidence: validatedMatch.confidence, rejected: validatedMatch.debug?.rejectedReason }));
 
           if (validatedMatch.debug?.rejectedReason) {
             addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
             return;
           }
 
-          addLog("info", `[LLM validated] ${validatedMatch.intent} conf=${validatedMatch.confidence}`);
-
-          // ── UPGRADE LOGIC ──
+          // LLM always wins unless it returns unknown and deterministic has a real match
           const llmWins =
             validatedMatch.intent !== "unknown" ||
             detMatch.intent === "unknown";
@@ -412,21 +413,17 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             validatedMatch.intent !== "ai_understood" &&
             validatedMatch.confidence < 50;
 
-          console.log("[v0] Upgrade logic:", { llmWins, detIsStronger, detIntent: detMatch.intent, detConf: detMatch.confidence, llmIntent: validatedMatch.intent, llmConf: validatedMatch.confidence });
-
           if (llmWins && !detIsStronger) {
             setMatch(validatedMatch);
-            addLog("info", `LLM upgraded: ${detMatch.intent}(${detMatch.confidence}) -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
-          } else {
-            addLog("info", `Kept deterministic: ${detMatch.intent}(${detMatch.confidence}) over LLM ${validatedMatch.intent}(${validatedMatch.confidence})`);
+            addLog("info", `LLM: ${detMatch.intent} -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
           }
-        })
-        .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : "LLM classify failed";
-          console.log("[v0] LLM CATCH:", msg, err);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "LLM failed";
           addLog("error", `LLM: ${msg}`);
-        })
-        .finally(() => setLlmClassifying(false));
+        } finally {
+          setLlmClassifying(false);
+        }
+      })();
     },
     [mode, addLog],
   );
@@ -562,7 +559,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     }
   }, [addLog]);
 
-  /* ═══════════════════════════════════════════════════════════════════════
+  /* ═══════════════════════��═══════════════════════════════════════════════
      REALTIME MODE — SpeechRecognition streaming
      ═══════════════════════════════════════════════════════════════════════ */
   const startRealtime = useCallback(async () => {
