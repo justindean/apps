@@ -416,8 +416,12 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             // LLM mapped to a DIFFERENT known intent -- trust LLM's context
             shouldUpgrade = validatedMatch.confidence > 60;
           } else if (llmHasKnownIntent && validatedMatch.intent === detMatch.intent) {
-            // LLM agrees with det -- keep det (it has fixed reply sets)
-            shouldUpgrade = false;
+            // LLM agrees with det's intent. Upgrade if the LLM has a more specific
+            // english translation (e.g. "What type of milk?" vs generic "What to drink?")
+            // The reply set stays the same since it's the same intent, but english changes.
+            if (validatedMatch.english !== detMatch.english && validatedMatch.confidence >= 70) {
+              shouldUpgrade = true;
+            }
           } else if (llmIsAiUnderstood && !detHasKnownIntent) {
             // LLM understood something det didn't -- use it
             shouldUpgrade = true;
@@ -774,7 +778,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
   /* ═══════════════════════════════════════════════════════════════════════
      RENDER
-     ═══════════════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════���════════════════ */
   return (
     <div className="flex flex-col gap-5">
 

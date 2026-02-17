@@ -252,7 +252,7 @@ const INTENT_CONSTRAINTS: Record<string, string[]> = {
   // — their trigger words are specific enough already
 };
 
-// ── Normalizer ──────────────────────────────────────────────────────────
+// ── Normalizer ────────────────────────────────────────────���─────────────
 
 export function normalizeTranscript(text: string): string {
   return text
@@ -367,7 +367,7 @@ const STOP_WORDS = new Set([
   "si", "no", "que", "como", "con", "para", "por",
 ]);
 
-// ── Keyword trigger groups ──────────────────────────────────────────────
+// ── Keyword trigger groups ─────────────────────────��────────────────────
 
 interface IntentDef {
   intent: string;
@@ -536,7 +536,7 @@ const INTENTS: IntentDef[] = [
 
 // ══════════════════════════════════════════════════════════════════════════
 //  classifyIntent — GROUNDED deterministic classifier
-// ══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════��════════
 
 function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
   const replies = REPLY_SETS.unknown;
@@ -730,8 +730,9 @@ Rules:
 - CRITICAL: Speech recognition often garbles words. Interpret what the waiter LIKELY MEANT, not
   what the words literally say. "que eres una menu" is garbled "quieres un menu" (do you want a menu),
   NOT "are you a menu". Always ask: "Would a waiter realistically say this?" If not, it's garbled speech.
-- CRITICAL: When you recognize keywords like "menu", "cuenta", "propina", etc., prefer the matching
-  fixed intent over ai_understood. Use ai_understood ONLY when no fixed intent fits.
+- Use a fixed intent when the FULL phrase clearly matches that intent. Use ai_understood when the
+  phrase has more nuance than the fixed intent captures (e.g. "que tipo de leche prefieres" is about
+  milk TYPE preference, not a generic drink offer -- use ai_understood with the specific meaning).
 
 WHEN TO USE FIXED INTENTS vs ai_understood:
 - If the transcript clearly matches a fixed intent below, use that intent and its allowed replies.
