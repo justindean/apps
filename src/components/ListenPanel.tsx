@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { classifyIntent, LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
+import { buildListenResult, LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
@@ -194,6 +194,7 @@ const INTENT_LABELS: Record<string, string> = {
   order_ready: "ORDER",
   order_items: "ORDER",
   doneness_preference: "STEAK",
+  soups_available: "SOUPS",
   drinks_offer: "DRINKS",
   drinks_hot_offer: "HOT DRINKS",
   anything_else: "MORE?",
@@ -229,6 +230,62 @@ interface ListenPanelProps {
   mode: SpeechMode;
   onCopy: (text: string) => void;
   onSpeak: (phrase: Phrase) => void;
+}
+
+/* ── OpenAI Ping Button (requirement F) ── */
+function OpenAIPingButton({ addLog }: { addLog: (type: DebugLog["type"], text: string) => void }) {
+  const [pingState, setPingState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [pingResult, setPingResult] = useState<string>("");
+
+  const handlePing = useCallback(async () => {
+    setPingState("loading");
+    setPingResult("");
+    addLog("info", "Pinging OpenAI...");
+
+    try {
+      const resp = await fetch("/api/debug/openai-ping");
+      const data = await resp.json();
+
+      if (data.ok) {
+        const usage = data.usage ?? {};
+        const msg = `OK model=${data.model} prompt=${usage.prompt_tokens} completion=${usage.completion_tokens} total=${usage.total_tokens} key=${data.keyPrefix}`;
+        setPingResult(msg);
+        setPingState("success");
+        addLog("info", `[OpenAI Ping] ${msg}`);
+      } else {
+        const msg = data.error || "Unknown error";
+        setPingResult(msg);
+        setPingState("error");
+        addLog("error", `[OpenAI Ping] ${msg}`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      setPingResult(msg);
+      setPingState("error");
+      addLog("error", `[OpenAI Ping] ${msg}`);
+    }
+  }, [addLog]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        onClick={handlePing}
+        disabled={pingState === "loading"}
+        className={`w-fit rounded-md px-2.5 py-1 font-sans text-[10px] font-bold transition ${
+          pingState === "loading"
+            ? "bg-stone-200 text-stone-400 dark:bg-stone-700 dark:text-stone-500"
+            : "bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/40 dark:text-sky-400 dark:hover:bg-sky-900/60"
+        }`}
+      >
+        {pingState === "loading" ? "Testing..." : "Test OpenAI"}
+      </button>
+      {pingResult && (
+        <p className={pingState === "success" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}>
+          {pingResult}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -273,12 +330,16 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }, []);
 
   /* ── Process transcript (shared by both modes) ──
-   * GROUNDED architecture: every call produces a fresh ListenMatch.
-   * No stale state reuse. AI responses are post-validated against constraints.
+   * GROUNDED: every listen creates a FRESH ListenMatch via buildListenResult.
+   * Old state is completely overwritten. If constraints fail -> unknown.
+   * AI is only consulted if deterministic confidence < 60, then post-validated.
    */
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
+
+      // ── FRESH STATE: wipe old match immediately ──
+      setMatch(null);
 
       const corrected = correctSpanish(rawText);
       setCorrectedText(corrected);
@@ -286,10 +347,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       const normed = normalizeTranscript(corrected);
 
-      // ── PASS 1: Deterministic classifier (constraint-validated) ──
-      const detMatch = classifyIntent(corrected);
+      // ── PASS 1: buildListenResult (always fresh, constraint-validated) ──
+      const detMatch = buildListenResult(corrected);
       setMatch(detMatch);
-      addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
+      addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
 
       // ── PASS 2: LLM fallback only if deterministic is low confidence ──
       if (detMatch.confidence < 60) {
@@ -318,11 +379,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
             if (validatedMatch.debug?.rejectedReason) {
               addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
-            } else {
-              addLog("info", `[LLM validated] ${validatedMatch.intent} conf=${validatedMatch.confidence}`);
+              // Keep deterministic (or unknown) — do NOT upgrade to a rejected match
+              return;
             }
 
-            // Upgrade if validated LLM is better than deterministic
+            addLog("info", `[LLM validated] ${validatedMatch.intent} conf=${validatedMatch.confidence} path=${validatedMatch.routerPath}`);
+
+            // Upgrade ONLY if validated LLM is better than deterministic
             if (
               detMatch.intent === "unknown" ||
               (validatedMatch.intent !== "unknown" && validatedMatch.confidence > detMatch.confidence)
@@ -336,6 +399,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : "LLM classify failed";
             addLog("error", `LLM: ${msg}`);
+            // On error, keep deterministic result (already set above)
           })
           .finally(() => setLlmClassifying(false));
       }
@@ -873,20 +937,28 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             </div>
           )}
 
-          {/* Last result summary */}
-          {(finalText || correctedText || match) && (
+          {/* ── STRUCTURED RESULT (requirement A) ── */}
+          {match && (
             <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
-              <p className="font-bold text-stone-600 dark:text-stone-300">Last Result:</p>
-              {finalText && <p><span className="text-stone-400">Raw: </span>{`"${finalText}"`}</p>}
-              {correctedText && correctedText !== finalText && <p><span className="text-amber-500">Corrected: </span>{`"${correctedText}"`}</p>}
-              {match && <p><span className="text-sky-500">Intent: </span>{match.intent} [{match.section}] conf={match.confidence} src={match.source}</p>}
-              {match && <p><span className="text-sky-500">English: </span>{match.english}</p>}
-              {match && <p><span className="text-emerald-500">Reply: </span>{match.bestReply.spanish} ({match.bestReply.english})</p>}
-              {match && match.evidence.length > 0 && <p><span className="text-violet-500">Evidence: </span>{match.evidence.join(", ")}</p>}
-              {match?.debug?.matchedRule && <p><span className="text-cyan-500">Rule: </span>{match.debug.matchedRule}</p>}
-              {match?.debug?.rejectedReason && <p><span className="text-red-500">Rejected: </span>{match.debug.rejectedReason}</p>}
+              <p className="font-bold text-stone-600 dark:text-stone-300">ListenResult:</p>
+              <p><span className="text-stone-400">rawTranscript: </span>{match.debug?.rawTranscript ? `"${match.debug.rawTranscript}"` : `"${finalText}"`}</p>
+              <p><span className="text-stone-400">normalizedTranscript: </span>{match.debug?.normalizedTranscript ? `"${match.debug.normalizedTranscript}"` : `"${normalizeTranscript(correctedText || finalText)}"`}</p>
+              <p><span className="text-sky-500">routerPath: </span><span className={match.routerPath === "fallback-unknown" ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{match.routerPath}</span></p>
+              <p><span className="text-cyan-500">matchedRuleId: </span>{match.debug?.matchedRule ?? "none"}</p>
+              <p><span className="text-violet-500">evidenceTokens: </span>[{match.evidence.join(", ")}]</p>
+              <p><span className="text-stone-400">constraintsPassed: </span><span className={match.debug?.constraintsPassed ? "text-emerald-500" : "text-red-500"}>{String(match.debug?.constraintsPassed ?? false)}</span></p>
+              <p><span className="text-sky-500">finalIntent: </span><span className="font-bold">{match.intent}</span> [{match.section}]</p>
+              <p><span className="text-sky-500">confidence: </span>{match.confidence} <span className="text-stone-400">src={match.source}</span></p>
+              {match.debug?.rejectedReason && <p><span className="text-red-500">reasonIfUnknown: </span>{match.debug.rejectedReason}</p>}
+              <p><span className="text-emerald-500">bestReply: </span>{match.bestReply.spanish}</p>
             </div>
           )}
+
+          {/* ── OpenAI Ping Test (requirement F) ── */}
+          <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
+            <p className="mb-1 font-bold text-stone-600 dark:text-stone-300">OpenAI Connectivity:</p>
+            <OpenAIPingButton addLog={addLog} />
+          </div>
 
           {/* Event log */}
           <div className="max-h-48 overflow-y-auto scrollbar-hide">

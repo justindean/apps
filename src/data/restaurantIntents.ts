@@ -18,18 +18,26 @@ export interface ListenReply {
 }
 
 export type ListenMatchSource = "deterministic" | "ai" | "none";
+export type RouterPath = "deterministic" | "ai" | "fallback-unknown";
 
 export interface ListenMatch {
   intent: string;
   english: string;
   confidence: number;     // 0–100
   source: ListenMatchSource;
+  routerPath: RouterPath;
   evidence: string[];     // exact substrings/keywords found in transcript
   keywords: string[];     // deprecated alias for evidence (backward compat)
   bestReply: ListenReply;
   alternates: ListenReply[];
   section: string;
-  debug?: { matchedRule?: string; rejectedReason?: string };
+  debug?: {
+    matchedRule?: string;
+    rejectedReason?: string;
+    constraintsPassed?: boolean;
+    rawTranscript?: string;
+    normalizedTranscript?: string;
+  };
 }
 
 // ── Reply sets by intent ────────────────────────────────────────────────
@@ -84,6 +92,12 @@ const REPLY_SETS: Record<string, ListenReply[]> = {
     { spanish: "Cafe, por favor.", english: "Coffee, please.", pronunciation: "kah-FEH, por fah-VOR" },
     { spanish: "Te, por favor.", english: "Tea, please.", pronunciation: "teh, por fah-VOR" },
     { spanish: "Agua, por favor.", english: "Water, please.", pronunciation: "AH-gwah, por fah-VOR" },
+    { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
+  ],
+  soups_available: [
+    { spanish: "Que sopas tiene?", english: "What soups do you have?", pronunciation: "keh SOH-pahs tee-EH-neh" },
+    { spanish: "Que sopa recomienda?", english: "Which soup do you recommend?", pronunciation: "keh SOH-pah reh-koh-mee-EHN-dah" },
+    { spanish: "Una sopa, por favor.", english: "A soup, please.", pronunciation: "OO-nah SOH-pah, por fah-VOR" },
     { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
   ],
   anything_else: [
@@ -168,6 +182,7 @@ const INTENT_TO_SECTION: Record<string, string> = {
   order_ready: "Food",
   order_items: "Food",
   doneness_preference: "Food",
+  soups_available: "Food",
   drinks_offer: "Drinks",
   drinks_hot_offer: "Drinks",
   anything_else: "Food",
@@ -194,8 +209,11 @@ const INTENT_TO_SECTION: Record<string, string> = {
 const INTENT_CONSTRAINTS: Record<string, string[]> = {
   doneness_preference: [
     "carne", "bistec", "steak", "termino", "termine", "coccion", "cocido",
-    "tres cuartos", "poco hecho", "medio", "rojo", "filete", "corte",
-    "arrachera", "res",
+    "tres cuartos", "poco hecho", "rojo", "filete", "corte",
+    "arrachera", "res", "jugoso", "bien cocido",
+  ],
+  soups_available: [
+    "sopa", "sopas", "caldo", "caldos", "consome", "consomé",
   ],
   drinks_hot_offer: [
     "cafe", "te", "capuchino", "capuccino", "americano", "latte",
@@ -270,6 +288,8 @@ interface FastPath {
 }
 
 const FAST_PATHS: FastPath[] = [
+  // Soups — MUST come early since "sopas" is unambiguous
+  { pattern: /\b(sopas?|caldo[s]?|consom[eé])\b/i, intent: "soups_available", english: "What soups do you have?", rule: "soups-regex" },
   // Hot drinks — MUST come before generic drinks_offer
   { pattern: /\b(cafe\s+o\s+te|te\s+o\s+cafe|quieres?\s+cafe|quieres?\s+te|un\s+cafe|un\s+te|capuchino|americano|latte)\b/i, intent: "drinks_hot_offer", english: "Would you like coffee or tea?", rule: "hot-drinks-regex" },
   // Doneness — explicit doneness phrases only (NO bare "quieres")
@@ -340,6 +360,12 @@ const INTENTS: IntentDef[] = [
       ["termino", "medio", "tres cuartos", "bien cocido", "poco hecho", "rojo", "coccion", "como lo quiere", "como la quiere", "a que termino"],
     ],
     replies: REPLY_SETS.doneness_preference, section: "Food", weight: 0.96,
+  },
+  {
+    intent: "soups_available",
+    englishMeaning: "What soups do you have?",
+    triggerGroups: [["sopa", "sopas", "caldo", "caldos", "consome", "consomé"]],
+    replies: REPLY_SETS.soups_available, section: "Food", weight: 0.94,
   },
   {
     intent: "drinks_hot_offer",
@@ -464,19 +490,20 @@ const INTENTS: IntentDef[] = [
 //  classifyIntent — GROUNDED deterministic classifier
 // ══════════════════════════════════════════════════════════════════════════
 
-function buildUnknown(debug?: { matchedRule?: string; rejectedReason?: string }): ListenMatch {
+function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
   const replies = REPLY_SETS.unknown;
   return {
     intent: "unknown",
     english: "Not sure what they said.",
     confidence: 15,
     source: "none",
+    routerPath: "fallback-unknown",
     evidence: [],
     keywords: [],
     bestReply: replies[0],
     alternates: replies.slice(1, 3),
     section: "Clarify",
-    debug,
+    debug: { constraintsPassed: false, ...debug },
   };
 }
 
@@ -502,12 +529,13 @@ export function classifyIntent(transcript: string): ListenMatch {
         english: fp.english,
         confidence: 92,
         source: "deterministic",
+        routerPath: "deterministic" as RouterPath,
         evidence,
         keywords: evidence,
         bestReply: replies[0],
         alternates: replies.slice(1, 3),
         section: INTENT_TO_SECTION[fp.intent] ?? "Clarify",
-        debug: { matchedRule: fp.rule },
+        debug: { matchedRule: fp.rule, constraintsPassed: true },
       };
     }
   }
@@ -562,12 +590,13 @@ export function classifyIntent(transcript: string): ListenMatch {
       english: best.def.englishMeaning,
       confidence,
       source: "deterministic",
+      routerPath: "deterministic" as RouterPath,
       evidence,
       keywords: evidence,
       bestReply: replies[0],
       alternates: replies.slice(1, 3),
       section: best.def.section,
-      debug: { matchedRule: "keyword-classifier" },
+      debug: { matchedRule: "keyword-classifier", constraintsPassed: true },
     };
   }
 
@@ -578,6 +607,27 @@ export function classifyIntent(transcript: string): ListenMatch {
 
 export function getRepliesForIntent(intent: string): ListenReply[] {
   return REPLY_SETS[intent] ?? REPLY_SETS.unknown;
+}
+
+/**
+ * Single source of truth: builds a FRESH ListenResult from a transcript.
+ * NEVER reuses prior state. Always starts from { intent: "unknown" }
+ * and upgrades only if constraints pass.
+ */
+export function buildListenResult(transcript: string): ListenMatch {
+  if (!transcript.trim()) return buildUnknown({ constraintsPassed: false });
+
+  const normed = normalizeTranscript(transcript);
+  const result = classifyIntent(transcript);
+
+  // Attach normalized transcript for debug
+  result.debug = {
+    ...result.debug,
+    rawTranscript: transcript,
+    normalizedTranscript: normed,
+  };
+
+  return result;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -617,6 +667,7 @@ INTENTS (choose exactly one):
 - order_ready
 - order_items
 - doneness_preference  (ONLY for meat: "carne", "bistec", "termino", NOT for generic "quieres")
+- soups_available      (IMPORTANT: "sopa", "sopas", "caldo", "consomé" — what soups/broths are available)
 - drinks_offer         (cold drinks, beer, water)
 - drinks_hot_offer     (IMPORTANT: coffee, tea, capuchino — "quieres cafe o te?")
 - anything_else        ("algo mas?", "nada mas?")
@@ -674,6 +725,12 @@ doneness_preference:
 - "Bien cocido, por favor."
 - "Poco hecho, por favor."
 - "Que me recomienda?"
+
+soups_available:
+- "Que sopas tiene?"
+- "Que sopa recomienda?"
+- "Una sopa, por favor."
+- "No, gracias."
 
 drinks_offer:
 - "Agua, por favor."
@@ -868,12 +925,13 @@ export function validateAndBuildFromLLM(
     english,
     confidence: rawConfidence,
     source: "ai",
+    routerPath: "ai" as RouterPath,
     evidence: allEvidence,
     keywords: allEvidence,
     bestReply,
     alternates: alternates.slice(0, 2),
     section,
-    debug: { matchedRule: "ai-validated" },
+    debug: { matchedRule: "ai-validated", constraintsPassed: true },
   };
 }
 
@@ -911,6 +969,7 @@ export function buildListenMatchFromLLM(data: LLMListenResponse): ListenMatch {
   return {
     intent, english, confidence,
     source: "ai",
+    routerPath: "ai" as RouterPath,
     evidence, keywords: evidence,
     bestReply,
     alternates: alternates.slice(0, 2),

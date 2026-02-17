@@ -252,6 +252,88 @@ function replyGeneratorPlugin(): Plugin {
   }
 }
 
+/**
+ * Dev-only middleware: /api/debug/openai-ping
+ * Makes a tiny OpenAI call to verify connectivity and key validity.
+ * Returns { ok, model, usage } so we can confirm tokens are flowing.
+ */
+function openaiPingPlugin(): Plugin {
+  let apiKey: string | undefined
+
+  return {
+    name: 'openai-ping-dev',
+    configResolved(config) {
+      const env = loadEnv(config.mode, process.cwd(), '')
+      apiKey = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+    },
+    configureServer(server) {
+      server.middlewares.use('/api/debug/openai-ping', async (_req: IncomingMessage, res) => {
+        const key = apiKey || process.env.OPENAI_API_KEY
+        if (!key) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'OPENAI_API_KEY is not set in environment variables' }))
+          return
+        }
+
+        try {
+          const model = 'gpt-4o-mini'
+          console.log(`[openai-ping] Sending ping to ${model}...`)
+
+          const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${key}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model,
+              temperature: 0,
+              max_tokens: 5,
+              messages: [
+                { role: 'system', content: 'Reply with exactly: OK' },
+                { role: 'user', content: 'ping' },
+              ],
+            }),
+          })
+
+          if (!resp.ok) {
+            const errText = await resp.text()
+            console.log(`[openai-ping] FAILED: ${resp.status} ${errText.slice(0, 200)}`)
+            res.writeHead(resp.status, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: `OpenAI ${resp.status}: ${errText.slice(0, 200)}` }))
+            return
+          }
+
+          const data = await resp.json() as {
+            model?: string;
+            usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+            choices?: { message?: { content?: string } }[];
+          }
+
+          const usage = data.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+          const reply = data.choices?.[0]?.message?.content ?? '(no reply)'
+
+          console.log(`[openai-ping] SUCCESS: model=${data.model} tokens=${usage.total_tokens} reply="${reply}"`)
+
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({
+            ok: true,
+            model: data.model,
+            reply,
+            usage,
+            keyPrefix: `${key.slice(0, 7)}...${key.slice(-4)}`,
+          }))
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Ping failed'
+          console.log(`[openai-ping] ERROR: ${msg}`)
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: msg }))
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), transcribePlugin(), classifyPlugin(), replyGeneratorPlugin()]
+  plugins: [react(), transcribePlugin(), classifyPlugin(), replyGeneratorPlugin(), openaiPingPlugin()]
 })
