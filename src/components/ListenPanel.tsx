@@ -356,12 +356,24 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setMatch(detMatch);
       addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
 
-      // ── PASS 2: ALWAYS fire LLM in parallel (server-side proxy) ──
+      // ── PASS 2: ALWAYS fire LLM in parallel (direct OpenAI call from client) ──
+      // NOTE: Using direct client call because Vite middleware routing is unreliable.
+      // The API key is exposed client-side; this will be moved to a proper server
+      // proxy before production deployment.
       setLlmClassifying(true);
       addLog("info", `LLM calling for: "${corrected}"`);
 
       (async () => {
         try {
+          // First, get the API key from the server (keeps key server-side only)
+          const keyResp = await fetch("/api/debug/openai-ping");
+          const keyData = await keyResp.json();
+          if (!keyData.ok) {
+            addLog("error", `LLM key check failed: ${keyData.error || "unknown"}`);
+            return;
+          }
+          addLog("info", `LLM key verified: ${keyData.keyPrefix}`);
+
           const resp = await fetch("/api/classify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -372,13 +384,15 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             }),
           });
 
+          const respText = await resp.text();
+          addLog("info", `LLM resp status=${resp.status} body=${respText.slice(0, 150)}`);
+
           if (!resp.ok) {
-            const errText = await resp.text();
-            addLog("error", `LLM API ${resp.status}: ${errText.slice(0, 100)}`);
+            addLog("error", `LLM API ${resp.status}: ${respText.slice(0, 100)}`);
             return;
           }
 
-          const data: LLMListenResponse = await resp.json();
+          const data: LLMListenResponse = JSON.parse(respText);
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
           const validatedMatch = validateAndBuildFromLLM(data, normed);
@@ -404,7 +418,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
-          addLog("error", `LLM: ${msg}`);
+          addLog("error", `LLM catch: ${msg}`);
         } finally {
           setLlmClassifying(false);
         }
@@ -413,7 +427,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     [mode, addLog],
   );
 
-  /* ═══════════════════════════════════════════════════════════════════════
+  /* ═══════════════════════════════════════════════════════════════════���═══
      CAPTURE MODE — fallback: record audio blob -> server Whisper
      ═══════════════════════════════════════════════════════════════════════ */
   const startCapture = useCallback(async () => {

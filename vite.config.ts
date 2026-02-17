@@ -79,15 +79,18 @@ function classifyPlugin(): Plugin {
     name: 'classify-dev',
     configureServer(server) {
       server.middlewares.use('/api/classify', async (req: IncomingMessage, res) => {
+        console.log(`[classify] HIT: ${req.method} ${req.url}`)
         if (req.method !== 'POST') {
           res.writeHead(405, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'POST required' }))
           return
         }
 
-        const key = process.env.OPENAI_API_KEY
+        // Try multiple ways to get the key
+        const env = loadEnv('development', process.cwd(), '')
+        const key = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+        console.log(`[classify] key found: ${key ? key.slice(0, 8) + '...' : 'NONE'} (env: ${!!env.OPENAI_API_KEY}, process: ${!!process.env.OPENAI_API_KEY})`)
         if (!key) {
-          console.log('[classify] ERROR: OPENAI_API_KEY not found in process.env')
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'Missing OPENAI_API_KEY' }))
           return
