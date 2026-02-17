@@ -347,7 +347,10 @@ const FAST_PATHS: FastPath[] = [
 
   // Single beverage nouns — could be "do you want X" or "what kind of X" or "we're out of X"
   { pattern: /\b(leche|jugo[s]?|juegos?|limonada|horchata|naranjada|jamaica|cerveza|chela|michelada|refresco|vino|mezcal|tequila|margarita|copa)\b/i, intent: "drinks_offer", english: "What would you like to drink?", rule: "drinks-single-noun", confidence: 55 },
-  // Table — single location words
+  // Table / seating — "una mesa?" = "Would you like a table?"
+  { pattern: /\b(una\s+mesa|quieres?\s+mesa|necesitas?\s+mesa|busca[ns]?\s+mesa)\b/i, intent: "party_size", english: "Would you like a table?", rule: "table-offer-phrase", confidence: 92 },
+  { pattern: /\bmesa\b/i, intent: "party_size", english: "Would you like a table?", rule: "mesa-single-noun", confidence: 55 },
+  // Table location — single location words
   { pattern: /\b(adentro|afuera|terraza|interior|exterior)\b/i, intent: "table_preference", english: "Inside or outside?", rule: "table-single-noun", confidence: 55 },
   // Tip — single words
   { pattern: /\b(propina|servicio|incluimos\s*servicio)\b/i, intent: "tip_service", english: "Would you like to add a tip?", rule: "tip-noun", confidence: 55 },
@@ -367,7 +370,7 @@ const STOP_WORDS = new Set([
   "si", "no", "que", "como", "con", "para", "por",
 ]);
 
-// ── Keyword trigger groups ───────────────────────��─��────────────────────
+// ── Keyword trigger groups ─────────────────────��─��─��────────────────────
 
 interface IntentDef {
   intent: string;
@@ -536,7 +539,7 @@ const INTENTS: IntentDef[] = [
 
 // ══════════════════════════════════════════════════════════════════════════
 //  classifyIntent — GROUNDED deterministic classifier
-// ══════════════════════════════════════════════════════════════��══��════════
+// ═══════════════════════════════════════════════════════════��══��══��════════
 
 function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
   const replies = REPLY_SETS.unknown;
