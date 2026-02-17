@@ -153,6 +153,76 @@ function correctSpanish(raw: string): string {
   return corrected;
 }
 
+/* ── Instant word-by-word Spanish-to-English dictionary ── */
+const ES_EN: Record<string, string> = {
+  // question words
+  que: "what", cual: "which", como: "how", donde: "where", cuando: "when",
+  cuanto: "how much", cuantos: "how many", cuantas: "how many", quien: "who",
+  // common verbs
+  quiere: "want", quieres: "do you want", quieren: "do you want",
+  desea: "would you like", deseas: "would you like",
+  prefiere: "prefer", prefieres: "do you prefer", prefieren: "do you prefer",
+  gusta: "like", gustaria: "would like",
+  tiene: "have", tenemos: "we have", hay: "there is",
+  esta: "is", estan: "are", es: "is", son: "are",
+  tomar: "drink", beber: "drink", comer: "eat", pedir: "order", ordenar: "order",
+  necesita: "need", necesitas: "do you need",
+  puede: "can", puedo: "I can", le: "you", les: "you all",
+  traer: "bring", traigo: "I bring", servir: "serve",
+  recomienda: "recommend", recomendar: "recommend",
+  probar: "try", quiere: "want",
+  // restaurant nouns
+  mesa: "table", silla: "chair", menu: "menu", carta: "menu",
+  cuenta: "check", propina: "tip", servicio: "service", recibo: "receipt",
+  factura: "invoice", cambio: "change", pesos: "pesos",
+  comida: "food", bebida: "drink", postre: "dessert", entrada: "appetizer",
+  plato: "dish", platillo: "dish", orden: "order",
+  carne: "meat", pollo: "chicken", res: "beef", cerdo: "pork", pescado: "fish",
+  camarones: "shrimp", bistec: "steak", filete: "fillet",
+  arroz: "rice", frijoles: "beans", ensalada: "salad",
+  sopa: "soup", caldo: "broth", tacos: "tacos", tortilla: "tortilla",
+  pan: "bread", queso: "cheese", salsa: "sauce", chile: "chili",
+  agua: "water", cerveza: "beer", vino: "wine", cafe: "coffee", te: "tea",
+  jugo: "juice", leche: "milk", refresco: "soda", limonada: "lemonade",
+  tequila: "tequila", mezcal: "mezcal", horchata: "horchata",
+  copa: "glass", vaso: "glass", botella: "bottle", jarra: "pitcher",
+  // food adjectives
+  picante: "spicy", caliente: "hot", frio: "cold", grande: "large", chico: "small",
+  dulce: "sweet", rico: "tasty", bueno: "good", fresco: "fresh",
+  bien: "well", cocido: "cooked", crudo: "raw", medio: "medium",
+  blanco: "white", rojo: "red", negro: "black", verde: "green", integral: "whole grain",
+  // common phrases
+  por: "please/for", favor: "please", gracias: "thanks", de: "of", el: "the", la: "the",
+  los: "the", las: "the", un: "a", una: "a", su: "your", algo: "something",
+  mas: "more", nada: "nothing", todo: "everything", otra: "another", otro: "another",
+  tipo: "type", clase: "kind", especial: "special", del: "of the", dia: "day",
+  hoy: "today", primero: "first", segundo: "second",
+  // greetings & small talk
+  hola: "hello", buenas: "hello", bienvenido: "welcome", bienvenidos: "welcome",
+  noches: "evening", tardes: "afternoon", dias: "morning",
+  primera: "first", vez: "time", visita: "visit", vives: "do you live",
+  // seating
+  adentro: "inside", afuera: "outside", terraza: "terrace",
+  personas: "people", cuantos: "how many",
+  // payment
+  tarjeta: "card", efectivo: "cash", pagar: "pay",
+};
+
+function quickTranslate(spanish: string): string {
+  const words = spanish.toLowerCase()
+    .replace(/[?!.,;:]/g, "")
+    .replace(/\u00e9/g, "e").replace(/\u00e1/g, "a").replace(/\u00ed/g, "i")
+    .replace(/\u00f3/g, "o").replace(/\u00fa/g, "u").replace(/\u00f1/g, "n")
+    .split(/\s+/)
+    .filter(Boolean);
+  const translated = words.map(w => ES_EN[w] ?? w);
+  // Capitalize first word
+  if (translated.length > 0) {
+    translated[0] = translated[0].charAt(0).toUpperCase() + translated[0].slice(1);
+  }
+  return translated.join(" ");
+}
+
 /* ── Restaurant hotwords for grammar hints ── */
 const RESTAURANT_HINTS = [
   "afuera", "adentro", "mesa", "cuenta", "propina", "servicio",
@@ -299,6 +369,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
   const [correctedText, setCorrectedText] = useState("");
+  const [instantEnglish, setInstantEnglish] = useState("");
   const [match, setMatch] = useState<ListenMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
@@ -347,9 +418,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       const corrected = correctSpanish(rawText);
       setCorrectedText(corrected);
+      setInstantEnglish(quickTranslate(corrected));
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      // Fire LLM -- the UI shows "Translating..." while this runs
+      // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
 
       (async () => {
@@ -400,6 +472,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     setInterimText("");
     setFinalText("");
     setCorrectedText("");
+    setInstantEnglish("");
     setMatch(null);
 
     addLog("capture", "Requesting mic (capture mode)...");
@@ -531,6 +604,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     setInterimText("");
     setFinalText("");
     setCorrectedText("");
+    setInstantEnglish("");
     setMatch(null);
     finalTextRef.current = "";
 
@@ -606,6 +680,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         }
       } else if (interim) {
         setInterimText(interim);
+        setInstantEnglish(quickTranslate(interim));
         addLog("partial", `"${interim}"`);
       }
     };
@@ -772,12 +847,15 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${isInterim ? "opacity-60" : ""}`}>
             {`\u201C${displayText}\u201D`}
           </p>
-          {/* Literal English translation -- shown once LLM responds */}
-          {match && match.literalEnglish && !llmClassifying && (
-            <p className="mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
-              {match.literalEnglish}
-            </p>
-          )}
+          {/* Literal English -- instant dictionary translation, upgrades to LLM once available */}
+          {(() => {
+            const literalText = (match && !llmClassifying && match.literalEnglish) ? match.literalEnglish : instantEnglish;
+            return literalText ? (
+              <p className={`mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400 ${isInterim ? "opacity-50" : ""}`}>
+                {literalText}
+              </p>
+            ) : null;
+          })()}
         </div>
       )}
 
