@@ -252,7 +252,7 @@ const INTENT_CONSTRAINTS: Record<string, string[]> = {
   // — their trigger words are specific enough already
 };
 
-// ── Normalizer ────────────────────────────────────────────���─────────────
+// ── Normalizer ────────────────────────────────────────────�����─────────────
 
 export function normalizeTranscript(text: string): string {
   return text
@@ -1093,7 +1093,8 @@ export function buildListenMatchFromLLM(data: LLMListenResponse): ListenMatch {
   const alternates: ListenReply[] = [];
   if (data.alternates) {
     for (const alt of data.alternates) {
-      const resolved = resolveReply(alt, intent);
+      const altSpanish = typeof alt === "object" && alt !== null ? (alt as { spanish: string }).spanish : (alt as string);
+      const resolved = resolveReply(altSpanish, intent);
       if (resolved && resolved.spanish !== bestReply.spanish) {
         alternates.push(resolved);
       }
