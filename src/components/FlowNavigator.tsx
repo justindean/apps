@@ -37,6 +37,7 @@ const sectionColorForLabel: Record<string, string> = {
   Tip:     "bg-violet-400 dark:bg-violet-500",
   Clarify: "bg-stone-300 dark:bg-stone-500",
   Smalltalk: "bg-indigo-400 dark:bg-indigo-500",
+  AI: "bg-sky-400 dark:bg-sky-500",
 };
 
 function getSectionColor(key: string) {

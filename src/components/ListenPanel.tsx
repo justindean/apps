@@ -172,6 +172,7 @@ const sectionBorderColor: Record<string, string> = {
   Tip: "border-violet-300/60 dark:border-violet-600/40",
   Clarify: "border-stone-300/60 dark:border-stone-600/40",
   Smalltalk: "border-indigo-300/60 dark:border-indigo-600/40",
+  AI: "border-sky-300/60 dark:border-sky-600/40",
 };
 
 const sectionBadgeColor: Record<string, string> = {
@@ -183,6 +184,7 @@ const sectionBadgeColor: Record<string, string> = {
   Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
   Clarify: "bg-stone-100 text-stone-600 dark:bg-stone-800/40 dark:text-stone-400",
   Smalltalk: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
+  AI: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
 };
 
 /* ── Humanized intent labels for badge ── */
@@ -209,6 +211,7 @@ const INTENT_LABELS: Record<string, string> = {
   smalltalk_live_here: "SMALLTALK",
   smalltalk_first_time: "SMALLTALK",
   smalltalk_enjoying: "SMALLTALK",
+  ai_understood: "AI",
   unknown: "UNKNOWN",
 };
 
@@ -842,9 +845,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             {match.section === "Clarify"
               ? "Not sure \u2014 try asking"
-              : match.confidence < 50
-                ? `Sounds like ${match.section.toLowerCase()} \u2014 try`
-                : "Best reply"}
+              : match.intent === "ai_understood"
+                ? "I think they said \u2014 try"
+                : match.confidence < 50
+                  ? `Sounds like ${match.section.toLowerCase()} \u2014 try`
+                  : "Best reply"}
           </p>
 
           <button
@@ -857,11 +862,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                   {match.bestReply.spanish}
                 </p>
                 <p className="mt-1 text-[14px] leading-snug text-stone-500 dark:text-stone-400">
-                  {match.bestReply.english}
+                  {match.bestReply.english || match.english}
                 </p>
-                <p className="mt-1 font-mono text-[11px] leading-snug tracking-tight text-stone-300 dark:text-stone-600">
-                  {match.bestReply.pronunciation}
-                </p>
+                {match.bestReply.pronunciation && (
+                  <p className="mt-1 font-mono text-[11px] leading-snug tracking-tight text-stone-300 dark:text-stone-600">
+                    {match.bestReply.pronunciation}
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-3.5 py-2 text-white shadow-md shadow-[#D94F2A]/25 transition-transform active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20">
                 <WaveformIcon size={13} />
@@ -897,9 +904,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                       <p className="text-[14px] font-bold leading-tight text-stone-800 dark:text-stone-200">
                         {reply.spanish}
                       </p>
-                      <p className="mt-0.5 text-[12px] text-stone-400 dark:text-stone-500">
-                        {reply.english}
-                      </p>
+                      {reply.english && (
+                        <p className="mt-0.5 text-[12px] text-stone-400 dark:text-stone-500">
+                          {reply.english}
+                        </p>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1 text-stone-400 dark:text-stone-500">
                       <VolumeIcon size={12} />

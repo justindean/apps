@@ -15,6 +15,7 @@ export interface ListenReply {
   spanish: string;
   english: string;
   pronunciation: string;
+  isAIGenerated?: boolean; // true when LLM generated this reply (not from our fixed sets)
 }
 
 export type ListenMatchSource = "deterministic" | "ai" | "none";
@@ -195,6 +196,7 @@ const INTENT_TO_SECTION: Record<string, string> = {
   receipt: "Tip",
   not_available: "Food",
   clarification: "Clarify",
+  ai_understood: "AI",
   unknown: "Clarify",
   smalltalk_origin: "Smalltalk",
   smalltalk_live_here: "Smalltalk",
@@ -254,7 +256,7 @@ export function normalizeTranscript(text: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[.,!?;:¿¡'"()]/g, "")
+    .replace(/[.,!?;:��¡'"()]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -662,30 +664,36 @@ export function buildListenResult(transcript: string): ListenMatch {
 
 export const LLM_SYSTEM_PROMPT = `You are TapHabla's Listen Mode brain for the Restaurant situation.
 
-Goal: Given a short Spanish transcript (often imperfect), determine:
+Goal: Given a short Spanish transcript (often imperfect from speech recognition), determine:
 1) What they likely meant (English)
-2) The intent (from a fixed list)
-3) Evidence tokens: exact words/phrases from the transcript that support your intent choice
-4) The best Spanish reply the user should say (from allowed replies only)
-5) 2 alternate replies (from allowed replies only)
+2) The intent (from a fixed list, OR "ai_understood" for anything restaurant-related you understand)
+3) Evidence tokens: exact words/phrases from the transcript that support your classification
+4) The best Spanish reply the user should say
+5) 2 alternate replies
 6) A match confidence (0-100)
+
+CRITICAL ARCHITECTURE RULE:
+You are the LAST LINE OF DEFENSE. If the transcript is restaurant-related and you understand
+what they're saying, you MUST provide a helpful response. NEVER return "unknown" if you can
+figure out the meaning, even if the words don't match a predefined intent category.
 
 Rules:
 - Output must be VALID JSON only. No extra text.
 - Be concise. No explanations.
-- Do NOT invent long replies. Keep Spanish replies short and natural for Mexico.
-- If transcript is imperfect, infer using restaurant context.
-- If intent is clear, choose a reply even if transcript is messy.
-- Never pick a reply that doesn't fit the intent.
-- Use the provided allowed replies by intent exactly; do not paraphrase them.
-- CRITICAL: "evidence" must contain ONLY tokens that literally appear in the transcript. Never hallucinate evidence.
-- CRITICAL: If transcript mentions any BEVERAGE (leche, jugo, agua, cerveza, refresco, limonada, horchata, etc.), use drinks_offer.
-- CRITICAL: If transcript mentions "cafe", "te", "capuchino", or other HOT drinks specifically, use drinks_hot_offer.
-- CRITICAL: doneness_preference is ONLY for meat/steak words: "carne", "bistec", "termino", "coccion". NEVER for drinks or food questions.
-- menu_offer is ONLY for "menu", "carta", or offering a printed menu.
-- IMPORTANT: "juegos" is a common mis-transcription of "jugos" (juices). Treat "juegos" as "jugos" in restaurant context.
-- Prefer restaurant-specific intents, BUT also handle common small-talk questions.
-- If no intent fits, use intent "unknown" and reply "Puede repetir, por favor?"
+- Keep Spanish replies short and natural for Mexico (under 10 words).
+- If transcript is imperfect, infer using restaurant context. Waiters often have imperfect transcriptions.
+- CRITICAL: "evidence" must contain ONLY tokens that literally appear in the transcript.
+- CRITICAL: doneness_preference is ONLY for meat/steak words: "carne", "bistec", "termino". NEVER for drinks or food questions.
+- "juegos" is a common mis-transcription of "jugos" (juices) in restaurant context.
+
+WHEN TO USE FIXED INTENTS vs ai_understood:
+- If the transcript clearly matches a fixed intent below, use that intent and its allowed replies.
+- If the transcript is restaurant-related but does NOT match any fixed intent (e.g., offering
+  desserts, specific dish names, custom specials, compliments about food, etc.), use intent
+  "ai_understood" and GENERATE a short natural Spanish reply + English meaning. This is the
+  expected path for ~20% of all transcripts since we can't pre-enumerate every possible thing
+  a waiter might say.
+- ONLY use "unknown" if the transcript is truly unintelligible or not restaurant-related at all.
 
 INTENTS (choose exactly one):
 - menu_offer
@@ -710,7 +718,11 @@ INTENTS (choose exactly one):
 - smalltalk_live_here
 - smalltalk_first_time
 - smalltalk_enjoying
-- unknown
+- ai_understood        (USE THIS when you understand the restaurant context but no fixed intent matches.
+                        Generate a natural short Spanish reply. Examples: offering desserts, specific menu
+                        items, compliments, restaurant-specific questions like "quieres postre?", "quieres
+                        dulces?", "quieres un whopper?", etc.)
+- unknown              (ONLY if transcript is truly unintelligible or completely non-restaurant-related)
 
 ALLOWED REPLIES BY INTENT:
 
@@ -838,6 +850,15 @@ smalltalk_enjoying:
 - "Si, me gusta mucho."
 - "La comida esta buenisima."
 
+ai_understood:
+(For ai_understood, you GENERATE the reply — do NOT use fixed replies. Keep it short, natural Mexican Spanish, under 10 words.)
+Examples of ai_understood scenarios:
+- "quieres dulces?" -> "Si, por favor." / "No, gracias."
+- "quieres postre?" -> "Si, que tiene?" / "No, gracias."
+- "quieres un whopper?" -> "Si, por favor." / "No, gracias."
+- "esta muy picante" -> "Gracias por avisarme." / "Tiene algo menos picante?"
+- "le falta sal?" -> "No, esta bien asi." / "Si, un poco, por favor."
+
 unknown:
 - "Puede repetir, por favor?"
 - "Mas despacio, por favor."
@@ -908,22 +929,45 @@ export function validateAndBuildFromLLM(
     }
   }
 
-  // ── CHECK 3: Intent constraints ──
-  // For DETERMINISTIC path, constraints are hard gates.
-  // For AI path, constraints are advisory: if the LLM returns high confidence
-  // AND at least some evidence tokens validated, trust it even if no constraint
-  // token was found. The LLM knows "leche" is a drink even if our constraint
-  // list doesn't include it.
+  // ── SPECIAL PATH: ai_understood — LLM understood but no fixed intent matches ──
+  // This is the key architectural change: trust the LLM's free-form reply.
+  if (intent === "ai_understood") {
+    const bestReply: ListenReply = {
+      spanish: data.best_reply ?? "Si, por favor.",
+      english: english,
+      pronunciation: "",
+      isAIGenerated: true,
+    };
+    const alternates: ListenReply[] = (data.alternates ?? []).map((alt) => ({
+      spanish: alt,
+      english: "",
+      pronunciation: "",
+      isAIGenerated: true,
+    }));
+    return {
+      intent: "ai_understood",
+      english,
+      confidence: rawConfidence,
+      source: "ai",
+      routerPath: "ai" as RouterPath,
+      evidence: validEvidence,
+      keywords: validEvidence,
+      bestReply,
+      alternates: alternates.slice(0, 2),
+      section: "AI",
+      debug: { matchedRule: "ai-understood", constraintsPassed: true },
+    };
+  }
+
+  // ── CHECK 3: Intent constraints (for fixed intents only) ──
+  // For AI path, constraints are advisory: trust LLM if confident with evidence.
   const constraintEvidence = checkConstraints(intent, normalizedTranscript);
   const hasConstraints = !!INTENT_CONSTRAINTS[intent];
   const constraintsSatisfied = !hasConstraints || constraintEvidence.length > 0;
 
   if (hasConstraints && !constraintsSatisfied) {
-    // Constraint tokens missing — but check if LLM is confident with evidence
     if (rawConfidence >= 75 && validEvidence.length > 0) {
-      // LLM is confident AND provided evidence that we verified exists in transcript.
-      // Trust the LLM — it likely knows vocabulary our constraint list doesn't cover.
-      // (e.g., "leche" is a drink but wasn't in our drinks_offer constraint list)
+      // Trust the LLM — it knows vocabulary our constraint list doesn't cover
     } else {
       return buildUnknown({
         rejectedReason: `AI chose ${intent} but no constraint tokens found (conf=${rawConfidence}, evidence=${validEvidence.length})`,
@@ -934,7 +978,7 @@ export function validateAndBuildFromLLM(
   // Merge evidence
   const allEvidence = [...new Set([...validEvidence, ...constraintEvidence])];
 
-  // Resolve replies
+  // Resolve replies from fixed sets
   const replies = REPLY_SETS[intent] ?? REPLY_SETS.unknown;
   let bestReply = data.best_reply ? resolveReply(data.best_reply, intent) : null;
   if (!bestReply) bestReply = replies[0];
