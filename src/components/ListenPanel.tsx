@@ -361,6 +361,18 @@ function OpenAIPingButton({ addLog }: { addLog: (type: DebugLog["type"], text: s
   );
 }
 
+/* ── Session-level mic permission cache (survives across scenario nav) ── */
+let _micPermissionGranted = false;
+
+async function checkMicPermission(): Promise<"granted" | "denied" | "prompt"> {
+  try {
+    const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+    return result.state as "granted" | "denied" | "prompt";
+  } catch {
+    return "prompt"; // permissions API not supported, assume unknown
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    ListenPanel
    ═══════════════════════════════════════════════════════════════════════ */
@@ -373,6 +385,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [match, setMatch] = useState<ListenMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
+  const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied">(
+    _micPermissionGranted ? "granted" : "unknown"
+  );
 
   // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
