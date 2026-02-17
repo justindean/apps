@@ -361,21 +361,9 @@ function OpenAIPingButton({ addLog }: { addLog: (type: DebugLog["type"], text: s
   );
 }
 
-/* ── Session-level mic permission cache (survives across scenario nav) ── */
-let _micPermissionGranted = false;
-
-async function checkMicPermission(): Promise<"granted" | "denied" | "prompt"> {
-  try {
-    const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
-    return result.state as "granted" | "denied" | "prompt";
-  } catch {
-    return "prompt"; // permissions API not supported, assume unknown
-  }
-}
-
-/* -----------------------------------------------------------------------
+/* ═══════════════════════════════════════════════════════════════════════
    ListenPanel
-   ----------------------------------------------------------------------- */
+   ═══════════════════════════════════════════════════════════════════════ */
 export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
@@ -385,9 +373,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [match, setMatch] = useState<ListenMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
-  const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied">(
-    _micPermissionGranted ? "granted" : "unknown"
-  );
 
   // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
@@ -417,23 +402,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const addLog = useCallback((type: DebugLog["type"], text: string) => {
     const time = new Date().toLocaleTimeString("en-US", { hour12: false });
     setDebugLogs((prev) => [...prev.slice(-60), { time, type, text }]);
-  }, []);
-
-  // Check mic permission on mount (non-blocking)
-  useEffect(() => {
-    if (_micPermissionGranted) {
-      setMicPermission("granted");
-      return;
-    }
-    checkMicPermission().then((status) => {
-      if (status === "granted") {
-        _micPermissionGranted = true;
-        setMicPermission("granted");
-      } else if (status === "denied") {
-        setMicPermission("denied");
-      }
-      // "prompt" stays as "unknown" -- don't bug the user until they tap
-    });
   }, []);
 
   /* ── Process transcript (shared by both modes) ──
@@ -499,9 +467,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     [mode, addLog],
   );
 
-  /* -----------------------------------------------------------------------
-     CAPTURE MODE -- fallback: record audio blob -> server Whisper
-     ----------------------------------------------------------------------- */
+  /* ═══════════════════════════════════════════════════════════════════���═══
+     CAPTURE MODE — fallback: record audio blob -> server Whisper
+     ═══════════════════════════════════════════════════════════════════════ */
   const startCapture = useCallback(async () => {
     setError(null);
     setInterimText("");
@@ -516,8 +484,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, sampleRate: { ideal: 44100 }, echoCancellation: true, noiseSuppression: true },
       });
-      _micPermissionGranted = true;
-      setMicPermission("granted");
 
       const track = stream.getAudioTracks()[0];
       if (track) {
@@ -633,9 +599,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     }
   }, [addLog]);
 
-  /* -----------------------------------------------------------------------
-     REALTIME MODE -- SpeechRecognition streaming
-     ----------------------------------------------------------------------- */
+  /* ═══════════════════════��═══════════════════════════════════════════════
+     REALTIME MODE — SpeechRecognition streaming
+     ═══════════════════════════════════════════════════════════════════════ */
   const startRealtime = useCallback(async () => {
     setError(null);
     setInterimText("");
@@ -655,8 +621,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, sampleRate: { ideal: 48000 }, autoGainControl: true, noiseSuppression: true, echoCancellation: true },
       });
-      _micPermissionGranted = true;
-      setMicPermission("granted");
       mediaStreamRef.current = stream;
 
       const track = stream.getAudioTracks()[0];
@@ -667,7 +631,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setMicPermission("denied");
       setError(`Mic error: ${msg}`);
       addLog("error", msg);
       return;
@@ -822,9 +785,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* -----------------------------------------------------------------------
+  /* ══════════════════════════���═════════════════��════════════���═════════════
      RENDER
-     ----------------------------------------------------------------------- */
+     ��═════════════════════════════════════════════════════���════════════════ */
   return (
     <div className="flex flex-col gap-5">
 
@@ -863,9 +826,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </button>
 
         <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">
-          {state === "idle" && !displayText && micPermission === "denied" && "Mic blocked -- check browser settings"}
-          {state === "idle" && !displayText && micPermission === "unknown" && "Tap to allow mic & start listening"}
-          {state === "idle" && !displayText && micPermission === "granted" && "Tap to listen"}
+          {state === "idle" && !displayText && "Tap to listen"}
           {state === "idle" && displayText && "Tap to listen again"}
           {state === "listening" && "Listening... tap to stop"}
           {state === "recording" && "Recording... tap to stop"}

@@ -1,5 +1,5 @@
 /**
- * Restaurant intent data for Listen mode -- v6 (LLM-primary, tone-aware)
+ * Restaurant intent data for Listen mode — v5 (LLM-primary)
  *
  * Architecture: The LLM is the sole classifier. This file provides:
  * - Types (ListenMatch, ListenReply, LLMListenResponse)
@@ -102,7 +102,7 @@ function escapeRegex(s: string): string {
 }
 
 function wordMatch(token: string, normed: string): boolean {
-  const pattern = new RegExp("(?:^|\\s|\\b)" + escapeRegex(token) + "(?:\\s|\\b|$)", "i");
+  const pattern = new RegExp(`(?:^|\\s|\\b)${escapeRegex(token)}(?:\\s|\\b|$)`, "i");
   return pattern.test(normed);
 }
 
