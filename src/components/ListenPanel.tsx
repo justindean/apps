@@ -373,9 +373,9 @@ async function checkMicPermission(): Promise<"granted" | "denied" | "prompt"> {
   }
 }
 
-/* ══════════════════════════════════════════════════════════��════════════
+/* -----------------------------------------------------------------------
    ListenPanel
-   ═══════════════════════════════════════════════════════════════════════ */
+   ----------------------------------------------------------------------- */
 export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
@@ -499,9 +499,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     [mode, addLog],
   );
 
-  /* ═══════════════════════════════════════════════════════════════════���═══
-     CAPTURE MODE — fallback: record audio blob -> server Whisper
-     ═══════════════════════════════════════════════════════════════════════ */
+  /* -----------------------------------------------------------------------
+     CAPTURE MODE -- fallback: record audio blob -> server Whisper
+     ----------------------------------------------------------------------- */
   const startCapture = useCallback(async () => {
     setError(null);
     setInterimText("");
@@ -633,9 +633,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     }
   }, [addLog]);
 
-  /* ═══════════════════════��═══════════════════════════════════════════════
-     REALTIME MODE — SpeechRecognition streaming
-     ═══════════════════════════════════════════════════════════════════════ */
+  /* -----------------------------------------------------------------------
+     REALTIME MODE -- SpeechRecognition streaming
+     ----------------------------------------------------------------------- */
   const startRealtime = useCallback(async () => {
     setError(null);
     setInterimText("");
@@ -822,9 +822,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ══════════════════════════���═════════════════��════════════���═════════════
+  /* -----------------------------------------------------------------------
      RENDER
-     ��═════════════════════════════════════════════════════���════════════════ */
+     ----------------------------------------------------------------------- */
   return (
     <div className="flex flex-col gap-5">
 
