@@ -364,7 +364,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       addLog("info", `LLM classifying: "${corrected}" (det: ${detMatch.intent} conf=${detMatch.confidence})`);
 
       console.log("[v0] LLM fetch starting for:", corrected);
-      fetch("/api/classify", {
+      fetch("/api/llm-classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

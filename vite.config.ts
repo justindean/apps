@@ -85,7 +85,8 @@ function classifyPlugin(): Plugin {
       apiKey = env.AI_GATEWAY_API_KEY || process.env.AI_GATEWAY_API_KEY || env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
     },
     configureServer(server) {
-      server.middlewares.use('/api/classify', async (req: IncomingMessage, res) => {
+      // Use /api/llm-classify to avoid conflict with api/classify.ts serverless function
+      server.middlewares.use('/api/llm-classify', async (req: IncomingMessage, res) => {
         if (req.method !== 'POST') {
           res.writeHead(405, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'POST required' }))
