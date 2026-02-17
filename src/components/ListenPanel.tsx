@@ -879,7 +879,21 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {match && hasResults && !llmClassifying && (
         <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They likely meant</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
+                {match.confidence < 50 ? "Did they mean...?" : "They likely meant"}
+              </p>
+              {/* Confidence pill */}
+              <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider ${
+                match.confidence >= 80
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
+                  : match.confidence >= 50
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
+                    : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
+              }`}>
+                {match.confidence >= 80 ? "High" : match.confidence >= 50 ? "Med" : "Low"}
+              </span>
+            </div>
             {match.intent !== "unknown" && (
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
                 {INTENT_LABELS[match.intent] ?? match.section}
@@ -889,6 +903,18 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           <p className="text-[20px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
             {`\u201C${match.english}\u201D`}
           </p>
+
+          {/* Alternate meanings for low/medium confidence */}
+          {match.alternateMeanings.length > 0 && (
+            <div className="mt-3 flex flex-col gap-1.5 border-t border-stone-200/40 pt-3 dark:border-stone-700/30">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/40">Or possibly</p>
+              {match.alternateMeanings.map((alt, i) => (
+                <p key={i} className="text-[13px] leading-snug text-stone-500 dark:text-stone-400">
+                  {`\u2022 \u201C${alt.english}\u201D`}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -963,6 +989,31 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                       <VolumeIcon size={12} />
                       <span className="text-[10px] font-semibold">Speak</span>
                     </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Follow-ups (conversation continuations) ── */}
+          {match.followUps && match.followUps.length > 0 && (
+            <div className="mt-4 border-t border-stone-200/40 pt-3 dark:border-stone-700/30">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
+                You could also say next
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {match.followUps.map((fu, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleReply({ spanish: fu.spanish, english: fu.english, pronunciation: "", isAIGenerated: true })}
+                    className="flex flex-col rounded-xl border border-stone-200/60 bg-white/80 px-3 py-2 text-left transition-all duration-150 active:scale-[0.97] dark:border-stone-700/40 dark:bg-stone-800/60"
+                  >
+                    <p className="text-[12px] font-semibold leading-tight text-stone-700 dark:text-stone-300">
+                      {fu.spanish}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-stone-400 dark:text-stone-500">
+                      {fu.english}
+                    </p>
                   </button>
                 ))}
               </div>

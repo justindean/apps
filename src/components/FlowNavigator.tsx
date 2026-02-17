@@ -680,7 +680,7 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
           {/* Listen mode header */}
           <div className="flex flex-col gap-0.5">
             <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Listen Mode</h2>
-            <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Hear them speak, get the right response.</p>
+            <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Speak naturally. TapHabla understands the situation and suggests what to say.</p>
           </div>
 
           <ListenPanel mode={mode} onCopy={onCopy} onSpeak={addRecent} />

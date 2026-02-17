@@ -21,6 +21,16 @@ export interface ListenReply {
 export type ListenMatchSource = "deterministic" | "ai" | "none";
 export type RouterPath = "deterministic" | "ai" | "fallback-unknown";
 
+export interface FollowUp {
+  spanish: string;
+  english: string;
+}
+
+export interface AlternateMeaning {
+  english: string;
+  intent: string;
+}
+
 export interface ListenMatch {
   intent: string;
   english: string;
@@ -32,6 +42,8 @@ export interface ListenMatch {
   keywords: string[];     // deprecated alias for evidence (backward compat)
   bestReply: ListenReply;
   alternates: ListenReply[];
+  followUps: FollowUp[];           // conversation continuations after replying
+  alternateMeanings: AlternateMeaning[]; // other possible interpretations (low confidence)
   section: string;
   debug?: {
     matchedRule?: string;
@@ -109,6 +121,8 @@ function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
     alternates: [
       { spanish: "Mas despacio, por favor.", english: "Slower, please.", pronunciation: "mahs dehs-PAH-see-oh, por fah-VOR", isAIGenerated: false },
     ],
+    followUps: [],
+    alternateMeanings: [],
     section: "Clarify",
     debug: { ...debug, constraintsPassed: false },
   };
@@ -139,6 +153,15 @@ const LLM_BASE_PROMPT = [
   "- For yes/no questions, yes/no replies are fine.",
   "- Always provide 1 best_reply + 2 alternates, each with English translations.",
   "",
+  "FOLLOW-UPS:",
+  "- Provide 2-3 follow_ups: phrases the user might want to say NEXT in the conversation.",
+  '- These should be natural continuations. E.g. after ordering food: "Can I also get a drink?", "That\'s all, thanks."',
+  "- Keep them short and tone-appropriate.",
+  "",
+  "ALTERNATE MEANINGS:",
+  "- If confidence < 70, provide 1-2 alternate_meanings: other plausible interpretations of what was said.",
+  "- Each has an english description and intent. Omit if confidence >= 70.",
+  "",
   "INTENTS (choose exactly one):",
   "- menu_offer, table_preference, party_size, greeting, order_ready, order_items",
   "- doneness_preference, soups_available, drinks_offer, drinks_hot_offer",
@@ -160,6 +183,13 @@ const LLM_BASE_PROMPT = [
   '  "alternates": [',
   '    {"spanish": "<reply>", "english": "<translation>"},',
   '    {"spanish": "<reply>", "english": "<translation>"}',
+  "  ],",
+  '  "follow_ups": [',
+  '    {"spanish": "<what to say next>", "english": "<translation>"},',
+  '    {"spanish": "<what to say next>", "english": "<translation>"}',
+  "  ],",
+  '  "alternate_meanings": [',
+  '    {"english": "<other possible meaning>", "intent": "<intent>"}',
   "  ]",
   "}",
 ].join("\n");
@@ -315,6 +345,8 @@ export interface LLMListenResponse {
   best_reply?: string;
   best_reply_english?: string;
   alternates?: (string | { spanish: string; english: string })[];
+  follow_ups?: { spanish: string; english: string }[];
+  alternate_meanings?: { english: string; intent: string }[];
   error?: string;
 }
 
@@ -366,6 +398,18 @@ export function validateAndBuildFromLLM(
     };
   }).filter((a) => a.spanish !== bestReply.spanish).slice(0, 2);
 
+  // Build follow-ups from LLM
+  const followUps: FollowUp[] = (data.follow_ups ?? []).map((f) => ({
+    spanish: f.spanish,
+    english: f.english,
+  })).slice(0, 3);
+
+  // Build alternate meanings (only meaningful when confidence < 70)
+  const alternateMeanings: AlternateMeaning[] = (data.alternate_meanings ?? []).map((a) => ({
+    english: a.english,
+    intent: a.intent,
+  })).slice(0, 2);
+
   return {
     intent,
     english,
@@ -377,6 +421,8 @@ export function validateAndBuildFromLLM(
     keywords: validEvidence,
     bestReply,
     alternates,
+    followUps,
+    alternateMeanings: rawConfidence < 70 ? alternateMeanings : [],
     section,
     debug: { matchedRule: "llm-primary", constraintsPassed: true },
   };
