@@ -426,7 +426,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       (async () => {
         try {
-          const resp = await fetch("/_llm/classify", {
+          console.log("[v0] Calling /api/classify with tone:", mode, "transcript:", corrected);
+          const resp = await fetch("/api/classify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -436,8 +437,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             }),
           });
 
+          console.log("[v0] /api/classify response status:", resp.status);
           if (!resp.ok) {
             const errText = await resp.text();
+            console.log("[v0] /api/classify error:", errText.slice(0, 200));
             addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
             return;
           }
@@ -784,7 +787,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
   /* ══════════════════════════���═════════════════��════════════���═════════════
      RENDER
-     ══════════════════════════════════════════════════════���════════════════ */
+     ��═════════════════════════════════════════════════════���════════════════ */
   return (
     <div className="flex flex-col gap-5">
 
