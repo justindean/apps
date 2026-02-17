@@ -171,6 +171,7 @@ const sectionBorderColor: Record<string, string> = {
   Bill: "border-emerald-300/60 dark:border-emerald-600/40",
   Tip: "border-violet-300/60 dark:border-violet-600/40",
   Clarify: "border-stone-300/60 dark:border-stone-600/40",
+  Smalltalk: "border-indigo-300/60 dark:border-indigo-600/40",
 };
 
 const sectionBadgeColor: Record<string, string> = {
@@ -181,6 +182,32 @@ const sectionBadgeColor: Record<string, string> = {
   Bill: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
   Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
   Clarify: "bg-stone-100 text-stone-600 dark:bg-stone-800/40 dark:text-stone-400",
+  Smalltalk: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
+};
+
+/* ── Humanized intent labels for badge ── */
+const INTENT_LABELS: Record<string, string> = {
+  menu_offer: "MENU",
+  table_preference: "TABLE",
+  party_size: "PARTY",
+  greeting: "GREETING",
+  order_ready: "ORDER",
+  order_items: "ORDER",
+  doneness_preference: "STEAK",
+  drinks_offer: "DRINKS",
+  anything_else: "MORE?",
+  check_in_food: "CHECK-IN",
+  bill_offer: "BILL",
+  payment_method: "PAYMENT",
+  tip_service: "TIP",
+  receipt: "RECEIPT",
+  not_available: "UNAVAILABLE",
+  clarification: "CLARIFY",
+  smalltalk_origin: "SMALLTALK",
+  smalltalk_live_here: "SMALLTALK",
+  smalltalk_first_time: "SMALLTALK",
+  smalltalk_enjoying: "SMALLTALK",
+  unknown: "UNKNOWN",
 };
 
 /* ── Convert ListenReply to Phrase (for onSpeak/onCopy compatibility) ── */
@@ -674,9 +701,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${match ? sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40" : "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They said</p>
-            {match && match.section !== "Clarify" && (
+            {match && match.intent !== "unknown" && (
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
-                {match.section}
+                {INTENT_LABELS[match.intent] ?? match.section}
               </span>
             )}
           </div>
@@ -708,9 +735,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {match && hasResults && (
             <div className="mt-2 flex items-center gap-2">
               <div className="flex items-center gap-1.5">
-                <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 60 ? "bg-emerald-400" : match.confidence >= 40 ? "bg-amber-400" : "bg-stone-300"}`} />
-                <span className={`text-[10px] font-semibold ${match.confidence >= 60 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 40 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
-                  {match.confidence >= 60 ? "Strong match" : match.confidence >= 40 ? "Likely match" : "Best guess"}
+                <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 85 ? "bg-emerald-400" : match.confidence >= 60 ? "bg-amber-400" : "bg-stone-300"}`} />
+                <span className={`text-[10px] font-semibold ${match.confidence >= 85 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 60 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
+                  {match.confidence >= 85 ? "Strong match" : match.confidence >= 60 ? "Best guess" : "Unsure"}
                 </span>
               </div>
               {llmClassifying && (
@@ -828,7 +855,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
               <p className="font-bold text-stone-600 dark:text-stone-300">Last Result:</p>
               {finalText && <p><span className="text-stone-400">Raw: </span>{`"${finalText}"`}</p>}
               {correctedText && correctedText !== finalText && <p><span className="text-amber-500">Corrected: </span>{`"${correctedText}"`}</p>}
-              {match && <p><span className="text-sky-500">Intent: </span>{match.intent} [{match.section}] conf={match.confidence}</p>}
+              {match && <p><span className="text-sky-500">Intent: </span>{match.intent} [{match.section}] conf={match.confidence} src={match.source}</p>}
               {match && <p><span className="text-sky-500">English: </span>{match.english}</p>}
               {match && <p><span className="text-emerald-500">Reply: </span>{match.bestReply.spanish} ({match.bestReply.english})</p>}
               {match && match.keywords.length > 0 && <p><span className="text-violet-500">Keywords: </span>{match.keywords.join(", ")}</p>}

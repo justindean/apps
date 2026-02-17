@@ -17,10 +17,13 @@ export interface ListenReply {
   pronunciation: string;
 }
 
+export type ListenMatchSource = "deterministic" | "ai" | "none";
+
 export interface ListenMatch {
   intent: string;
   english: string;        // what they meant in English
   confidence: number;     // 0–100
+  source: ListenMatchSource;
   keywords: string[];     // detected trigger words (for debug)
   bestReply: ListenReply;
   alternates: ListenReply[];
@@ -80,6 +83,13 @@ const REPLY_SETS: Record<string, ListenReply[]> = {
     { spanish: "Agua, por favor.", english: "Water, please.", pronunciation: "AH-gwah, por fah-VOR" },
     { spanish: "Una cerveza, por favor.", english: "A beer, please.", pronunciation: "OO-nah ser-VEH-sah, por fah-VOR" },
     { spanish: "Nada, gracias.", english: "Nothing, thanks.", pronunciation: "NAH-dah, GRAH-see-ahs" },
+  ],
+  doneness_preference: [
+    { spanish: "Termino medio, por favor.", english: "Medium, please.", pronunciation: "TEHR-mee-noh MEH-dee-oh, por fah-VOR" },
+    { spanish: "Tres cuartos, por favor.", english: "Medium-well, please.", pronunciation: "trehs KWAHR-tohs, por fah-VOR" },
+    { spanish: "Bien cocido, por favor.", english: "Well done, please.", pronunciation: "bee-EHN koh-SEE-doh, por fah-VOR" },
+    { spanish: "Poco hecho, por favor.", english: "Rare, please.", pronunciation: "POH-koh EH-choh, por fah-VOR" },
+    { spanish: "Que me recomienda?", english: "What do you recommend?", pronunciation: "keh meh reh-koh-mee-EHN-dah" },
   ],
   anything_else: [
     { spanish: "No, gracias.", english: "No, thanks.", pronunciation: "noh, GRAH-see-ahs" },
@@ -164,6 +174,7 @@ const INTENT_TO_SECTION: Record<string, string> = {
   greeting: "Arrival",
   order_ready: "Food",
   order_items: "Food",
+  doneness_preference: "Food",
   drinks_offer: "Drinks",
   anything_else: "Food",
   check_in_food: "Food",
@@ -219,6 +230,19 @@ const INTENTS: IntentDef[] = [
     replies: REPLY_SETS.table_preference,
     section: "Arrival",
     weight: 0.92,
+  },
+
+  // ── Doneness preference (MUST be checked before menu_offer) ──
+  {
+    intent: "doneness_preference",
+    englishMeaning: "How would you like your meat cooked?",
+    triggerGroups: [
+      ["carne", "bistec", "steak", "res", "filete", "corte", "arrachera"],
+      ["termino", "medio", "tres cuartos", "bien cocido", "poco hecho", "rojo", "coccion", "quieres", "como lo quiere", "como la quiere", "a que termino"],
+    ],
+    replies: REPLY_SETS.doneness_preference,
+    section: "Food",
+    weight: 0.96, // High weight — must beat menu_offer
   },
 
   // ── Menu offer ──
@@ -434,6 +458,9 @@ function normalize(text: string): string {
 // ── Fast-path shortcuts (no AI needed) ──────────────────────────────────
 
 const FAST_PATHS: { pattern: RegExp; intent: string; english: string }[] = [
+  // Doneness MUST come before anything that could false-match on "quieres" or "como"
+  { pattern: /\b(como\s+quieres?\s+(tu|la|el)\s+carne|a\s+que\s+termin|que\s+termin|como\s+lo\s+quiere|termino\s+medio|tres\s+cuartos|bien\s+cocido|poco\s+hecho)\b/i, intent: "doneness_preference", english: "How would you like your meat cooked?" },
+  { pattern: /\b(carne|bistec|steak|filete|arrachera|corte)\b/i, intent: "doneness_preference", english: "How would you like your meat cooked?" },
   { pattern: /\b(algo\s*mas|nada\s*mas|quieres?\s*algo|quieren\s*algo|otra\s*cosa|algo\s*mas\s*para)\b/i, intent: "anything_else", english: "Would you like anything else?" },
   { pattern: /\b(todo\s*bien|como\s*esta\s*todo|que\s*tal|como\s*va)\b/i, intent: "check_in_food", english: "How is everything?" },
   { pattern: /\b(adentro|afuera|terraza|interior|exterior)\b/i, intent: "table_preference", english: "Inside or outside?" },
@@ -462,7 +489,8 @@ export function classifyIntent(transcript: string): ListenMatch {
       return {
         intent: fp.intent,
         english: fp.english,
-        confidence: 85,
+        confidence: 92,
+        source: "deterministic" as ListenMatchSource,
         keywords: [normed.match(fp.pattern)?.[0] ?? ""],
         bestReply: replies[0],
         alternates: replies.slice(1, 3),
@@ -509,6 +537,7 @@ export function classifyIntent(transcript: string): ListenMatch {
       intent: best.def.intent,
       english: best.def.englishMeaning,
       confidence,
+      source: "deterministic" as ListenMatchSource,
       keywords: best.matchedWords,
       bestReply: replies[0],
       alternates: replies.slice(1, 3),
@@ -522,6 +551,7 @@ export function classifyIntent(transcript: string): ListenMatch {
     intent: "unknown",
     english: "Not sure what they said.",
     confidence: 15,
+    source: "none" as ListenMatchSource,
     keywords: [],
     bestReply: replies[0],
     alternates: replies.slice(1, 3),
@@ -557,6 +587,8 @@ Rules:
 - Use the provided allowed replies by intent exactly; do not paraphrase them.
 - Prefer restaurant-specific intents, BUT you MUST also handle common small-talk questions that happen in restaurants.
 - If transcript is a clear personal question (e.g., "De donde eres?"), do NOT return unknown. Use a smalltalk intent.
+- CRITICAL: If transcript mentions "carne", "bistec", "termino", "coccion", or asks "como quieres/lo quiere", this is doneness_preference, NOT menu_offer.
+- menu_offer is ONLY for "menu", "carta", or offering a printed menu.
 - If no intent fits, use intent "unknown" and reply "Puede repetir, por favor?"
 
 INTENTS (choose exactly one):
@@ -566,6 +598,7 @@ INTENTS (choose exactly one):
 - greeting
 - order_ready
 - order_items
+- doneness_preference  (CRITICAL: "Como quieres tu carne?", "A que termino?", "Como lo quiere?" — about meat/steak doneness, NOT menu)
 - drinks_offer
 - anything_else   (IMPORTANT: "Quieres algo mas?", "Algo mas?", "Algo mas para tomar/comer?")
 - check_in_food    ("Que tal?", "Como esta todo?", "Todo bien?")
@@ -615,6 +648,13 @@ order_items:
 - "Quiero esto, por favor."
 - "Para mi, esto."
 - "Me recomienda algo?"
+
+doneness_preference:
+- "Termino medio, por favor."
+- "Tres cuartos, por favor."
+- "Bien cocido, por favor."
+- "Poco hecho, por favor."
+- "Que me recomienda?"
 
 drinks_offer:
 - "Agua, por favor."
@@ -782,7 +822,8 @@ export function buildListenMatchFromReplyGenerator(
   return {
     intent,
     english,
-    confidence: 90, // High confidence since intent is already known
+    confidence: 90,
+    source: "ai" as ListenMatchSource,
     keywords: [],
     bestReply,
     alternates: alternates.slice(0, 2),
@@ -853,6 +894,7 @@ export function buildListenMatchFromLLM(data: LLMListenResponse): ListenMatch {
     intent,
     english,
     confidence,
+    source: "ai" as ListenMatchSource,
     keywords,
     bestReply,
     alternates: alternates.slice(0, 2),
