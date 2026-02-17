@@ -367,7 +367,7 @@ const STOP_WORDS = new Set([
   "si", "no", "que", "como", "con", "para", "por",
 ]);
 
-// ── Keyword trigger groups ─────────────────────────��────────────────────
+// ── Keyword trigger groups ───────────────────────��─��────────────────────
 
 interface IntentDef {
   intent: string;
@@ -536,7 +536,7 @@ const INTENTS: IntentDef[] = [
 
 // ══════════════════════════════════════════════════════════════════════════
 //  classifyIntent — GROUNDED deterministic classifier
-// ═════════════════════════════════════════════════════════════════��════════
+// ══════════════════════════════════════════════════════════════��══��════════
 
 function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
   const replies = REPLY_SETS.unknown;
@@ -915,12 +915,20 @@ unknown:
 OUTPUT JSON SCHEMA:
 {
   "intent": "<one intent>",
-  "english": "<short natural English meaning>",
+  "english": "<short natural English meaning of what THEY said>",
   "evidence": ["<token from transcript>", "<token from transcript>"],
   "confidence": <0-100>,
-  "best_reply": "<one allowed reply>",
-  "alternates": ["<allowed reply>", "<allowed reply>"]
-}`;
+  "best_reply": "<one allowed reply in Spanish>",
+  "best_reply_english": "<English translation of best_reply>",
+  "alternates": [
+    {"spanish": "<allowed reply>", "english": "<English translation>"},
+    {"spanish": "<allowed reply>", "english": "<English translation>"}
+  ]
+}
+
+CRITICAL for replies: The "best_reply_english" and alternate "english" fields must translate the REPLY
+itself, not repeat the question. Example: if best_reply is "Leche entera, por favor.", best_reply_english
+is "Whole milk, please." — NOT "What type of milk do you prefer?"`;
 
 // ── Parse LLM response ─────────────────────────────────────────────────
 
@@ -931,7 +939,8 @@ export interface LLMListenResponse {
   keywords?: string[];
   confidence?: number;
   best_reply?: string;
-  alternates?: string[];
+  best_reply_english?: string;
+  alternates?: (string | { spanish: string; english: string })[];
   error?: string;
 }
 
@@ -982,16 +991,19 @@ export function validateAndBuildFromLLM(
   if (intent === "ai_understood") {
     const bestReply: ListenReply = {
       spanish: data.best_reply ?? "Si, por favor.",
-      english: english,
+      english: data.best_reply_english || english,
       pronunciation: "",
       isAIGenerated: true,
     };
-    const alternates: ListenReply[] = (data.alternates ?? []).map((alt) => ({
-      spanish: alt,
-      english: "",
-      pronunciation: "",
-      isAIGenerated: true,
-    }));
+    const alternates: ListenReply[] = (data.alternates ?? []).map((alt) => {
+      const isObj = typeof alt === "object" && alt !== null;
+      return {
+        spanish: isObj ? (alt as { spanish: string }).spanish : (alt as string),
+        english: isObj ? (alt as { english: string }).english : "",
+        pronunciation: "",
+        isAIGenerated: true,
+      };
+    });
     return {
       intent: "ai_understood",
       english,
@@ -1034,7 +1046,8 @@ export function validateAndBuildFromLLM(
   const alternates: ListenReply[] = [];
   if (data.alternates) {
     for (const alt of data.alternates) {
-      const resolved = resolveReply(alt, intent);
+      const altSpanish = typeof alt === "object" && alt !== null ? (alt as { spanish: string }).spanish : (alt as string);
+      const resolved = resolveReply(altSpanish, intent);
       if (resolved && resolved.spanish !== bestReply.spanish) {
         alternates.push(resolved);
       }

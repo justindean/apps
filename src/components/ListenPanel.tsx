@@ -776,7 +776,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ═══════════════════════════════════════════════════════════════════════
+  /* ══════════════════════════��════════════════════════════════════════════
      RENDER
      ══════════════════════════════════════════════════════���════════════════ */
   return (
@@ -902,11 +902,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             {match.section === "Clarify"
               ? "Not sure \u2014 try asking"
-              : match.intent === "ai_understood"
-                ? "I think they said \u2014 try"
-                : match.confidence < 50
-                  ? `Sounds like ${match.section.toLowerCase()} \u2014 try`
-                  : "Best reply"}
+              : "Best reply"}
           </p>
 
           <button
@@ -948,7 +944,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {match.alternates.length > 0 && (
             <div className="mt-3">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
-                Or try
+                Or say
               </p>
               <div className="flex flex-col gap-2">
                 {match.alternates.map((reply) => (
