@@ -356,43 +356,51 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setMatch(detMatch);
       addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
 
-      // ── PASS 2: ALWAYS fire LLM in parallel (direct OpenAI call from client) ──
-      // NOTE: Using direct client call because Vite middleware routing is unreliable.
-      // The API key is exposed client-side; this will be moved to a proper server
-      // proxy before production deployment.
+      // ── PASS 2: ALWAYS fire LLM in parallel ──
+      // Direct OpenAI call from client. Vite middleware /api/* routing does not
+      // work in this sandbox. Will move to a proper server proxy for production.
       setLlmClassifying(true);
-      addLog("info", `LLM calling for: "${corrected}"`);
 
       (async () => {
         try {
-          // First, get the API key from the server (keeps key server-side only)
-          const keyResp = await fetch("/api/debug/openai-ping");
-          const keyData = await keyResp.json();
-          if (!keyData.ok) {
-            addLog("error", `LLM key check failed: ${keyData.error || "unknown"}`);
+          const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+          if (!apiKey) {
+            addLog("error", "LLM: no API key available");
             return;
           }
-          addLog("info", `LLM key verified: ${keyData.keyPrefix}`);
 
-          const resp = await fetch("/api/classify", {
+          const resp = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({
-              transcript: corrected,
-              tone: mode === "formal" ? "Formal" : mode === "street" ? "Street" : "Neutral",
-              systemPromptOverride: LLM_SYSTEM_PROMPT,
+              model: "gpt-4o-mini",
+              temperature: 0.2,
+              max_tokens: 300,
+              response_format: { type: "json_object" },
+              messages: [
+                { role: "system", content: LLM_SYSTEM_PROMPT },
+                { role: "user", content: `Transcript: "${corrected}"\nTone: ${mode === "formal" ? "Formal" : mode === "street" ? "Street" : "Neutral"}` },
+              ],
             }),
           });
 
-          const respText = await resp.text();
-          addLog("info", `LLM resp status=${resp.status} body=${respText.slice(0, 150)}`);
-
           if (!resp.ok) {
-            addLog("error", `LLM API ${resp.status}: ${respText.slice(0, 100)}`);
+            const errText = await resp.text();
+            addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
             return;
           }
 
-          const data: LLMListenResponse = JSON.parse(respText);
+          const raw = await resp.json();
+          const content = raw.choices?.[0]?.message?.content;
+          if (!content) {
+            addLog("error", "LLM: empty response");
+            return;
+          }
+
+          const data: LLMListenResponse = JSON.parse(content);
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
           const validatedMatch = validateAndBuildFromLLM(data, normed);
@@ -402,7 +410,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             return;
           }
 
-          // LLM always wins unless it returns unknown and deterministic has a real match
           const llmWins =
             validatedMatch.intent !== "unknown" ||
             detMatch.intent === "unknown";
@@ -418,7 +425,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
-          addLog("error", `LLM catch: ${msg}`);
+          addLog("error", `LLM: ${msg}`);
         } finally {
           setLlmClassifying(false);
         }
