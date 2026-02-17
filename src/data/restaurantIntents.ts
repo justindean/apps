@@ -458,9 +458,8 @@ function normalize(text: string): string {
 // ── Fast-path shortcuts (no AI needed) ──────────────────────────────────
 
 const FAST_PATHS: { pattern: RegExp; intent: string; english: string }[] = [
-  // Doneness MUST come before anything that could false-match on "quieres" or "como"
-  { pattern: /\b(como\s+quieres?\s+(tu|la|el)\s+carne|a\s+que\s+termin|que\s+termin|como\s+lo\s+quiere|termino\s+medio|tres\s+cuartos|bien\s+cocido|poco\s+hecho)\b/i, intent: "doneness_preference", english: "How would you like your meat cooked?" },
-  { pattern: /\b(carne|bistec|steak|filete|arrachera|corte)\b/i, intent: "doneness_preference", english: "How would you like your meat cooked?" },
+  // Doneness — only match explicit doneness phrases, NOT bare meat words (those could be order_items)
+  { pattern: /\b(como\s+quieres?\s+(tu|la|el)\s+carne|a\s+que\s+termin|que\s+termin|como\s+lo\s+quiere|como\s+la\s+quiere|termino\s+medio|tres\s+cuartos|bien\s+cocid[oa]|poco\s+hech[oa]|medio\s+rojo|rojo\s+por\s+dentro)\b/i, intent: "doneness_preference", english: "How would you like your meat cooked?" },
   { pattern: /\b(algo\s*mas|nada\s*mas|quieres?\s*algo|quieren\s*algo|otra\s*cosa|algo\s*mas\s*para)\b/i, intent: "anything_else", english: "Would you like anything else?" },
   { pattern: /\b(todo\s*bien|como\s*esta\s*todo|que\s*tal|como\s*va)\b/i, intent: "check_in_food", english: "How is everything?" },
   { pattern: /\b(adentro|afuera|terraza|interior|exterior)\b/i, intent: "table_preference", english: "Inside or outside?" },
