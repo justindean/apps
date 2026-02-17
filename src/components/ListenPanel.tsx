@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { buildListenResult, LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
+import { LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
@@ -334,29 +334,22 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }, []);
 
   /* ── Process transcript (shared by both modes) ──
-   * Architecture: LLM-primary, deterministic as fast preview.
-   * 1. Show deterministic result INSTANTLY (free, no API call)
-   * 2. LLM fires in parallel (~800ms)
-   * 3. LLM result ALWAYS replaces the preview -- no upgrade logic
-   * 4. If LLM fails, deterministic result stays as fallback
+   * Architecture: LLM-only. No deterministic classifier.
+   * 1. Show "Heard: X" + "Translating..." immediately
+   * 2. LLM responds (~800ms) with intent, translation, and reply options
+   * 3. If LLM fails, show error -- no wrong-guess fallback
    */
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
 
-      // ── FRESH STATE: wipe old match immediately ──
       setMatch(null);
 
       const corrected = correctSpanish(rawText);
       setCorrectedText(corrected);
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      // ── PASS 1: Instant deterministic preview ──
-      const detMatch = buildListenResult(corrected);
-      setMatch(detMatch);
-      addLog("intent", `[preview] ${detMatch.intent} conf=${detMatch.confidence} evidence=[${detMatch.evidence.join(", ")}]`);
-
-      // ── PASS 2: LLM replaces preview unconditionally ──
+      // Fire LLM -- the UI shows "Translating..." while this runs
       setLlmClassifying(true);
 
       (async () => {
@@ -374,7 +367,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           if (!resp.ok) {
             const errText = await resp.text();
             addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
-            return; // Keep deterministic preview as fallback
+            return;
           }
 
           const data: LLMListenResponse = await resp.json();
@@ -384,16 +377,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
           if (llmMatch.debug?.rejectedReason) {
             addLog("error", `[LLM REJECTED] ${llmMatch.debug.rejectedReason}`);
-            return; // Keep deterministic preview as fallback
+            return;
           }
 
-          // LLM always wins -- replace the preview unconditionally
           setMatch(llmMatch);
-          addLog("info", `LLM replaced: ${detMatch.intent} -> ${llmMatch.intent}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
-          addLog("error", `LLM: ${msg} (keeping preview)`);
-          // Deterministic preview stays as fallback
+          addLog("error", `LLM: ${msg}`);
         } finally {
           setLlmClassifying(false);
         }
@@ -778,21 +768,25 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${match ? sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40" : "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They said</p>
-            {match && match.intent !== "unknown" && (
+            {match && match.intent !== "unknown" && !llmClassifying && (
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
                 {INTENT_LABELS[match.intent] ?? match.section}
               </span>
             )}
           </div>
 
-          {/* English meaning */}
-          {match && hasResults ? (
+          {/* English meaning or translating state */}
+          {match && hasResults && !llmClassifying ? (
             <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
               {`\u201C${match.english}\u201D`}
             </p>
+          ) : llmClassifying ? (
+            <p className="animate-pulse text-[15px] font-bold leading-tight text-sky-600 dark:text-sky-400">
+              Translating...
+            </p>
           ) : (
             <p className={`text-[15px] font-bold leading-tight text-stone-700 dark:text-stone-300 ${isInterim ? "opacity-50" : ""}`}>
-              {state === "processing" ? "Interpreting..." : "Listening..."}
+              {state === "processing" ? "Processing audio..." : "Listening..."}
             </p>
           )}
 
@@ -807,38 +801,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
               {"Corrected: \u201C"}{correctedText}{"\u201D"}
             </p>
           )}
-
-          {/* Confidence + LLM status — grounded logic */}
-          {match && hasResults && (() => {
-            const isStrong = match.source === "deterministic"
-              ? match.confidence >= 85
-              : match.source === "ai" && match.confidence >= 85 && match.evidence.length > 0;
-            const isBestGuess = !isStrong && match.confidence >= 60;
-            const label = isStrong ? "Strong match" : isBestGuess ? "Best guess" : "Unsure";
-            const dotColor = isStrong ? "bg-emerald-400" : isBestGuess ? "bg-amber-400" : "bg-stone-300";
-            const textColor = isStrong ? "text-emerald-600 dark:text-emerald-400" : isBestGuess ? "text-amber-600 dark:text-amber-400" : "text-stone-400";
-            return (
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <div className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
-                  <span className={`text-[10px] font-semibold ${textColor}`}>{label}</span>
-                  {match.evidence.length > 0 && (
-                    <span className="text-[9px] text-stone-400 dark:text-stone-500">
-                      {`[${match.evidence.slice(0, 3).join(", ")}]`}
-                    </span>
-                  )}
-                </div>
-                {llmClassifying && (
-                  <span className="animate-pulse text-[10px] font-medium text-sky-500 dark:text-sky-400">Refining...</span>
-                )}
-              </div>
-            );
-          })()}
         </div>
       )}
 
-      {/* ── BEST REPLY ── */}
-      {match && hasResults && (
+      {/* ── BEST REPLY -- only shown after LLM responds ── */}
+      {match && hasResults && !llmClassifying && (
         <div className="animate-fade-in">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             {match.section === "Clarify"
