@@ -393,8 +393,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             validatedMatch.intent !== "unknown" ||
             detMatch.intent === "unknown";
 
+          // Only trust deterministic over LLM when it has genuinely strong
+          // multi-word evidence (not a single keyword match)
           const detIsStronger =
-            detMatch.confidence >= 90 &&
+            detMatch.confidence >= 85 &&
+            detMatch.evidence.length >= 2 &&
             validatedMatch.intent !== "ai_understood" &&
             validatedMatch.confidence < 50;
 

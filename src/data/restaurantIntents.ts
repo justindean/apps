@@ -310,43 +310,51 @@ interface FastPath {
   intent: string;
   english: string;
   rule: string; // for debug
+  confidence: number; // 92 = multi-word phrase (unambiguous), 55 = single noun (needs LLM)
 }
 
 const FAST_PATHS: FastPath[] = [
-  // Soups — MUST come early since "sopas" is unambiguous
-  { pattern: /\b(sopas?|caldo[s]?|consom[eé])\b/i, intent: "soups_available", english: "What soups do you have?", rule: "soups-regex" },
-  // Hot drinks — MUST come before generic drinks_offer
-  { pattern: /\b(cafe\s+o\s+te|te\s+o\s+cafe|quieres?\s+cafe|quieres?\s+te|un\s+cafe|un\s+te|capuchino|americano|latte)\b/i, intent: "drinks_hot_offer", english: "Would you like coffee or tea?", rule: "hot-drinks-regex" },
-  // Cold drinks / generic drink words — fast match on specific beverage nouns
-  { pattern: /\b(leche|jugo[s]?|juegos?|limonada|horchata|naranjada|jamaica|cerveza|chela|michelada|refresco|vino|mezcal|tequila|margarita|copa)\b/i, intent: "drinks_offer", english: "What would you like to drink?", rule: "drinks-noun-regex" },
-  { pattern: /\b(algo\s+de\s+tomar|para\s+tomar|quieres?\s+tomar|desea\s+tomar|van\s+a\s+tomar|que\s+va[sn]?\s+a\s+tomar)\b/i, intent: "drinks_offer", english: "What would you like to drink?", rule: "drinks-phrase-regex" },
-  // Doneness — explicit doneness phrases only (NO bare "quieres")
-  { pattern: /\b(como\s+quieres?\s+(tu|la|el)\s+carne|a\s+que\s+termin|que\s+termin|como\s+lo\s+quiere|como\s+la\s+quiere|termino\s+medio|tres\s+cuartos|bien\s+cocid[oa]|poco\s+hech[oa]|medio\s+rojo|rojo\s+por\s+dentro)\b/i, intent: "doneness_preference", english: "How would you like your meat cooked?", rule: "doneness-regex" },
-  // Anything else
-  { pattern: /\b(algo\s*mas|nada\s*mas|quieres?\s+algo|quieren\s+algo|otra\s*cosa|algo\s*mas\s*para)\b/i, intent: "anything_else", english: "Would you like anything else?", rule: "anything-else-regex" },
-  // Check-in
-  { pattern: /\b(todo\s*bien|como\s*esta\s*todo|que\s*tal\s*todo|como\s*va\s*todo)\b/i, intent: "check_in_food", english: "How is everything?", rule: "check-in-regex" },
-  // Table
-  { pattern: /\b(adentro|afuera|terraza|interior|exterior)\b/i, intent: "table_preference", english: "Inside or outside?", rule: "table-regex" },
-  // Party size
-  { pattern: /\b(cuantos\s*son|para\s*cuantos|mesa\s*para)\b/i, intent: "party_size", english: "How many people?", rule: "party-regex" },
-  // Payment
-  { pattern: /\b(tarjeta\s*o\s*efectivo|efectivo\s*o\s*tarjeta|como\s*va\s*a\s*pagar)\b/i, intent: "payment_method", english: "Cash or card?", rule: "payment-regex" },
-  // Tip
-  { pattern: /\b(propina|servicio|incluimos\s*servicio)\b/i, intent: "tip_service", english: "Would you like to add a tip?", rule: "tip-regex" },
-  // Bill
-  { pattern: /\b(la\s*cuenta|su\s*cuenta|les\s*traigo\s*la\s*cuenta)\b/i, intent: "bill_offer", english: "Here's the check.", rule: "bill-regex" },
-  // Not available
-  { pattern: /\b(no\s*hay|se\s*termino|no\s*tenemos|ya\s*no\s*hay)\b/i, intent: "not_available", english: "Sorry, that's not available.", rule: "not-avail-regex" },
-  // Receipt
-  { pattern: /\b(recibo|factura|ticket|comprobante)\b/i, intent: "receipt", english: "Do you need a receipt?", rule: "receipt-regex" },
-  // Menu
-  { pattern: /\b(menu|carta)\b/i, intent: "menu_offer", english: "Would you like a menu?", rule: "menu-regex" },
-  // Smalltalk
-  { pattern: /\b(de\s+donde\s+eres|de\s+donde\s+vienes|de\s+donde\s+son|de\s+donde\s+es)\b/i, intent: "smalltalk_origin", english: "Where are you from?", rule: "origin-regex" },
-  { pattern: /\b(vives?\s+aqui|vives?\s+aca|viven\s+aqui)\b/i, intent: "smalltalk_live_here", english: "Do you live here?", rule: "live-here-regex" },
-  { pattern: /\b(primera\s+vez|primer\s+vez|primera\s+visita)\b/i, intent: "smalltalk_first_time", english: "Is it your first time?", rule: "first-time-regex" },
-  { pattern: /\b(te\s+gusta\s+mexico|te\s+esta\s+gustando|les\s+gusta\s+mexico|como\s+la\s+estas\s+pasando)\b/i, intent: "smalltalk_enjoying", english: "Are you enjoying Mexico?", rule: "enjoying-regex" },
+  // ── HIGH CONFIDENCE (92): multi-word phrases that are unambiguous ──
+
+  // Soups — "sopas" alone is unambiguous in a restaurant
+  { pattern: /\b(sopas?|caldo[s]?|consom[eé])\b/i, intent: "soups_available", english: "What soups do you have?", rule: "soups-regex", confidence: 92 },
+  // Hot drinks — multi-word phrases only
+  { pattern: /\b(cafe\s+o\s+te|te\s+o\s+cafe|quieres?\s+cafe|quieres?\s+te|un\s+cafe|un\s+te|capuchino|americano|latte)\b/i, intent: "drinks_hot_offer", english: "Would you like coffee or tea?", rule: "hot-drinks-phrase", confidence: 92 },
+  // Drink phrases — multi-word, clearly about ordering drinks
+  { pattern: /\b(algo\s+de\s+tomar|para\s+tomar|quieres?\s+tomar|desea\s+tomar|van\s+a\s+tomar|que\s+va[sn]?\s+a\s+tomar)\b/i, intent: "drinks_offer", english: "What would you like to drink?", rule: "drinks-phrase", confidence: 92 },
+  // Doneness — explicit doneness phrases
+  { pattern: /\b(como\s+quieres?\s+(tu|la|el)\s+carne|a\s+que\s+termin|que\s+termin|como\s+lo\s+quiere|como\s+la\s+quiere|termino\s+medio|tres\s+cuartos|bien\s+cocid[oa]|poco\s+hech[oa]|medio\s+rojo|rojo\s+por\s+dentro)\b/i, intent: "doneness_preference", english: "How would you like your meat cooked?", rule: "doneness-phrase", confidence: 92 },
+  // Anything else — multi-word phrases
+  { pattern: /\b(algo\s*mas|nada\s*mas|quieres?\s+algo|quieren\s+algo|otra\s*cosa|algo\s*mas\s*para)\b/i, intent: "anything_else", english: "Would you like anything else?", rule: "anything-else-phrase", confidence: 92 },
+  // Check-in — multi-word phrases
+  { pattern: /\b(todo\s*bien|como\s*esta\s*todo|que\s*tal\s*todo|como\s*va\s*todo)\b/i, intent: "check_in_food", english: "How is everything?", rule: "check-in-phrase", confidence: 92 },
+  // Party size — multi-word phrases
+  { pattern: /\b(cuantos\s*son|para\s*cuantos|mesa\s*para)\b/i, intent: "party_size", english: "How many people?", rule: "party-phrase", confidence: 92 },
+  // Payment — multi-word phrases
+  { pattern: /\b(tarjeta\s*o\s*efectivo|efectivo\s*o\s*tarjeta|como\s*va\s*a\s*pagar)\b/i, intent: "payment_method", english: "Cash or card?", rule: "payment-phrase", confidence: 92 },
+  // Bill — multi-word phrases
+  { pattern: /\b(la\s*cuenta|su\s*cuenta|les\s*traigo\s*la\s*cuenta)\b/i, intent: "bill_offer", english: "Here's the check.", rule: "bill-phrase", confidence: 92 },
+  // Not available — multi-word phrases
+  { pattern: /\b(no\s*hay|se\s*termino|no\s*tenemos|ya\s*no\s*hay)\b/i, intent: "not_available", english: "Sorry, that's not available.", rule: "not-avail-phrase", confidence: 92 },
+  // Smalltalk — multi-word phrases
+  { pattern: /\b(de\s+donde\s+eres|de\s+donde\s+vienes|de\s+donde\s+son|de\s+donde\s+es)\b/i, intent: "smalltalk_origin", english: "Where are you from?", rule: "origin-phrase", confidence: 92 },
+  { pattern: /\b(vives?\s+aqui|vives?\s+aca|viven\s+aqui)\b/i, intent: "smalltalk_live_here", english: "Do you live here?", rule: "live-here-phrase", confidence: 92 },
+  { pattern: /\b(primera\s+vez|primer\s+vez|primera\s+visita)\b/i, intent: "smalltalk_first_time", english: "Is it your first time?", rule: "first-time-phrase", confidence: 92 },
+  { pattern: /\b(te\s+gusta\s+mexico|te\s+esta\s+gustando|les\s+gusta\s+mexico|como\s+la\s+estas\s+pasando)\b/i, intent: "smalltalk_enjoying", english: "Are you enjoying Mexico?", rule: "enjoying-phrase", confidence: 92 },
+
+  // ── MEDIUM CONFIDENCE (55): single nouns that are ambiguous without context ──
+  // These get a fast deterministic result, but the LLM will verify/correct.
+
+  // Single beverage nouns — could be "do you want X" or "what kind of X" or "we're out of X"
+  { pattern: /\b(leche|jugo[s]?|juegos?|limonada|horchata|naranjada|jamaica|cerveza|chela|michelada|refresco|vino|mezcal|tequila|margarita|copa)\b/i, intent: "drinks_offer", english: "What would you like to drink?", rule: "drinks-single-noun", confidence: 55 },
+  // Table — single location words
+  { pattern: /\b(adentro|afuera|terraza|interior|exterior)\b/i, intent: "table_preference", english: "Inside or outside?", rule: "table-single-noun", confidence: 55 },
+  // Tip — single words
+  { pattern: /\b(propina|servicio|incluimos\s*servicio)\b/i, intent: "tip_service", english: "Would you like to add a tip?", rule: "tip-noun", confidence: 55 },
+  // Receipt — single words
+  { pattern: /\b(recibo|factura|ticket|comprobante)\b/i, intent: "receipt", english: "Do you need a receipt?", rule: "receipt-noun", confidence: 55 },
+  // Menu — single words
+  { pattern: /\b(menu|carta)\b/i, intent: "menu_offer", english: "Would you like a menu?", rule: "menu-noun", confidence: 55 },
 ];
 
 // ── Stop words: generic verbs/words that appear in many Spanish sentences ──
@@ -567,7 +575,7 @@ export function classifyIntent(transcript: string): ListenMatch {
       return {
         intent: fp.intent,
         english: fp.english,
-        confidence: 92,
+        confidence: fp.confidence,
         source: "deterministic",
         routerPath: "deterministic" as RouterPath,
         evidence,
@@ -606,19 +614,31 @@ export function classifyIntent(transcript: string): ListenMatch {
       continue; // Skip — constraints not met
     }
 
-    // Check if ALL matched words are stop words (generic verbs/pronouns)
-    const hasSubstantiveEvidence = matchedWords.some(
+    // Check how many matched words are substantive (not generic verbs/pronouns)
+    const substantiveWords = matchedWords.filter(
       (w) => !STOP_WORDS.has(normalizeTranscript(w))
     );
-    
+    const hasSubstantiveEvidence = substantiveWords.length > 0;
+
     const groupRatio = groupHits / def.triggerGroups.length;
-    const multiWordBonus = matchedWords.length > 1 ? 0.08 : 0;
+
+    // Scoring tiers based on evidence quality:
+    // - 2+ substantive words across 2+ groups = strong (0.85-0.92)
+    // - 1 substantive word, 1 group = moderate (0.55-0.65)
+    // - Only stop words = weak (capped at 0.35)
+    const multiGroupBonus = (groupHits >= 2 && substantiveWords.length >= 2) ? 0.20 : 0;
+    const multiWordBonus = substantiveWords.length > 1 ? 0.10 : 0;
     const fullMatchBonus = groupHits === def.triggerGroups.length ? 0.12 : 0;
-    // CRITICAL: If ALL evidence is stop words, cap score at 0.35 (conf=35)
-    // so the LLM fallback will fire and give a proper classification
-    let score = Math.min(1, def.weight * groupRatio + 0.2 + multiWordBonus + fullMatchBonus);
+
+    let score = Math.min(1, def.weight * groupRatio + 0.2 + multiWordBonus + multiGroupBonus + fullMatchBonus);
+
+    // Cap scores based on evidence quality
     if (!hasSubstantiveEvidence) {
+      // Only stop words matched -- very unreliable
       score = Math.min(score, 0.35);
+    } else if (substantiveWords.length === 1 && groupHits === 1) {
+      // Single substantive word, single group -- ambiguous, let LLM verify
+      score = Math.min(score, 0.65);
     }
 
     if (!best || score > best.score) {
