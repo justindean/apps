@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { classifyIntent, LLM_SYSTEM_PROMPT, buildListenMatchFromLLM } from "../data/restaurantIntents";
+import { buildListenResult, LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
@@ -171,6 +171,8 @@ const sectionBorderColor: Record<string, string> = {
   Bill: "border-emerald-300/60 dark:border-emerald-600/40",
   Tip: "border-violet-300/60 dark:border-violet-600/40",
   Clarify: "border-stone-300/60 dark:border-stone-600/40",
+  Smalltalk: "border-indigo-300/60 dark:border-indigo-600/40",
+  AI: "border-sky-300/60 dark:border-sky-600/40",
 };
 
 const sectionBadgeColor: Record<string, string> = {
@@ -181,6 +183,36 @@ const sectionBadgeColor: Record<string, string> = {
   Bill: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
   Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
   Clarify: "bg-stone-100 text-stone-600 dark:bg-stone-800/40 dark:text-stone-400",
+  Smalltalk: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
+  AI: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
+};
+
+/* ── Humanized intent labels for badge ── */
+const INTENT_LABELS: Record<string, string> = {
+  menu_offer: "MENU",
+  table_preference: "TABLE",
+  party_size: "PARTY",
+  greeting: "GREETING",
+  order_ready: "ORDER",
+  order_items: "ORDER",
+  doneness_preference: "STEAK",
+  soups_available: "SOUPS",
+  drinks_offer: "DRINKS",
+  drinks_hot_offer: "HOT DRINKS",
+  anything_else: "MORE?",
+  check_in_food: "CHECK-IN",
+  bill_offer: "BILL",
+  payment_method: "PAYMENT",
+  tip_service: "TIP",
+  receipt: "RECEIPT",
+  not_available: "UNAVAILABLE",
+  clarification: "CLARIFY",
+  smalltalk_origin: "SMALLTALK",
+  smalltalk_live_here: "SMALLTALK",
+  smalltalk_first_time: "SMALLTALK",
+  smalltalk_enjoying: "SMALLTALK",
+  ai_understood: "AI",
+  unknown: "UNKNOWN",
 };
 
 /* ── Convert ListenReply to Phrase (for onSpeak/onCopy compatibility) ── */
@@ -201,6 +233,62 @@ interface ListenPanelProps {
   mode: SpeechMode;
   onCopy: (text: string) => void;
   onSpeak: (phrase: Phrase) => void;
+}
+
+/* ── OpenAI Ping Button (requirement F) ── */
+function OpenAIPingButton({ addLog }: { addLog: (type: DebugLog["type"], text: string) => void }) {
+  const [pingState, setPingState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [pingResult, setPingResult] = useState<string>("");
+
+  const handlePing = useCallback(async () => {
+    setPingState("loading");
+    setPingResult("");
+    addLog("info", "Pinging OpenAI...");
+
+    try {
+      const resp = await fetch("/api/debug/openai-ping");
+      const data = await resp.json();
+
+      if (data.ok) {
+        const usage = data.usage ?? {};
+        const msg = `OK model=${data.model} prompt=${usage.prompt_tokens} completion=${usage.completion_tokens} total=${usage.total_tokens} key=${data.keyPrefix}`;
+        setPingResult(msg);
+        setPingState("success");
+        addLog("info", `[OpenAI Ping] ${msg}`);
+      } else {
+        const msg = data.error || "Unknown error";
+        setPingResult(msg);
+        setPingState("error");
+        addLog("error", `[OpenAI Ping] ${msg}`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      setPingResult(msg);
+      setPingState("error");
+      addLog("error", `[OpenAI Ping] ${msg}`);
+    }
+  }, [addLog]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        onClick={handlePing}
+        disabled={pingState === "loading"}
+        className={`w-fit rounded-md px-2.5 py-1 font-sans text-[10px] font-bold transition ${
+          pingState === "loading"
+            ? "bg-stone-200 text-stone-400 dark:bg-stone-700 dark:text-stone-500"
+            : "bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/40 dark:text-sky-400 dark:hover:bg-sky-900/60"
+        }`}
+      >
+        {pingState === "loading" ? "Testing..." : "Test OpenAI"}
+      </button>
+      {pingResult && (
+        <p className={pingState === "success" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}>
+          {pingResult}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -238,73 +326,142 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const lastTranscriptAtRef = useRef(0);
   const speechStartedRef = useRef(false);
   const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const processedFinalRef = useRef(false); // prevents double processTranscript calls
 
   const addLog = useCallback((type: DebugLog["type"], text: string) => {
     const time = new Date().toLocaleTimeString("en-US", { hour12: false });
     setDebugLogs((prev) => [...prev.slice(-60), { time, type, text }]);
   }, []);
 
-  /* ── Process transcript (shared by both modes) ── */
+  /* ── Process transcript (shared by both modes) ──
+   * GROUNDED: every listen creates a FRESH ListenMatch via buildListenResult.
+   * Old state is completely overwritten. If constraints fail -> unknown.
+   * AI is only consulted if deterministic confidence < 60, then post-validated.
+   */
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
+
+      // ── FRESH STATE: wipe old match immediately ──
+      setMatch(null);
 
       const corrected = correctSpanish(rawText);
       setCorrectedText(corrected);
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      // ── PASS 1: Deterministic classifier (includes fast-path regex shortcuts) ──
-      const keywordMatch = classifyIntent(corrected);
-      setMatch(keywordMatch);
-      addLog("intent", `[keyword] ${keywordMatch.intent} conf=${keywordMatch.confidence} keywords=[${keywordMatch.keywords.join(", ")}]`);
+      const normed = normalizeTranscript(corrected);
 
-      // ── PASS 2: LLM classifier if keyword match is low confidence ──
-      if (keywordMatch.confidence < 60) {
-        addLog("info", `Low confidence (${keywordMatch.confidence}), running LLM classifier...`);
-        setLlmClassifying(true);
+      // ── PASS 1: buildListenResult (always fresh, constraint-validated) ──
+      const detMatch = buildListenResult(corrected);
+      setMatch(detMatch);
+      addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
 
-        fetch("/api/classify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transcript: corrected,
-            systemPromptOverride: LLM_SYSTEM_PROMPT,
-          }),
-        })
-          .then((r) => r.json())
-          .then((data: LLMListenResponse & { error?: string }) => {
-            if (data.error) {
-              addLog("error", `LLM: ${data.error}`);
-              return;
+      // ── PASS 2: ALWAYS fire LLM in parallel (server-side proxy) ──
+      // Uses /_llm/classify (NOT /api/) to avoid Vercel Sandbox serverless interception.
+      // API key stays server-side only.
+      setLlmClassifying(true);
+
+      (async () => {
+        try {
+          const resp = await fetch("/_llm/classify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transcript: corrected,
+              tone: mode === "formal" ? "Formal" : mode === "street" ? "Street" : "Neutral",
+              systemPromptOverride: LLM_SYSTEM_PROMPT,
+            }),
+          });
+
+          if (!resp.ok) {
+            const errText = await resp.text();
+            addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
+            return;
+          }
+
+          const data: LLMListenResponse = await resp.json();
+          addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
+
+          const validatedMatch = validateAndBuildFromLLM(data, normed);
+
+          if (validatedMatch.debug?.rejectedReason) {
+            addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
+            return;
+          }
+
+          // ── UPGRADE DECISION ──
+          // Core principle: det confidence reflects evidence quality.
+          //   92 = multi-word phrase match (very reliable, hard to override)
+          //   55-65 = single keyword (ambiguous, easy to override)
+          //   <50 = stop words only (unreliable, always override)
+          //
+          // The LLM adds contextual understanding: "leche" alone -> drinks,
+          // but "tipo de leche prefieres" -> which milk type. The LLM sees
+          // the full phrase and understands the real question.
+          //
+          // Guard rail: if the LLM's english would be nonsensical for a waiter
+          // to say (e.g. "Are you a food menu?"), it's hallucinating on garbled
+          // speech and we keep the deterministic result.
+
+          const detHasKnownIntent = detMatch.intent !== "unknown";
+          const llmHasKnownIntent = validatedMatch.intent !== "unknown" && validatedMatch.intent !== "ai_understood";
+          const llmIsAiUnderstood = validatedMatch.intent === "ai_understood";
+
+          let shouldUpgrade = false;
+
+          if (detMatch.intent === "unknown") {
+            // Det had nothing -- any LLM result is better
+            shouldUpgrade = validatedMatch.intent !== "unknown";
+          } else if (llmHasKnownIntent && validatedMatch.intent !== detMatch.intent) {
+            // LLM mapped to a DIFFERENT known intent -- trust LLM's context
+            shouldUpgrade = validatedMatch.confidence > 60;
+          } else if (llmHasKnownIntent && validatedMatch.intent === detMatch.intent) {
+            // LLM agrees with det's intent. Upgrade if the LLM has a more specific
+            // english translation (e.g. "What type of milk?" vs generic "What to drink?")
+            // The reply set stays the same since it's the same intent, but english changes.
+            if (validatedMatch.english !== detMatch.english && validatedMatch.confidence >= 70) {
+              shouldUpgrade = true;
             }
-
-            addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply="${data.best_reply}"`);
-            addLog("info", `[LLM] meaning: "${data.english}"`);
-
-            const llmMatch = buildListenMatchFromLLM(data);
-
-            // Upgrade if LLM is more confident or keyword was unknown
-            if (
-              keywordMatch.intent === "unknown" ||
-              (llmMatch.confidence ?? 0) > keywordMatch.confidence
-            ) {
-              setMatch(llmMatch);
-              addLog("info", `[LLM] Upgraded from ${keywordMatch.intent}(${keywordMatch.confidence}) to ${llmMatch.intent}(${llmMatch.confidence})`);
+          } else if (llmIsAiUnderstood && !detHasKnownIntent) {
+            // LLM understood something det didn't -- use it
+            shouldUpgrade = true;
+          } else if (llmIsAiUnderstood && detHasKnownIntent) {
+            // LLM returned ai_understood while det has a known intent.
+            // Use a sliding scale based on det confidence:
+            //   det <= 65 (single keyword): LLM likely has better context, override
+            //   det 66-84 (moderate match): LLM needs high confidence to override
+            //   det >= 85 (multi-word phrase): almost never override with ai_understood
+            if (detMatch.confidence <= 65) {
+              // Single-keyword det match -- LLM probably understands the full phrase better
+              shouldUpgrade = validatedMatch.confidence >= 60;
+            } else if (detMatch.confidence <= 84) {
+              // Moderate det match -- LLM needs to be very confident
+              shouldUpgrade = validatedMatch.confidence >= 85;
             } else {
-              addLog("info", `[LLM] Kept keyword match (higher confidence)`);
+              // Strong multi-word det match -- keep det, ai_understood is likely
+              // a literal translation of garbled speech
+              shouldUpgrade = false;
             }
-          })
-          .catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : "LLM classify failed";
-            addLog("error", `LLM: ${msg}`);
-          })
-          .finally(() => setLlmClassifying(false));
-      }
+          }
+
+          if (shouldUpgrade) {
+            setMatch(validatedMatch);
+            addLog("info", `LLM: ${detMatch.intent}(${detMatch.confidence}) -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
+          } else {
+            addLog("info", `Kept det: ${detMatch.intent}(${detMatch.confidence}), LLM was ${validatedMatch.intent}(${validatedMatch.confidence})`);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "LLM failed";
+          addLog("error", `LLM: ${msg}`);
+        } finally {
+          setLlmClassifying(false);
+        }
+      })();
     },
     [mode, addLog],
   );
 
-  /* ═══════════════════════════════════════════════════════════════════════
+  /* ═══════════════════════════════════════════════════════════════════���═══
      CAPTURE MODE — fallback: record audio blob -> server Whisper
      ═══════════════════════════════════════════════════════════════════════ */
   const startCapture = useCallback(async () => {
@@ -435,7 +592,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     }
   }, [addLog]);
 
-  /* ═══════════════════════════════════════════════════════════════════════
+  /* ═══════════════════════��═══════════════════════════════════════════════
      REALTIME MODE — SpeechRecognition streaming
      ═══════════════════════════════════════════════════════════════════════ */
   const startRealtime = useCallback(async () => {
@@ -512,7 +669,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         finalTextRef.current = final;
         setFinalText(final);
         setInterimText("");
-        processTranscript(final);
+        if (!processedFinalRef.current) {
+          processedFinalRef.current = true;
+          processTranscript(final);
+        }
       } else if (interim) {
         setInterimText(interim);
         addLog("partial", `"${interim}"`);
@@ -535,7 +695,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
       }
-      if (finalTextRef.current.trim()) {
+      // Only process on end if we never got a final result during onresult
+      if (finalTextRef.current.trim() && !processedFinalRef.current) {
+        processedFinalRef.current = true;
         setState("processing");
         processTranscript(finalTextRef.current);
         setTimeout(() => setState("idle"), 200);
@@ -547,6 +709,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     recognitionRef.current = recognition;
     speechStartedRef.current = false;
     lastTranscriptAtRef.current = 0;
+    processedFinalRef.current = false;
 
     try {
       recognition.start();
@@ -613,9 +776,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ═══════════════════════════════════════════════════════════════════════
+  /* ══════════════════════════��════════════════════════════════════════════
      RENDER
-     ═══════════════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════���════════════════ */
   return (
     <div className="flex flex-col gap-5">
 
@@ -674,9 +837,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${match ? sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40" : "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They said</p>
-            {match && match.section !== "Clarify" && (
+            {match && match.intent !== "unknown" && (
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
-                {match.section}
+                {INTENT_LABELS[match.intent] ?? match.section}
               </span>
             )}
           </div>
@@ -704,20 +867,32 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             </p>
           )}
 
-          {/* Confidence + LLM status */}
-          {match && hasResults && (
-            <div className="mt-2 flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <div className={`h-1.5 w-1.5 rounded-full ${match.confidence >= 60 ? "bg-emerald-400" : match.confidence >= 40 ? "bg-amber-400" : "bg-stone-300"}`} />
-                <span className={`text-[10px] font-semibold ${match.confidence >= 60 ? "text-emerald-600 dark:text-emerald-400" : match.confidence >= 40 ? "text-amber-600 dark:text-amber-400" : "text-stone-400"}`}>
-                  {match.confidence >= 60 ? "Strong match" : match.confidence >= 40 ? "Likely match" : "Best guess"}
-                </span>
+          {/* Confidence + LLM status — grounded logic */}
+          {match && hasResults && (() => {
+            const isStrong = match.source === "deterministic"
+              ? match.confidence >= 85
+              : match.source === "ai" && match.confidence >= 85 && match.evidence.length > 0;
+            const isBestGuess = !isStrong && match.confidence >= 60;
+            const label = isStrong ? "Strong match" : isBestGuess ? "Best guess" : "Unsure";
+            const dotColor = isStrong ? "bg-emerald-400" : isBestGuess ? "bg-amber-400" : "bg-stone-300";
+            const textColor = isStrong ? "text-emerald-600 dark:text-emerald-400" : isBestGuess ? "text-amber-600 dark:text-amber-400" : "text-stone-400";
+            return (
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <div className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
+                  <span className={`text-[10px] font-semibold ${textColor}`}>{label}</span>
+                  {match.evidence.length > 0 && (
+                    <span className="text-[9px] text-stone-400 dark:text-stone-500">
+                      {`[${match.evidence.slice(0, 3).join(", ")}]`}
+                    </span>
+                  )}
+                </div>
+                {llmClassifying && (
+                  <span className="animate-pulse text-[10px] font-medium text-sky-500 dark:text-sky-400">Refining...</span>
+                )}
               </div>
-              {llmClassifying && (
-                <span className="animate-pulse text-[10px] font-medium text-sky-500 dark:text-sky-400">Refining...</span>
-              )}
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -727,9 +902,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             {match.section === "Clarify"
               ? "Not sure \u2014 try asking"
-              : match.confidence < 50
-                ? `Sounds like ${match.section.toLowerCase()} \u2014 try`
-                : "Best reply"}
+              : "Best reply"}
           </p>
 
           <button
@@ -742,11 +915,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                   {match.bestReply.spanish}
                 </p>
                 <p className="mt-1 text-[14px] leading-snug text-stone-500 dark:text-stone-400">
-                  {match.bestReply.english}
+                  {match.bestReply.english || match.english}
                 </p>
-                <p className="mt-1 font-mono text-[11px] leading-snug tracking-tight text-stone-300 dark:text-stone-600">
-                  {match.bestReply.pronunciation}
-                </p>
+                {match.bestReply.pronunciation && (
+                  <p className="mt-1 font-mono text-[11px] leading-snug tracking-tight text-stone-300 dark:text-stone-600">
+                    {match.bestReply.pronunciation}
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-3.5 py-2 text-white shadow-md shadow-[#D94F2A]/25 transition-transform active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20">
                 <WaveformIcon size={13} />
@@ -769,7 +944,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {match.alternates.length > 0 && (
             <div className="mt-3">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
-                Or try
+                Or say
               </p>
               <div className="flex flex-col gap-2">
                 {match.alternates.map((reply) => (
@@ -782,9 +957,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                       <p className="text-[14px] font-bold leading-tight text-stone-800 dark:text-stone-200">
                         {reply.spanish}
                       </p>
-                      <p className="mt-0.5 text-[12px] text-stone-400 dark:text-stone-500">
-                        {reply.english}
-                      </p>
+                      {reply.english && (
+                        <p className="mt-0.5 text-[12px] text-stone-400 dark:text-stone-500">
+                          {reply.english}
+                        </p>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1 text-stone-400 dark:text-stone-500">
                       <VolumeIcon size={12} />
@@ -822,18 +999,28 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             </div>
           )}
 
-          {/* Last result summary */}
-          {(finalText || correctedText || match) && (
+          {/* ── STRUCTURED RESULT (requirement A) ── */}
+          {match && (
             <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
-              <p className="font-bold text-stone-600 dark:text-stone-300">Last Result:</p>
-              {finalText && <p><span className="text-stone-400">Raw: </span>{`"${finalText}"`}</p>}
-              {correctedText && correctedText !== finalText && <p><span className="text-amber-500">Corrected: </span>{`"${correctedText}"`}</p>}
-              {match && <p><span className="text-sky-500">Intent: </span>{match.intent} [{match.section}] conf={match.confidence}</p>}
-              {match && <p><span className="text-sky-500">English: </span>{match.english}</p>}
-              {match && <p><span className="text-emerald-500">Reply: </span>{match.bestReply.spanish} ({match.bestReply.english})</p>}
-              {match && match.keywords.length > 0 && <p><span className="text-violet-500">Keywords: </span>{match.keywords.join(", ")}</p>}
+              <p className="font-bold text-stone-600 dark:text-stone-300">ListenResult:</p>
+              <p><span className="text-stone-400">rawTranscript: </span>{match.debug?.rawTranscript ? `"${match.debug.rawTranscript}"` : `"${finalText}"`}</p>
+              <p><span className="text-stone-400">normalizedTranscript: </span>{match.debug?.normalizedTranscript ? `"${match.debug.normalizedTranscript}"` : `"${normalizeTranscript(correctedText || finalText)}"`}</p>
+              <p><span className="text-sky-500">routerPath: </span><span className={match.routerPath === "fallback-unknown" ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{match.routerPath}</span></p>
+              <p><span className="text-cyan-500">matchedRuleId: </span>{match.debug?.matchedRule ?? "none"}</p>
+              <p><span className="text-violet-500">evidenceTokens: </span>[{match.evidence.join(", ")}]</p>
+              <p><span className="text-stone-400">constraintsPassed: </span><span className={match.debug?.constraintsPassed ? "text-emerald-500" : "text-red-500"}>{String(match.debug?.constraintsPassed ?? false)}</span></p>
+              <p><span className="text-sky-500">finalIntent: </span><span className="font-bold">{match.intent}</span> [{match.section}]</p>
+              <p><span className="text-sky-500">confidence: </span>{match.confidence} <span className="text-stone-400">src={match.source}</span></p>
+              {match.debug?.rejectedReason && <p><span className="text-red-500">reasonIfUnknown: </span>{match.debug.rejectedReason}</p>}
+              <p><span className="text-emerald-500">bestReply: </span>{match.bestReply.spanish}</p>
             </div>
           )}
+
+          {/* ── OpenAI Ping Test (requirement F) ── */}
+          <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
+            <p className="mb-1 font-bold text-stone-600 dark:text-stone-300">OpenAI Connectivity:</p>
+            <OpenAIPingButton addLog={addLog} />
+          </div>
 
           {/* Event log */}
           <div className="max-h-48 overflow-y-auto scrollbar-hide">
