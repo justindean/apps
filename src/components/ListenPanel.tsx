@@ -763,44 +763,37 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </div>
       )}
 
-      {/* ── THEY SAID ── */}
+      {/* ── CARD 1: WHAT WE HEARD ── */}
       {displayText && (
-        <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${match ? sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40" : "border-stone-200/60 dark:border-stone-700/40"}`}>
+        <div className="animate-fade-in rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
+            {isInterim ? "Hearing..." : "We heard"}
+          </p>
+          <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${isInterim ? "opacity-60" : ""}`}>
+            {`\u201C${displayText}\u201D`}
+          </p>
+          {llmClassifying && !isInterim && (
+            <p className="mt-2 animate-pulse text-[13px] font-semibold text-sky-600 dark:text-sky-400">
+              Translating...
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── CARD 2: WHAT THEY MEANT (LLM interpretation) ── */}
+      {match && hasResults && !llmClassifying && (
+        <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They said</p>
-            {match && match.intent !== "unknown" && !llmClassifying && (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They likely meant</p>
+            {match.intent !== "unknown" && (
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
                 {INTENT_LABELS[match.intent] ?? match.section}
               </span>
             )}
           </div>
-
-          {/* English meaning or translating state */}
-          {match && hasResults && !llmClassifying ? (
-            <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
-              {`\u201C${match.english}\u201D`}
-            </p>
-          ) : llmClassifying ? (
-            <p className="animate-pulse text-[15px] font-bold leading-tight text-sky-600 dark:text-sky-400">
-              Translating...
-            </p>
-          ) : (
-            <p className={`text-[15px] font-bold leading-tight text-stone-700 dark:text-stone-300 ${isInterim ? "opacity-50" : ""}`}>
-              {state === "processing" ? "Processing audio..." : "Listening..."}
-            </p>
-          )}
-
-          {/* Spanish heard */}
-          <p className={`mt-1.5 text-[13px] leading-snug text-stone-400 dark:text-stone-500 ${isInterim ? "opacity-50" : ""}`}>
-            <span className="font-medium text-stone-500/60 dark:text-stone-600">{"Heard: "}</span>
-            {`\u201C${displayText}\u201D`}
+          <p className="text-[20px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
+            {`\u201C${match.english}\u201D`}
           </p>
-
-          {correctedText && correctedText !== finalText && hasResults && (
-            <p className="mt-1 text-[11px] text-stone-300 dark:text-stone-600">
-              {"Corrected: \u201C"}{correctedText}{"\u201D"}
-            </p>
-          )}
         </div>
       )}
 
