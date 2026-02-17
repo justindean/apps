@@ -355,66 +355,73 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setMatch(detMatch);
       addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
 
-      // ── PASS 2: LLM fallback only if deterministic is low confidence ──
-      if (detMatch.confidence < 60) {
-        addLog("info", `Low confidence (${detMatch.confidence}), running LLM classifier...`);
-        setLlmClassifying(true);
+      // ── PASS 2: ALWAYS fire LLM in parallel ──
+      // Show deterministic result immediately (already set above), but let
+      // the LLM verify, correct, or enhance it. The LLM is the source of truth
+      // for understanding context — the deterministic path is just a fast preview.
+      setLlmClassifying(true);
+      addLog("info", `LLM classifying: "${corrected}" (det: ${detMatch.intent} conf=${detMatch.confidence})`);
 
-        addLog("info", `Calling LLM for: "${corrected}"`);
-        fetch("/api/classify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transcript: corrected,
-            systemPromptOverride: LLM_SYSTEM_PROMPT,
-          }),
+      fetch("/api/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: corrected,
+          systemPromptOverride: LLM_SYSTEM_PROMPT,
+        }),
+      })
+        .then((r) => {
+          if (!r.ok) {
+            return r.text().then((t) => {
+              throw new Error(`API ${r.status}: ${t.slice(0, 200)}`);
+            });
+          }
+          return r.json();
         })
-          .then((r) => {
-            if (!r.ok) {
-              return r.text().then((t) => {
-                throw new Error(`API ${r.status}: ${t.slice(0, 200)}`);
-              });
-            }
-            return r.json();
-          })
-          .then((data: LLMListenResponse & { error?: string }) => {
+        .then((data: LLMListenResponse & { error?: string }) => {
+          if (data.error) {
+            addLog("error", `LLM error: ${data.error}`);
+            return;
+          }
 
-            if (data.error) {
-              addLog("error", `LLM error: ${data.error}`);
-              return;
-            }
+          addLog("intent", `[LLM raw] intent=${data.intent} conf=${data.confidence} evidence=[${(data.evidence ?? data.keywords ?? []).join(", ")}] reply=${data.best_reply}`);
 
-            addLog("intent", `[LLM raw] intent=${data.intent} conf=${data.confidence} evidence=[${(data.evidence ?? data.keywords ?? []).join(", ")}] reply=${data.best_reply}`);
+          // POST-VALIDATION: validate AI output against transcript constraints
+          const validatedMatch = validateAndBuildFromLLM(data, normed);
 
-            // POST-VALIDATION: validate AI output against transcript constraints
-            const validatedMatch = validateAndBuildFromLLM(data, normed);
+          if (validatedMatch.debug?.rejectedReason) {
+            addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
+            return;
+          }
 
-            if (validatedMatch.debug?.rejectedReason) {
-              addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
-              // Keep deterministic (or unknown) — do NOT upgrade to a rejected match
-              return;
-            }
+          addLog("info", `[LLM validated] ${validatedMatch.intent} conf=${validatedMatch.confidence}`);
 
-            addLog("info", `[LLM validated] ${validatedMatch.intent} conf=${validatedMatch.confidence} path=${validatedMatch.routerPath}`);
+          // ── UPGRADE LOGIC ──
+          // The LLM always wins EXCEPT when:
+          // - LLM returns "unknown" and deterministic has a real match
+          // - LLM confidence is very low AND deterministic is very high
+          const llmWins =
+            validatedMatch.intent !== "unknown" ||
+            detMatch.intent === "unknown";
 
-            // Upgrade ONLY if validated LLM is better than deterministic
-            if (
-              detMatch.intent === "unknown" ||
-              (validatedMatch.intent !== "unknown" && validatedMatch.confidence > detMatch.confidence)
-            ) {
-              setMatch(validatedMatch);
-              addLog("info", `Upgraded: ${detMatch.intent}(${detMatch.confidence}) -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
-            } else {
-              addLog("info", `Kept deterministic: ${detMatch.intent}(${detMatch.confidence})`);
-            }
-          })
-          .catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : "LLM classify failed";
-            addLog("error", `LLM: ${msg}`);
-            // On error, keep deterministic result (already set above)
-          })
-          .finally(() => setLlmClassifying(false));
-      }
+          const detIsStronger =
+            detMatch.confidence >= 90 &&
+            validatedMatch.intent !== "ai_understood" &&
+            validatedMatch.confidence < 50;
+
+          if (llmWins && !detIsStronger) {
+            setMatch(validatedMatch);
+            addLog("info", `LLM upgraded: ${detMatch.intent}(${detMatch.confidence}) -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
+          } else {
+            addLog("info", `Kept deterministic: ${detMatch.intent}(${detMatch.confidence}) over LLM ${validatedMatch.intent}(${validatedMatch.confidence})`);
+          }
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : "LLM classify failed";
+          addLog("error", `LLM: ${msg}`);
+          // On error, keep deterministic result (already set above)
+        })
+        .finally(() => setLlmClassifying(false));
     },
     [mode, addLog],
   );
