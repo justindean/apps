@@ -334,9 +334,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }, []);
 
   /* ── Process transcript (shared by both modes) ──
-   * GROUNDED: every listen creates a FRESH ListenMatch via buildListenResult.
-   * Old state is completely overwritten. If constraints fail -> unknown.
-   * AI is only consulted if deterministic confidence < 60, then post-validated.
+   * Architecture: LLM-primary, deterministic as fast preview.
+   * 1. Show deterministic result INSTANTLY (free, no API call)
+   * 2. LLM fires in parallel (~800ms)
+   * 3. LLM result ALWAYS replaces the preview -- no upgrade logic
+   * 4. If LLM fails, deterministic result stays as fallback
    */
   const processTranscript = useCallback(
     (rawText: string) => {
@@ -349,16 +351,12 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setCorrectedText(corrected);
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      const normed = normalizeTranscript(corrected);
-
-      // ── PASS 1: buildListenResult (always fresh, constraint-validated) ──
+      // ── PASS 1: Instant deterministic preview ──
       const detMatch = buildListenResult(corrected);
       setMatch(detMatch);
-      addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
+      addLog("intent", `[preview] ${detMatch.intent} conf=${detMatch.confidence} evidence=[${detMatch.evidence.join(", ")}]`);
 
-      // ── PASS 2: ALWAYS fire LLM in parallel (server-side proxy) ──
-      // Uses /_llm/classify (NOT /api/) to avoid Vercel Sandbox serverless interception.
-      // API key stays server-side only.
+      // ── PASS 2: LLM replaces preview unconditionally ──
       setLlmClassifying(true);
 
       (async () => {
@@ -376,83 +374,26 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           if (!resp.ok) {
             const errText = await resp.text();
             addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
-            return;
+            return; // Keep deterministic preview as fallback
           }
 
           const data: LLMListenResponse = await resp.json();
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
-          const validatedMatch = validateAndBuildFromLLM(data, normed);
+          const llmMatch = validateAndBuildFromLLM(data, normalizeTranscript(corrected));
 
-          if (validatedMatch.debug?.rejectedReason) {
-            addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
-            return;
+          if (llmMatch.debug?.rejectedReason) {
+            addLog("error", `[LLM REJECTED] ${llmMatch.debug.rejectedReason}`);
+            return; // Keep deterministic preview as fallback
           }
 
-          // ── UPGRADE DECISION ──
-          // Core principle: det confidence reflects evidence quality.
-          //   92 = multi-word phrase match (very reliable, hard to override)
-          //   55-65 = single keyword (ambiguous, easy to override)
-          //   <50 = stop words only (unreliable, always override)
-          //
-          // The LLM adds contextual understanding: "leche" alone -> drinks,
-          // but "tipo de leche prefieres" -> which milk type. The LLM sees
-          // the full phrase and understands the real question.
-          //
-          // Guard rail: if the LLM's english would be nonsensical for a waiter
-          // to say (e.g. "Are you a food menu?"), it's hallucinating on garbled
-          // speech and we keep the deterministic result.
-
-          const detHasKnownIntent = detMatch.intent !== "unknown";
-          const llmHasKnownIntent = validatedMatch.intent !== "unknown" && validatedMatch.intent !== "ai_understood";
-          const llmIsAiUnderstood = validatedMatch.intent === "ai_understood";
-
-          let shouldUpgrade = false;
-
-          if (detMatch.intent === "unknown") {
-            // Det had nothing -- any LLM result is better
-            shouldUpgrade = validatedMatch.intent !== "unknown";
-          } else if (llmHasKnownIntent && validatedMatch.intent !== detMatch.intent) {
-            // LLM mapped to a DIFFERENT known intent -- trust LLM's context
-            shouldUpgrade = validatedMatch.confidence > 60;
-          } else if (llmHasKnownIntent && validatedMatch.intent === detMatch.intent) {
-            // LLM agrees with det's intent. Upgrade if the LLM has a more specific
-            // english translation (e.g. "What type of milk?" vs generic "What to drink?")
-            // The reply set stays the same since it's the same intent, but english changes.
-            if (validatedMatch.english !== detMatch.english && validatedMatch.confidence >= 70) {
-              shouldUpgrade = true;
-            }
-          } else if (llmIsAiUnderstood && !detHasKnownIntent) {
-            // LLM understood something det didn't -- use it
-            shouldUpgrade = true;
-          } else if (llmIsAiUnderstood && detHasKnownIntent) {
-            // LLM returned ai_understood while det has a known intent.
-            // Use a sliding scale based on det confidence:
-            //   det <= 65 (single keyword): LLM likely has better context, override
-            //   det 66-84 (moderate match): LLM needs high confidence to override
-            //   det >= 85 (multi-word phrase): almost never override with ai_understood
-            if (detMatch.confidence <= 65) {
-              // Single-keyword det match -- LLM probably understands the full phrase better
-              shouldUpgrade = validatedMatch.confidence >= 60;
-            } else if (detMatch.confidence <= 84) {
-              // Moderate det match -- LLM needs to be very confident
-              shouldUpgrade = validatedMatch.confidence >= 85;
-            } else {
-              // Strong multi-word det match -- keep det, ai_understood is likely
-              // a literal translation of garbled speech
-              shouldUpgrade = false;
-            }
-          }
-
-          if (shouldUpgrade) {
-            setMatch(validatedMatch);
-            addLog("info", `LLM: ${detMatch.intent}(${detMatch.confidence}) -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
-          } else {
-            addLog("info", `Kept det: ${detMatch.intent}(${detMatch.confidence}), LLM was ${validatedMatch.intent}(${validatedMatch.confidence})`);
-          }
+          // LLM always wins -- replace the preview unconditionally
+          setMatch(llmMatch);
+          addLog("info", `LLM replaced: ${detMatch.intent} -> ${llmMatch.intent}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
-          addLog("error", `LLM: ${msg}`);
+          addLog("error", `LLM: ${msg} (keeping preview)`);
+          // Deterministic preview stays as fallback
         } finally {
           setLlmClassifying(false);
         }
@@ -776,7 +717,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ══════════════════════════��════════════════════════════════════════════
+  /* ══════════════════════════���════════════════════════════════════════════
      RENDER
      ══════════════════════════════════════════════════════���════════════════ */
   return (

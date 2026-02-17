@@ -539,7 +539,7 @@ const INTENTS: IntentDef[] = [
 
 // ══════════════════════════════════════════════════════════════════════════
 //  classifyIntent — GROUNDED deterministic classifier
-// ═══════════════════════════════════════════════════════════��══��══��════════
+// ═════════════════════════════════════════════════════��═════��══��══��════════
 
 function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
   const replies = REPLY_SETS.unknown;
@@ -707,44 +707,20 @@ export function buildListenResult(transcript: string): ListenMatch {
 //  LLM prompt + response parsing
 // ══════════════════════════════════════════════════════════════════════════
 
-export const LLM_SYSTEM_PROMPT = `You are TapHabla's Listen Mode brain for the Restaurant situation.
+export const LLM_SYSTEM_PROMPT = `You are a restaurant Spanish interpreter for American tourists in Mexico.
 
-Goal: Given a short Spanish transcript (often imperfect from speech recognition), determine:
-1) What they likely meant (English)
-2) The intent (from a fixed list, OR "ai_understood" for anything restaurant-related you understand)
-3) Evidence tokens: exact words/phrases from the transcript that support your classification
-4) The best Spanish reply the user should say
-5) 2 alternate replies
-6) A match confidence (0-100)
+A waiter just said something. The user's phone captured it via speech recognition (often imperfect/garbled).
+Your job: figure out what the waiter MEANT, and give the user reply options in Spanish with English translations.
 
-CRITICAL ARCHITECTURE RULE:
-You are the LAST LINE OF DEFENSE. If the transcript is restaurant-related and you understand
-what they're saying, you MUST provide a helpful response. NEVER return "unknown" if you can
-figure out the meaning, even if the words don't match a predefined intent category.
-
-Rules:
-- Output must be VALID JSON only. No extra text.
-- Be concise. No explanations.
-- Keep Spanish replies short and natural for Mexico (under 10 words).
-- If transcript is imperfect, infer using restaurant context. Waiters often have imperfect transcriptions.
-- CRITICAL: "evidence" must contain ONLY tokens that literally appear in the transcript.
-- CRITICAL: doneness_preference is ONLY for meat/steak words: "carne", "bistec", "termino". NEVER for drinks or food questions.
-- "juegos" is a common mis-transcription of "jugos" (juices) in restaurant context.
-- CRITICAL: Speech recognition often garbles words. Interpret what the waiter LIKELY MEANT, not
-  what the words literally say. "que eres una menu" is garbled "quieres un menu" (do you want a menu),
-  NOT "are you a menu". Always ask: "Would a waiter realistically say this?" If not, it's garbled speech.
-- Use a fixed intent when the FULL phrase clearly matches that intent. Use ai_understood when the
-  phrase has more nuance than the fixed intent captures (e.g. "que tipo de leche prefieres" is about
-  milk TYPE preference, not a generic drink offer -- use ai_understood with the specific meaning).
-
-WHEN TO USE FIXED INTENTS vs ai_understood:
-- If the transcript clearly matches a fixed intent below, use that intent and its allowed replies.
-- If the transcript is restaurant-related but does NOT match any fixed intent (e.g., offering
-  desserts, specific dish names, custom specials, compliments about food, etc.), use intent
-  "ai_understood" and GENERATE a short natural Spanish reply + English meaning. This is the
-  expected path for ~20% of all transcripts since we can't pre-enumerate every possible thing
-  a waiter might say.
-- ONLY use "unknown" if the transcript is truly unintelligible or not restaurant-related at all.
+CORE RULES:
+- Output VALID JSON only. No extra text.
+- Speech recognition garbles words. "que eres una menu" = "quieres un menu" (do you want a menu).
+  Always interpret what a waiter would REALISTICALLY say, not the literal garbled words.
+- Keep Spanish replies short, natural Mexican Spanish (under 10 words).
+- The user is a beginner -- every reply MUST include an English translation.
+- Use a fixed intent when it fits. Use "ai_understood" when the phrase is more specific than any
+  fixed intent (e.g. "que tipo de leche prefieres" = asking about milk type, not a generic drink offer).
+- ONLY use "unknown" if the transcript is truly unintelligible or not restaurant-related.
 
 INTENTS (choose exactly one):
 - menu_offer
@@ -962,8 +938,8 @@ function resolveReply(spanish: string, intent: string): ListenReply | null {
 }
 
 /**
- * POST-VALIDATION: validate AI response against transcript constraints.
- * This is the key grounding check that prevents hallucinated intents.
+ * Build a ListenMatch from an LLM response.
+ * The LLM is the source of truth -- we only do basic sanity checks.
  */
 export function validateAndBuildFromLLM(
   data: LLMListenResponse,
@@ -974,13 +950,13 @@ export function validateAndBuildFromLLM(
   const rawConfidence = Math.max(0, Math.min(100, data.confidence ?? 15));
   const aiEvidence = data.evidence ?? data.keywords ?? [];
 
-  // ── CHECK 1: Is intent in our allowed list? ──
+  // Sanity check: is intent in our allowed list?
   const section = INTENT_TO_SECTION[intent];
   if (!section) {
     return buildUnknown({ rejectedReason: `AI returned unknown intent: ${intent}` });
   }
 
-  // ── CHECK 2: Validate evidence tokens actually appear in transcript (word-boundary) ──
+  // Validate evidence tokens appear in transcript
   const validEvidence: string[] = [];
   for (const token of aiEvidence) {
     const normedToken = normalizeTranscript(token);
@@ -989,8 +965,18 @@ export function validateAndBuildFromLLM(
     }
   }
 
-  // ── SPECIAL PATH: ai_understood — LLM understood but no fixed intent matches ──
-  // This is the key architectural change: trust the LLM's free-form reply.
+  // Helper: parse an alternate entry (supports both string and {spanish, english} formats)
+  const parseAlternate = (alt: string | { spanish: string; english: string }): ListenReply => {
+    const isObj = typeof alt === "object" && alt !== null;
+    return {
+      spanish: isObj ? (alt as { spanish: string }).spanish : (alt as string),
+      english: isObj ? (alt as { english: string }).english : "",
+      pronunciation: "",
+      isAIGenerated: true,
+    };
+  };
+
+  // For ai_understood: use LLM-generated replies directly
   if (intent === "ai_understood") {
     const bestReply: ListenReply = {
       spanish: data.best_reply ?? "Si, por favor.",
@@ -998,15 +984,6 @@ export function validateAndBuildFromLLM(
       pronunciation: "",
       isAIGenerated: true,
     };
-    const alternates: ListenReply[] = (data.alternates ?? []).map((alt) => {
-      const isObj = typeof alt === "object" && alt !== null;
-      return {
-        spanish: isObj ? (alt as { spanish: string }).spanish : (alt as string),
-        english: isObj ? (alt as { english: string }).english : "",
-        pronunciation: "",
-        isAIGenerated: true,
-      };
-    });
     return {
       intent: "ai_understood",
       english,
@@ -1016,46 +993,32 @@ export function validateAndBuildFromLLM(
       evidence: validEvidence,
       keywords: validEvidence,
       bestReply,
-      alternates: alternates.slice(0, 2),
+      alternates: (data.alternates ?? []).map(parseAlternate).slice(0, 2),
       section: "AI",
       debug: { matchedRule: "ai-understood", constraintsPassed: true },
     };
   }
 
-  // ── CHECK 3: Intent constraints (for fixed intents only) ──
-  // For AI path, constraints are advisory: trust LLM if confident with evidence.
-  const constraintEvidence = checkConstraints(intent, normalizedTranscript);
-  const hasConstraints = !!INTENT_CONSTRAINTS[intent];
-  const constraintsSatisfied = !hasConstraints || constraintEvidence.length > 0;
-
-  if (hasConstraints && !constraintsSatisfied) {
-    if (rawConfidence >= 75 && validEvidence.length > 0) {
-      // Trust the LLM — it knows vocabulary our constraint list doesn't cover
-    } else {
-      return buildUnknown({
-        rejectedReason: `AI chose ${intent} but no constraint tokens found (conf=${rawConfidence}, evidence=${validEvidence.length})`,
-      });
-    }
-  }
-
-  // Merge evidence
-  const allEvidence = [...new Set([...validEvidence, ...constraintEvidence])];
-
-  // Resolve replies from fixed sets
+  // For fixed intents: resolve replies from REPLY_SETS, with LLM english translations
   const replies = REPLY_SETS[intent] ?? REPLY_SETS.unknown;
   let bestReply = data.best_reply ? resolveReply(data.best_reply, intent) : null;
   if (!bestReply) bestReply = replies[0];
+  // Use LLM's english translation for the best reply if available
+  if (data.best_reply_english) bestReply = { ...bestReply, english: data.best_reply_english };
 
   const alternates: ListenReply[] = [];
   if (data.alternates) {
     for (const alt of data.alternates) {
       const altSpanish = typeof alt === "object" && alt !== null ? (alt as { spanish: string }).spanish : (alt as string);
+      const altEnglish = typeof alt === "object" && alt !== null ? (alt as { english: string }).english : "";
       const resolved = resolveReply(altSpanish, intent);
       if (resolved && resolved.spanish !== bestReply.spanish) {
-        alternates.push(resolved);
+        // Use LLM's english if available, otherwise keep the fixed reply's english
+        alternates.push(altEnglish ? { ...resolved, english: altEnglish } : resolved);
       }
     }
   }
+  // Fill remaining alternates from fixed reply sets
   if (alternates.length < 2) {
     for (const r of replies) {
       if (r.spanish !== bestReply.spanish && !alternates.find((a) => a.spanish === r.spanish)) {
@@ -1071,8 +1034,8 @@ export function validateAndBuildFromLLM(
     confidence: rawConfidence,
     source: "ai",
     routerPath: "ai" as RouterPath,
-    evidence: allEvidence,
-    keywords: allEvidence,
+    evidence: validEvidence,
+    keywords: validEvidence,
     bestReply,
     alternates: alternates.slice(0, 2),
     section,
