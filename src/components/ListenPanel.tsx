@@ -360,8 +360,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         addLog("info", `Low confidence (${detMatch.confidence}), running LLM classifier...`);
         setLlmClassifying(true);
 
-        console.log("[v0] LLM fallback firing for:", corrected);
-        addLog("info", `Calling /api/classify with transcript: "${corrected}"`);
+        addLog("info", `Calling LLM for: "${corrected}"`);
         fetch("/api/classify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -371,8 +370,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           }),
         })
           .then((r) => {
-            console.log("[v0] /api/classify response status:", r.status);
-            addLog("info", `/api/classify status: ${r.status}`);
             if (!r.ok) {
               return r.text().then((t) => {
                 throw new Error(`API ${r.status}: ${t.slice(0, 200)}`);
@@ -381,8 +378,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             return r.json();
           })
           .then((data: LLMListenResponse & { error?: string }) => {
-            console.log("[v0] LLM response data:", JSON.stringify(data).slice(0, 500));
-            addLog("info", `LLM raw response: ${JSON.stringify(data).slice(0, 200)}`);
 
             if (data.error) {
               addLog("error", `LLM error: ${data.error}`);
@@ -415,8 +410,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           })
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : "LLM classify failed";
-            console.log("[v0] LLM CATCH error:", msg, err);
-            addLog("error", `LLM FAILED: ${msg}`);
+            addLog("error", `LLM: ${msg}`);
             // On error, keep deterministic result (already set above)
           })
           .finally(() => setLlmClassifying(false));
