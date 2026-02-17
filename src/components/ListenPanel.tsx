@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { buildListenResult, LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
+import { LLM_SYSTEM_PROMPT, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
@@ -153,6 +153,76 @@ function correctSpanish(raw: string): string {
   return corrected;
 }
 
+/* ── Instant word-by-word Spanish-to-English dictionary ── */
+const ES_EN: Record<string, string> = {
+  // question words
+  que: "what", cual: "which", como: "how", donde: "where", cuando: "when",
+  cuanto: "how much", cuantos: "how many", cuantas: "how many", quien: "who",
+  // common verbs
+  quiere: "want", quieres: "do you want", quieren: "do you want",
+  desea: "would you like", deseas: "would you like",
+  prefiere: "prefer", prefieres: "do you prefer", prefieren: "do you prefer",
+  gusta: "like", gustaria: "would like",
+  tiene: "have", tenemos: "we have", hay: "there is",
+  esta: "is", estan: "are", es: "is", son: "are",
+  tomar: "drink", beber: "drink", comer: "eat", pedir: "order", ordenar: "order",
+  necesita: "need", necesitas: "do you need",
+  puede: "can", puedo: "I can", le: "you", les: "you all",
+  traer: "bring", traigo: "I bring", servir: "serve",
+  recomienda: "recommend", recomendar: "recommend",
+  probar: "try",
+  // restaurant nouns
+  mesa: "table", silla: "chair", menu: "menu", carta: "menu",
+  cuenta: "check", propina: "tip", servicio: "service", recibo: "receipt",
+  factura: "invoice", cambio: "change", pesos: "pesos",
+  comida: "food", bebida: "drink", postre: "dessert", entrada: "appetizer",
+  plato: "dish", platillo: "dish", orden: "order",
+  carne: "meat", pollo: "chicken", res: "beef", cerdo: "pork", pescado: "fish",
+  camarones: "shrimp", bistec: "steak", filete: "fillet",
+  arroz: "rice", frijoles: "beans", ensalada: "salad",
+  sopa: "soup", caldo: "broth", tacos: "tacos", tortilla: "tortilla",
+  pan: "bread", queso: "cheese", salsa: "sauce", chile: "chili",
+  agua: "water", cerveza: "beer", vino: "wine", cafe: "coffee", te: "tea",
+  jugo: "juice", leche: "milk", refresco: "soda", limonada: "lemonade",
+  tequila: "tequila", mezcal: "mezcal", horchata: "horchata",
+  copa: "glass", vaso: "glass", botella: "bottle", jarra: "pitcher",
+  // food adjectives
+  picante: "spicy", caliente: "hot", frio: "cold", grande: "large", chico: "small",
+  dulce: "sweet", rico: "tasty", bueno: "good", fresco: "fresh",
+  bien: "well", cocido: "cooked", crudo: "raw", medio: "medium",
+  blanco: "white", rojo: "red", negro: "black", verde: "green", integral: "whole grain",
+  // common phrases
+  por: "please/for", favor: "please", gracias: "thanks", de: "of", el: "the", la: "the",
+  los: "the", las: "the", un: "a", una: "a", su: "your", algo: "something",
+  mas: "more", nada: "nothing", todo: "everything", otra: "another", otro: "another",
+  tipo: "type", clase: "kind", especial: "special", del: "of the", dia: "day",
+  hoy: "today", primero: "first", segundo: "second",
+  // greetings & small talk
+  hola: "hello", buenas: "hello", bienvenido: "welcome", bienvenidos: "welcome",
+  noches: "evening", tardes: "afternoon", dias: "morning",
+  primera: "first", vez: "time", visita: "visit", vives: "do you live",
+  // seating
+  adentro: "inside", afuera: "outside", terraza: "terrace",
+  personas: "people",
+  // payment
+  tarjeta: "card", efectivo: "cash", pagar: "pay",
+};
+
+function quickTranslate(spanish: string): string {
+  const words = spanish.toLowerCase()
+    .replace(/[?!.,;:]/g, "")
+    .replace(/\u00e9/g, "e").replace(/\u00e1/g, "a").replace(/\u00ed/g, "i")
+    .replace(/\u00f3/g, "o").replace(/\u00fa/g, "u").replace(/\u00f1/g, "n")
+    .split(/\s+/)
+    .filter(Boolean);
+  const translated = words.map(w => ES_EN[w] ?? w);
+  // Capitalize first word
+  if (translated.length > 0) {
+    translated[0] = translated[0].charAt(0).toUpperCase() + translated[0].slice(1);
+  }
+  return translated.join(" ");
+}
+
 /* ── Restaurant hotwords for grammar hints ── */
 const RESTAURANT_HINTS = [
   "afuera", "adentro", "mesa", "cuenta", "propina", "servicio",
@@ -299,6 +369,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
   const [correctedText, setCorrectedText] = useState("");
+  const [instantEnglish, setInstantEnglish] = useState("");
   const [match, setMatch] = useState<ListenMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
@@ -334,31 +405,23 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   }, []);
 
   /* ── Process transcript (shared by both modes) ──
-   * GROUNDED: every listen creates a FRESH ListenMatch via buildListenResult.
-   * Old state is completely overwritten. If constraints fail -> unknown.
-   * AI is only consulted if deterministic confidence < 60, then post-validated.
+   * Architecture: LLM-only. No deterministic classifier.
+   * 1. Show "Heard: X" + "Translating..." immediately
+   * 2. LLM responds (~800ms) with intent, translation, and reply options
+   * 3. If LLM fails, show error -- no wrong-guess fallback
    */
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
 
-      // ── FRESH STATE: wipe old match immediately ──
       setMatch(null);
 
       const corrected = correctSpanish(rawText);
       setCorrectedText(corrected);
+      setInstantEnglish(quickTranslate(corrected));
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      const normed = normalizeTranscript(corrected);
-
-      // ── PASS 1: buildListenResult (always fresh, constraint-validated) ──
-      const detMatch = buildListenResult(corrected);
-      setMatch(detMatch);
-      addLog("intent", `[det] ${detMatch.intent} conf=${detMatch.confidence} path=${detMatch.routerPath} evidence=[${detMatch.evidence.join(", ")}]${detMatch.debug?.matchedRule ? ` rule=${detMatch.debug.matchedRule}` : ""}`);
-
-      // ── PASS 2: ALWAYS fire LLM in parallel (server-side proxy) ──
-      // Uses /_llm/classify (NOT /api/) to avoid Vercel Sandbox serverless interception.
-      // API key stays server-side only.
+      // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
 
       (async () => {
@@ -382,74 +445,14 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           const data: LLMListenResponse = await resp.json();
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
-          const validatedMatch = validateAndBuildFromLLM(data, normed);
+          const llmMatch = validateAndBuildFromLLM(data, normalizeTranscript(corrected));
 
-          if (validatedMatch.debug?.rejectedReason) {
-            addLog("error", `[LLM REJECTED] ${validatedMatch.debug.rejectedReason}`);
+          if (llmMatch.debug?.rejectedReason) {
+            addLog("error", `[LLM REJECTED] ${llmMatch.debug.rejectedReason}`);
             return;
           }
 
-          // ── UPGRADE DECISION ──
-          // Core principle: det confidence reflects evidence quality.
-          //   92 = multi-word phrase match (very reliable, hard to override)
-          //   55-65 = single keyword (ambiguous, easy to override)
-          //   <50 = stop words only (unreliable, always override)
-          //
-          // The LLM adds contextual understanding: "leche" alone -> drinks,
-          // but "tipo de leche prefieres" -> which milk type. The LLM sees
-          // the full phrase and understands the real question.
-          //
-          // Guard rail: if the LLM's english would be nonsensical for a waiter
-          // to say (e.g. "Are you a food menu?"), it's hallucinating on garbled
-          // speech and we keep the deterministic result.
-
-          const detHasKnownIntent = detMatch.intent !== "unknown";
-          const llmHasKnownIntent = validatedMatch.intent !== "unknown" && validatedMatch.intent !== "ai_understood";
-          const llmIsAiUnderstood = validatedMatch.intent === "ai_understood";
-
-          let shouldUpgrade = false;
-
-          if (detMatch.intent === "unknown") {
-            // Det had nothing -- any LLM result is better
-            shouldUpgrade = validatedMatch.intent !== "unknown";
-          } else if (llmHasKnownIntent && validatedMatch.intent !== detMatch.intent) {
-            // LLM mapped to a DIFFERENT known intent -- trust LLM's context
-            shouldUpgrade = validatedMatch.confidence > 60;
-          } else if (llmHasKnownIntent && validatedMatch.intent === detMatch.intent) {
-            // LLM agrees with det's intent. Upgrade if the LLM has a more specific
-            // english translation (e.g. "What type of milk?" vs generic "What to drink?")
-            // The reply set stays the same since it's the same intent, but english changes.
-            if (validatedMatch.english !== detMatch.english && validatedMatch.confidence >= 70) {
-              shouldUpgrade = true;
-            }
-          } else if (llmIsAiUnderstood && !detHasKnownIntent) {
-            // LLM understood something det didn't -- use it
-            shouldUpgrade = true;
-          } else if (llmIsAiUnderstood && detHasKnownIntent) {
-            // LLM returned ai_understood while det has a known intent.
-            // Use a sliding scale based on det confidence:
-            //   det <= 65 (single keyword): LLM likely has better context, override
-            //   det 66-84 (moderate match): LLM needs high confidence to override
-            //   det >= 85 (multi-word phrase): almost never override with ai_understood
-            if (detMatch.confidence <= 65) {
-              // Single-keyword det match -- LLM probably understands the full phrase better
-              shouldUpgrade = validatedMatch.confidence >= 60;
-            } else if (detMatch.confidence <= 84) {
-              // Moderate det match -- LLM needs to be very confident
-              shouldUpgrade = validatedMatch.confidence >= 85;
-            } else {
-              // Strong multi-word det match -- keep det, ai_understood is likely
-              // a literal translation of garbled speech
-              shouldUpgrade = false;
-            }
-          }
-
-          if (shouldUpgrade) {
-            setMatch(validatedMatch);
-            addLog("info", `LLM: ${detMatch.intent}(${detMatch.confidence}) -> ${validatedMatch.intent}(${validatedMatch.confidence})`);
-          } else {
-            addLog("info", `Kept det: ${detMatch.intent}(${detMatch.confidence}), LLM was ${validatedMatch.intent}(${validatedMatch.confidence})`);
-          }
+          setMatch(llmMatch);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
           addLog("error", `LLM: ${msg}`);
@@ -469,6 +472,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     setInterimText("");
     setFinalText("");
     setCorrectedText("");
+    setInstantEnglish("");
     setMatch(null);
 
     addLog("capture", "Requesting mic (capture mode)...");
@@ -600,6 +604,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     setInterimText("");
     setFinalText("");
     setCorrectedText("");
+    setInstantEnglish("");
     setMatch(null);
     finalTextRef.current = "";
 
@@ -675,6 +680,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         }
       } else if (interim) {
         setInterimText(interim);
+        setInstantEnglish(quickTranslate(interim));
         addLog("partial", `"${interim}"`);
       }
     };
@@ -776,7 +782,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ══════════════════════════��════════════════════════════════════════════
+  /* ══════════════════════════���═════════════════��══════════════════════════
      RENDER
      ══════════════════════════════════════════════════════���════════════════ */
   return (
@@ -832,72 +838,59 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </div>
       )}
 
-      {/* ── THEY SAID ── */}
+      {/* ── CARD 1: WHAT WE HEARD (Spanish + literal English) ── */}
       {displayText && (
-        <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${match ? sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40" : "border-stone-200/60 dark:border-stone-700/40"}`}>
+        <div className="animate-fade-in rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
+            {isInterim ? "Hearing..." : "We heard"}
+          </p>
+          <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${isInterim ? "opacity-60" : ""}`}>
+            {`\u201C${displayText}\u201D`}
+          </p>
+          {/* Literal English -- instant dictionary translation, upgrades to LLM once available */}
+          {(() => {
+            const literalText = (match && !llmClassifying && match.literalEnglish) ? match.literalEnglish : instantEnglish;
+            return literalText ? (
+              <p className={`mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400 ${isInterim ? "opacity-50" : ""}`}>
+                {literalText}
+              </p>
+            ) : null;
+          })()}
+        </div>
+      )}
+
+      {/* ── CARD 2: WHAT THEY MEANT (LLM interpretation) ── */}
+      {/* Show loading placeholder while LLM is working */}
+      {llmClassifying && !isInterim && displayText && (
+        <div className="animate-fade-in rounded-2xl border border-dashed border-stone-300/60 bg-gradient-to-b from-stone-50/50 to-stone-100/30 p-4 dark:border-stone-600/40 dark:from-stone-800/50 dark:to-stone-800/30">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They likely meant</p>
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
+            <p className="animate-pulse text-[14px] font-semibold text-sky-600 dark:text-sky-400">
+              Checking what they most likely meant...
+            </p>
+          </div>
+        </div>
+      )}
+      {/* Show actual interpretation once LLM responds */}
+      {match && hasResults && !llmClassifying && (
+        <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They said</p>
-            {match && match.intent !== "unknown" && (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They likely meant</p>
+            {match.intent !== "unknown" && (
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
                 {INTENT_LABELS[match.intent] ?? match.section}
               </span>
             )}
           </div>
-
-          {/* English meaning */}
-          {match && hasResults ? (
-            <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
-              {`\u201C${match.english}\u201D`}
-            </p>
-          ) : (
-            <p className={`text-[15px] font-bold leading-tight text-stone-700 dark:text-stone-300 ${isInterim ? "opacity-50" : ""}`}>
-              {state === "processing" ? "Interpreting..." : "Listening..."}
-            </p>
-          )}
-
-          {/* Spanish heard */}
-          <p className={`mt-1.5 text-[13px] leading-snug text-stone-400 dark:text-stone-500 ${isInterim ? "opacity-50" : ""}`}>
-            <span className="font-medium text-stone-500/60 dark:text-stone-600">{"Heard: "}</span>
-            {`\u201C${displayText}\u201D`}
+          <p className="text-[20px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
+            {`\u201C${match.english}\u201D`}
           </p>
-
-          {correctedText && correctedText !== finalText && hasResults && (
-            <p className="mt-1 text-[11px] text-stone-300 dark:text-stone-600">
-              {"Corrected: \u201C"}{correctedText}{"\u201D"}
-            </p>
-          )}
-
-          {/* Confidence + LLM status — grounded logic */}
-          {match && hasResults && (() => {
-            const isStrong = match.source === "deterministic"
-              ? match.confidence >= 85
-              : match.source === "ai" && match.confidence >= 85 && match.evidence.length > 0;
-            const isBestGuess = !isStrong && match.confidence >= 60;
-            const label = isStrong ? "Strong match" : isBestGuess ? "Best guess" : "Unsure";
-            const dotColor = isStrong ? "bg-emerald-400" : isBestGuess ? "bg-amber-400" : "bg-stone-300";
-            const textColor = isStrong ? "text-emerald-600 dark:text-emerald-400" : isBestGuess ? "text-amber-600 dark:text-amber-400" : "text-stone-400";
-            return (
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <div className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
-                  <span className={`text-[10px] font-semibold ${textColor}`}>{label}</span>
-                  {match.evidence.length > 0 && (
-                    <span className="text-[9px] text-stone-400 dark:text-stone-500">
-                      {`[${match.evidence.slice(0, 3).join(", ")}]`}
-                    </span>
-                  )}
-                </div>
-                {llmClassifying && (
-                  <span className="animate-pulse text-[10px] font-medium text-sky-500 dark:text-sky-400">Refining...</span>
-                )}
-              </div>
-            );
-          })()}
         </div>
       )}
 
-      {/* ── BEST REPLY ── */}
-      {match && hasResults && (
+      {/* ── BEST REPLY -- only shown after LLM responds ── */}
+      {match && hasResults && !llmClassifying && (
         <div className="animate-fade-in">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             {match.section === "Clarify"
