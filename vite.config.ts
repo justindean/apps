@@ -1,4 +1,3 @@
-// App restarted
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
@@ -76,35 +75,23 @@ function transcribePlugin(): Plugin {
  * Dev-only middleware that proxies /api/classify to OpenAI Chat for LLM intent classification.
  */
 function classifyPlugin(): Plugin {
-  let apiKey: string | undefined
-
   return {
     name: 'classify-dev',
-    configResolved(config) {
-      const env = loadEnv(config.mode, process.cwd(), '')
-      apiKey = env.AI_GATEWAY_API_KEY || process.env.AI_GATEWAY_API_KEY || env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
-    },
     configureServer(server) {
-      // Use /api/llm-classify to avoid conflict with api/classify.ts serverless function
-      server.middlewares.use('/api/llm-classify', async (req: IncomingMessage, res) => {
+      server.middlewares.use('/api/classify', async (req: IncomingMessage, res) => {
         if (req.method !== 'POST') {
           res.writeHead(405, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'POST required' }))
           return
         }
 
-        const key = apiKey || process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY
+        const key = process.env.OPENAI_API_KEY
         if (!key) {
-          console.log('[classify] ERROR: No API key found (checked AI_GATEWAY_API_KEY and OPENAI_API_KEY)')
+          console.log('[classify] ERROR: OPENAI_API_KEY not found in process.env')
           res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'Missing API key' }))
+          res.end(JSON.stringify({ error: 'Missing OPENAI_API_KEY' }))
           return
         }
-
-        // Determine if this is an AI Gateway key or direct OpenAI key
-        const isGateway = !key.startsWith('sk-')
-        const baseUrl = isGateway ? 'https://api.vercel.ai/v1' : 'https://api.openai.com/v1'
-        const model = isGateway ? 'openai/gpt-4o-mini' : 'gpt-4o-mini'
 
         try {
           const chunks: Uint8Array[] = []
@@ -122,19 +109,19 @@ function classifyPlugin(): Plugin {
 
           const { transcript, systemPromptOverride } = JSON.parse(bodyStr)
 
-          console.log(`[classify] transcript: "${transcript}", using: ${isGateway ? 'AI Gateway' : 'OpenAI direct'}`)
+          console.log(`[classify] transcript: "${transcript}"`)
 
           const systemPrompt = systemPromptOverride as string
           const userPrompt = `Transcript: "${transcript}"\nTone: Neutral`
 
-          const resp = await fetch(`${baseUrl}/chat/completions`, {
+          const resp = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${key}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model,
+              model: 'gpt-4o-mini',
               temperature: 0.2,
               max_tokens: 300,
               response_format: { type: 'json_object' },
@@ -353,12 +340,6 @@ function openaiPingPlugin(): Plugin {
   }
 }
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  return {
-    plugins: [react(), transcribePlugin(), classifyPlugin(), replyGeneratorPlugin(), openaiPingPlugin()],
-    define: {
-      'import.meta.env.VITE_OPENAI_API_KEY': JSON.stringify(env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || ''),
-    },
-  }
+export default defineConfig({
+  plugins: [react(), transcribePlugin(), classifyPlugin(), replyGeneratorPlugin(), openaiPingPlugin()],
 })

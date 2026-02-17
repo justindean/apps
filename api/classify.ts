@@ -14,16 +14,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "POST required" });
   }
 
-  const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    console.log("[classify] ERROR: No API key found (checked AI_GATEWAY_API_KEY and OPENAI_API_KEY)");
-    return res.status(500).json({ error: "Missing API key" });
+    console.log("[classify] ERROR: OPENAI_API_KEY not set");
+    return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
   }
-
-  // Determine if this is an AI Gateway key or direct OpenAI key
-  const isGateway = !apiKey.startsWith("sk-");
-  const baseUrl = isGateway ? "https://api.vercel.ai/v1" : "https://api.openai.com/v1";
-  const model = isGateway ? "openai/gpt-4o-mini" : "gpt-4o-mini";
 
   try {
     const { transcript, systemPromptOverride } = req.body as {
@@ -40,14 +35,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const systemPrompt = systemPromptOverride;
     const userPrompt = `Transcript: "${transcript}"\nTone: Neutral`;
 
-    const resp = await fetch(`${baseUrl}/chat/completions`, {
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model,
+        model: "gpt-4o-mini",
         temperature: 0.2,
         max_tokens: 300,
         response_format: { type: "json_object" },
