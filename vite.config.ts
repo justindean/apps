@@ -78,8 +78,8 @@ function classifyPlugin(): Plugin {
   return {
     name: 'classify-dev',
     configureServer(server) {
-      // Use /_llm/ prefix (NOT /api/) because Vercel Sandbox intercepts /api/* for serverless functions
-      server.middlewares.use('/_llm/classify', async (req: IncomingMessage, res) => {
+      // Use /api/classify — matches production serverless function path
+      server.middlewares.use('/api/classify', async (req: IncomingMessage, res) => {
         console.log(`[classify] HIT: ${req.method} ${req.url}`)
         if (req.method !== 'POST') {
           res.writeHead(405, { 'Content-Type': 'application/json' })
