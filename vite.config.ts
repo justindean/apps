@@ -93,6 +93,7 @@ function classifyPlugin(): Plugin {
 
         const key = apiKey || process.env.OPENAI_API_KEY
         if (!key) {
+          console.log('[classify] ERROR: No OPENAI_API_KEY found')
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'Missing OPENAI_API_KEY' }))
           return
@@ -113,6 +114,9 @@ function classifyPlugin(): Plugin {
           )
 
           const { transcript, systemPromptOverride } = JSON.parse(bodyStr)
+
+          console.log(`[classify] Received transcript: "${transcript}"`)
+          console.log(`[classify] Using API key: ${key.slice(0, 7)}...${key.slice(-4)}`)
 
           const systemPrompt = systemPromptOverride as string
 
@@ -138,6 +142,7 @@ function classifyPlugin(): Plugin {
 
           if (!resp.ok) {
             const errText = await resp.text()
+            console.log(`[classify] OpenAI ERROR: ${resp.status} ${errText.slice(0, 200)}`)
             res.writeHead(resp.status, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ error: `OpenAI: ${errText.slice(0, 200)}` }))
             return
@@ -145,7 +150,9 @@ function classifyPlugin(): Plugin {
 
           const data = await resp.json() as { choices?: { message?: { content?: string } }[] }
           const content = data.choices?.[0]?.message?.content
+          console.log(`[classify] OpenAI response: ${content?.slice(0, 300)}`)
           if (!content) {
+            console.log('[classify] ERROR: No content in OpenAI response')
             res.writeHead(500, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ error: 'No response from model' }))
             return
@@ -155,6 +162,7 @@ function classifyPlugin(): Plugin {
           res.end(content)
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'Classification failed'
+          console.log(`[classify] CATCH error: ${msg}`)
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: msg }))
         }
