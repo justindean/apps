@@ -390,8 +390,19 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           }
 
           // ── UPGRADE DECISION ──
-          // The deterministic result already provides a known intent (or unknown).
-          // The LLM should only override in specific cases:
+          // Core principle: det confidence reflects evidence quality.
+          //   92 = multi-word phrase match (very reliable, hard to override)
+          //   55-65 = single keyword (ambiguous, easy to override)
+          //   <50 = stop words only (unreliable, always override)
+          //
+          // The LLM adds contextual understanding: "leche" alone -> drinks,
+          // but "tipo de leche prefieres" -> which milk type. The LLM sees
+          // the full phrase and understands the real question.
+          //
+          // Guard rail: if the LLM's english would be nonsensical for a waiter
+          // to say (e.g. "Are you a food menu?"), it's hallucinating on garbled
+          // speech and we keep the deterministic result.
+
           const detHasKnownIntent = detMatch.intent !== "unknown";
           const llmHasKnownIntent = validatedMatch.intent !== "unknown" && validatedMatch.intent !== "ai_understood";
           const llmIsAiUnderstood = validatedMatch.intent === "ai_understood";
@@ -402,18 +413,31 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             // Det had nothing -- any LLM result is better
             shouldUpgrade = validatedMatch.intent !== "unknown";
           } else if (llmHasKnownIntent && validatedMatch.intent !== detMatch.intent) {
-            // LLM mapped to a DIFFERENT known intent -- trust LLM's contextual understanding
-            // e.g., det said "drinks_offer" but LLM correctly identified "milk_type" context
+            // LLM mapped to a DIFFERENT known intent -- trust LLM's context
             shouldUpgrade = validatedMatch.confidence > 60;
+          } else if (llmHasKnownIntent && validatedMatch.intent === detMatch.intent) {
+            // LLM agrees with det -- keep det (it has fixed reply sets)
+            shouldUpgrade = false;
           } else if (llmIsAiUnderstood && !detHasKnownIntent) {
             // LLM understood something det didn't -- use it
             shouldUpgrade = true;
           } else if (llmIsAiUnderstood && detHasKnownIntent) {
-            // LLM returned a freeform guess but det already has a known intent.
-            // ONLY override if det confidence is very low (single-keyword guess)
-            // and LLM confidence is high. Never override a decent det match with
-            // a literal translation of garbled speech.
-            shouldUpgrade = detMatch.confidence < 50 && validatedMatch.confidence >= 80;
+            // LLM returned ai_understood while det has a known intent.
+            // Use a sliding scale based on det confidence:
+            //   det <= 65 (single keyword): LLM likely has better context, override
+            //   det 66-84 (moderate match): LLM needs high confidence to override
+            //   det >= 85 (multi-word phrase): almost never override with ai_understood
+            if (detMatch.confidence <= 65) {
+              // Single-keyword det match -- LLM probably understands the full phrase better
+              shouldUpgrade = validatedMatch.confidence >= 60;
+            } else if (detMatch.confidence <= 84) {
+              // Moderate det match -- LLM needs to be very confident
+              shouldUpgrade = validatedMatch.confidence >= 85;
+            } else {
+              // Strong multi-word det match -- keep det, ai_understood is likely
+              // a literal translation of garbled speech
+              shouldUpgrade = false;
+            }
           }
 
           if (shouldUpgrade) {
