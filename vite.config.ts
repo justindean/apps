@@ -81,7 +81,7 @@ function classifyPlugin(): Plugin {
     name: 'classify-dev',
     configResolved(config) {
       const env = loadEnv(config.mode, process.cwd(), '')
-      apiKey = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+      apiKey = env.AI_GATEWAY_API_KEY || process.env.AI_GATEWAY_API_KEY || env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
     },
     configureServer(server) {
       server.middlewares.use('/api/classify', async (req: IncomingMessage, res) => {
@@ -91,13 +91,18 @@ function classifyPlugin(): Plugin {
           return
         }
 
-        const key = apiKey || process.env.OPENAI_API_KEY
+        const key = apiKey || process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY
         if (!key) {
-          console.log('[classify] ERROR: No OPENAI_API_KEY found')
+          console.log('[classify] ERROR: No API key found (checked AI_GATEWAY_API_KEY and OPENAI_API_KEY)')
           res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'Missing OPENAI_API_KEY' }))
+          res.end(JSON.stringify({ error: 'Missing API key' }))
           return
         }
+
+        // Determine if this is an AI Gateway key or direct OpenAI key
+        const isGateway = !key.startsWith('sk-')
+        const baseUrl = isGateway ? 'https://api.vercel.ai/v1' : 'https://api.openai.com/v1'
+        const model = isGateway ? 'openai/gpt-4o-mini' : 'gpt-4o-mini'
 
         try {
           const chunks: Uint8Array[] = []
@@ -115,21 +120,19 @@ function classifyPlugin(): Plugin {
 
           const { transcript, systemPromptOverride } = JSON.parse(bodyStr)
 
-          console.log(`[classify] Received transcript: "${transcript}"`)
-          console.log(`[classify] Using API key: ${key.slice(0, 7)}...${key.slice(-4)}`)
+          console.log(`[classify] transcript: "${transcript}", using: ${isGateway ? 'AI Gateway' : 'OpenAI direct'}`)
 
           const systemPrompt = systemPromptOverride as string
-
           const userPrompt = `Transcript: "${transcript}"\nTone: Neutral`
 
-          const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+          const resp = await fetch(`${baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${key}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'gpt-4o-mini',
+              model,
               temperature: 0.2,
               max_tokens: 300,
               response_format: { type: 'json_object' },
@@ -142,17 +145,16 @@ function classifyPlugin(): Plugin {
 
           if (!resp.ok) {
             const errText = await resp.text()
-            console.log(`[classify] OpenAI ERROR: ${resp.status} ${errText.slice(0, 200)}`)
+            console.log(`[classify] LLM ERROR: ${resp.status} ${errText.slice(0, 200)}`)
             res.writeHead(resp.status, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: `OpenAI: ${errText.slice(0, 200)}` }))
+            res.end(JSON.stringify({ error: `LLM ${resp.status}: ${errText.slice(0, 200)}` }))
             return
           }
 
           const data = await resp.json() as { choices?: { message?: { content?: string } }[] }
           const content = data.choices?.[0]?.message?.content
-          console.log(`[classify] OpenAI response: ${content?.slice(0, 300)}`)
+          console.log(`[classify] LLM response: ${content?.slice(0, 300)}`)
           if (!content) {
-            console.log('[classify] ERROR: No content in OpenAI response')
             res.writeHead(500, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ error: 'No response from model' }))
             return
@@ -182,7 +184,7 @@ function replyGeneratorPlugin(): Plugin {
     name: 'reply-generator-dev',
     configResolved(config) {
       const env = loadEnv(config.mode, process.cwd(), '')
-      apiKey = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+      apiKey = env.AI_GATEWAY_API_KEY || process.env.AI_GATEWAY_API_KEY || env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
     },
     configureServer(server) {
       server.middlewares.use('/api/generate-reply', async (req: IncomingMessage, res) => {
@@ -192,12 +194,16 @@ function replyGeneratorPlugin(): Plugin {
           return
         }
 
-        const key = apiKey || process.env.OPENAI_API_KEY
+        const key = apiKey || process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY
         if (!key) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'Missing OPENAI_API_KEY' }))
+          res.end(JSON.stringify({ error: 'Missing API key' }))
           return
         }
+
+        const isGateway = !key.startsWith('sk-')
+        const baseUrl = isGateway ? 'https://api.vercel.ai/v1' : 'https://api.openai.com/v1'
+        const model = isGateway ? 'openai/gpt-4o-mini' : 'gpt-4o-mini'
 
         try {
           const chunks: Uint8Array[] = []
@@ -215,14 +221,14 @@ function replyGeneratorPlugin(): Plugin {
 
           const { systemPrompt, userPrompt } = JSON.parse(bodyStr)
 
-          const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+          const resp = await fetch(`${baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${key}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'gpt-4o-mini',
+              model,
               temperature: 0.15,
               max_tokens: 200,
               response_format: { type: 'json_object' },
@@ -236,7 +242,7 @@ function replyGeneratorPlugin(): Plugin {
           if (!resp.ok) {
             const errText = await resp.text()
             res.writeHead(resp.status, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: `OpenAI: ${errText.slice(0, 200)}` }))
+            res.end(JSON.stringify({ error: `LLM: ${errText.slice(0, 200)}` }))
             return
           }
 
@@ -272,22 +278,25 @@ function openaiPingPlugin(): Plugin {
     name: 'openai-ping-dev',
     configResolved(config) {
       const env = loadEnv(config.mode, process.cwd(), '')
-      apiKey = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+      apiKey = env.AI_GATEWAY_API_KEY || process.env.AI_GATEWAY_API_KEY || env.OPENAI_API_KEY || process.env.OPENAI_API_KEY
     },
     configureServer(server) {
       server.middlewares.use('/api/debug/openai-ping', async (_req: IncomingMessage, res) => {
-        const key = apiKey || process.env.OPENAI_API_KEY
+        const key = apiKey || process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY
         if (!key) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: false, error: 'OPENAI_API_KEY is not set in environment variables' }))
+          res.end(JSON.stringify({ ok: false, error: 'No API key set (checked AI_GATEWAY_API_KEY and OPENAI_API_KEY)' }))
           return
         }
 
-        try {
-          const model = 'gpt-4o-mini'
-          console.log(`[openai-ping] Sending ping to ${model}...`)
+        const isGateway = !key.startsWith('sk-')
+        const baseUrl = isGateway ? 'https://api.vercel.ai/v1' : 'https://api.openai.com/v1'
+        const model = isGateway ? 'openai/gpt-4o-mini' : 'gpt-4o-mini'
 
-          const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        try {
+          console.log(`[openai-ping] Sending ping to ${model} via ${isGateway ? 'AI Gateway' : 'OpenAI direct'}...`)
+
+          const resp = await fetch(`${baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${key}`,
