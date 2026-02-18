@@ -1,15 +1,10 @@
 /**
- * Restaurant intent data for Listen mode — v5 (LLM-primary)
- *
- * Architecture: The LLM is the sole classifier. This file provides:
- * - Types (ListenMatch, ListenReply, LLMListenResponse)
- * - Reply sets for fixed intents (used by validateAndBuildFromLLM)
- * - Section mapping for UI colors
- * - The LLM system prompt
- * - validateAndBuildFromLLM to build a ListenMatch from LLM JSON
+ * Restaurant intent data for Listen mode -- v7 (LLM-primary, tone-aware)
+ * NOTE: This file deliberately avoids backtick template literals to prevent
+ * stale esbuild transform cache issues in the Vite dev server.
  */
 
-// ── Core types ──────────────────────────────────────────────────────────
+// -- Core types --
 
 export interface ListenReply {
   spanish: string;
@@ -34,16 +29,16 @@ export interface AlternateMeaning {
 export interface ListenMatch {
   intent: string;
   english: string;
-  literalEnglish: string; // word-for-word translation of what was heard
-  confidence: number;     // 0–100
+  literalEnglish: string;
+  confidence: number;
   source: ListenMatchSource;
   routerPath: RouterPath;
-  evidence: string[];     // exact substrings/keywords found in transcript
-  keywords: string[];     // deprecated alias for evidence (backward compat)
+  evidence: string[];
+  keywords: string[];
   bestReply: ListenReply;
   alternates: ListenReply[];
-  followUps: FollowUp[];           // conversation continuations after replying
-  alternateMeanings: AlternateMeaning[]; // other possible interpretations (low confidence)
+  followUps: FollowUp[];
+  alternateMeanings: AlternateMeaning[];
   section: string;
   debug?: {
     matchedRule?: string;
@@ -54,9 +49,7 @@ export interface ListenMatch {
   };
 }
 
-
-
-// ── Section mapping for UI colors ───────────────────────────────────────
+// -- Section mapping for UI colors --
 
 const INTENT_TO_SECTION: Record<string, string> = {
   menu_offer: "Menu",
@@ -85,7 +78,7 @@ const INTENT_TO_SECTION: Record<string, string> = {
   smalltalk_enjoying: "Smalltalk",
 };
 
-// ── Utilities ───────────────────────────────────────────────────────────
+// -- Utilities --
 
 export function normalizeTranscript(text: string): string {
   return text
@@ -102,12 +95,17 @@ function escapeRegex(s: string): string {
 }
 
 function wordMatch(token: string, normed: string): boolean {
-  const pattern = new RegExp(`(?:^|\\s|\\b)${escapeRegex(token)}(?:\\s|\\b|$)`, "i");
+  var pattern = new RegExp("(?:^|\\s|\\b)" + escapeRegex(token) + "(?:\\s|\\b|$)", "i");
   return pattern.test(normed);
 }
 
 function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
-  const fallbackReply: ListenReply = { spanish: "Puede repetir, por favor?", english: "Can you repeat, please?", pronunciation: "PWEH-deh reh-peh-TEER, por fah-VOR", isAIGenerated: false };
+  var fallbackReply: ListenReply = {
+    spanish: "Puede repetir, por favor?",
+    english: "Can you repeat, please?",
+    pronunciation: "PWEH-deh reh-peh-TEER, por fah-VOR",
+    isAIGenerated: false,
+  };
   return {
     intent: "unknown",
     english: "Not sure what they said.",
@@ -119,22 +117,25 @@ function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
     keywords: [],
     bestReply: fallbackReply,
     alternates: [
-      { spanish: "Mas despacio, por favor.", english: "Slower, please.", pronunciation: "mahs dehs-PAH-see-oh, por fah-VOR", isAIGenerated: false },
+      {
+        spanish: "Mas despacio, por favor.",
+        english: "Slower, please.",
+        pronunciation: "mahs dehs-PAH-see-oh, por fah-VOR",
+        isAIGenerated: false,
+      },
     ],
     followUps: [],
     alternateMeanings: [],
     section: "Clarify",
-    debug: { ...debug, constraintsPassed: false },
+    debug: Object.assign({}, debug, { constraintsPassed: false }),
   };
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// ========================================================================
 //  LLM prompt + response parsing
-// ══════════════════════════════════════════════════════════════════════════
+// ========================================================================
 
-// ── Base system prompt (shared across all tones) ────────────────────────
-
-const LLM_BASE_PROMPT = [
+var LLM_BASE_PROMPT = [
   "You are a restaurant Spanish interpreter for American tourists in Mexico.",
   "",
   "A waiter just said something. The user's phone captured it via speech recognition (often imperfect/garbled).",
@@ -142,14 +143,14 @@ const LLM_BASE_PROMPT = [
   "",
   "CORE RULES:",
   "- Output VALID JSON only. No extra text.",
-  '- Speech recognition garbles words. "que eres una menu" = "quieres un menu" (do you want a menu).',
+  "- Speech recognition garbles words. \"que eres una menu\" = \"quieres un menu\" (do you want a menu).",
   "  Always interpret what a waiter would REALISTICALLY say, not the literal garbled words.",
   "- The user is a BEGINNER in Spanish. Every reply MUST have an English translation.",
-  '- ONLY use "unknown" if the transcript is truly unintelligible or not restaurant-related.',
+  "- ONLY use \"unknown\" if the transcript is truly unintelligible or not restaurant-related.",
   "",
   "REPLY GENERATION:",
   "- Generate replies that DIRECTLY ANSWER the specific question asked.",
-  '- DO NOT give generic "Si, por favor" when the question asks for a CHOICE.',
+  "- DO NOT give generic \"Si, por favor\" when the question asks for a CHOICE.",
   "- For yes/no questions, yes/no replies are fine.",
   "- Always provide 1 best_reply + 2 alternates, each with English translations.",
   "",
@@ -157,12 +158,12 @@ const LLM_BASE_PROMPT = [
   "- Provide 2-3 follow_ups: practical phrases the user might want to say NEXT in the conversation.",
   "- Follow-ups must be GROUNDED in real Mexican restaurant culture.",
   "- Use SPECIFIC names that people actually say in Mexico, not generic categories:",
-  '  - Beers: Modelo, Corona, Tecate, Victoria, Pacifico, Dos Equis, Bohemia, Negra Modelo (NOT "local beers" or "which do you recommend")',
-  '  - Meats: res, pollo, cerdo, pastor, bistec, chorizo (NOT generic "what meats do you have")',
-  '  - Salsas: roja, verde, habanero (NOT "which salsas")',
-  '  - Sides: frijoles, arroz, guacamole, tortillas',
-  '- Good follow-ups: "Tienes Modelo?", "Y una orden de guacamole tambien", "Es todo, gracias", "Que cervezas tienen?"',
-  '- Bad follow-ups: "Do you have local options?", "Which do you recommend?", "What brands do you carry?"',
+  "  - Beers: Modelo, Corona, Tecate, Victoria, Pacifico, Dos Equis, Bohemia, Negra Modelo (NOT \"local beers\" or \"which do you recommend\")",
+  "  - Meats: res, pollo, cerdo, pastor, bistec, chorizo (NOT generic \"what meats do you have\")",
+  "  - Salsas: roja, verde, habanero (NOT \"which salsas\")",
+  "  - Sides: frijoles, arroz, guacamole, tortillas",
+  "- Good follow-ups: \"Tienes Modelo?\", \"Y una orden de guacamole tambien\", \"Es todo, gracias\", \"Que cervezas tienen?\"",
+  "- Bad follow-ups: \"Do you have local options?\", \"Which do you recommend?\", \"What brands do you carry?\"",
   "- Think like a tourist who just wants to order something specific, not browse.",
   "- Keep them short and tone-appropriate.",
   "",
@@ -181,30 +182,28 @@ const LLM_BASE_PROMPT = [
   "",
   "OUTPUT JSON:",
   "{",
-  '  "intent": "<one intent>",',
-  '  "literal_english": "<word-for-word English translation of the raw Spanish heard>",',
-  '  "english": "<natural English interpretation of what they MEANT, correcting for garbled speech>",',
-  '  "evidence": ["<token from transcript>"],',
-  '  "confidence": 0-100,',
-  '  "best_reply": "<contextual Spanish reply>",',
-  '  "best_reply_english": "<English translation of best_reply>",',
-  '  "alternates": [',
-  '    {"spanish": "<reply>", "english": "<translation>"},',
-  '    {"spanish": "<reply>", "english": "<translation>"}',
+  "  \"intent\": \"<one intent>\",",
+  "  \"literal_english\": \"<word-for-word English translation of the raw Spanish heard>\",",
+  "  \"english\": \"<natural English interpretation of what they MEANT, correcting for garbled speech>\",",
+  "  \"evidence\": [\"<token from transcript>\"],",
+  "  \"confidence\": 0-100,",
+  "  \"best_reply\": \"<contextual Spanish reply>\",",
+  "  \"best_reply_english\": \"<English translation of best_reply>\",",
+  "  \"alternates\": [",
+  "    {\"spanish\": \"<reply>\", \"english\": \"<translation>\"},",
+  "    {\"spanish\": \"<reply>\", \"english\": \"<translation>\"}",
   "  ],",
-  '  "follow_ups": [',
-  '    {"spanish": "<what to say next>", "english": "<translation>"},',
-  '    {"spanish": "<what to say next>", "english": "<translation>"}',
+  "  \"follow_ups\": [",
+  "    {\"spanish\": \"<what to say next>\", \"english\": \"<translation>\"},",
+  "    {\"spanish\": \"<what to say next>\", \"english\": \"<translation>\"}",
   "  ],",
-  '  "alternate_meanings": [',
-  '    {"english": "<other possible meaning>", "intent": "<intent>"}',
+  "  \"alternate_meanings\": [",
+  "    {\"english\": \"<other possible meaning>\", \"intent\": \"<intent>\"}",
   "  ]",
   "}",
 ].join("\n");
 
-// ── Tone-specific few-shot examples ─────────────────────────────────────
-
-const TONE_EXAMPLES: Record<string, string> = {
+var TONE_EXAMPLES: Record<string, string> = {
   street: [
     "",
     "TONE: Street / Casual Mexican Spanish. Short, relaxed, slang OK.",
@@ -215,37 +214,37 @@ const TONE_EXAMPLES: Record<string, string> = {
     "",
     "FEW-SHOT EXAMPLES (match this vibe):",
     "",
-    'Waiter: "quieres algo de tomar?"',
-    'best_reply: "Una chela, porfa." (A beer, please.)',
-    'alternates: "Un agua, va." (A water, sure.) / "Que tienen?" (What do you have?)',
+    "Waiter: \"quieres algo de tomar?\"",
+    "best_reply: \"Una chela, porfa.\" (A beer, please.)",
+    "alternates: \"Un agua, va.\" (A water, sure.) / \"Que tienen?\" (What do you have?)",
     "",
-    'Waiter: "algo mas?"',
-    'best_reply: "Nah, estamos bien." (Nah, we\'re good.)',
-    'alternates: "Otra ronda, porfa." (Another round, please.) / "Nomas la cuenta." (Just the check.)',
+    "Waiter: \"algo mas?\"",
+    "best_reply: \"Nah, estamos bien.\" (Nah, we're good.)",
+    "alternates: \"Otra ronda, porfa.\" (Another round, please.) / \"Nomas la cuenta.\" (Just the check.)",
     "",
-    'Waiter: "como quieres la carne?"',
-    'best_reply: "Al punto, porfa." (Medium, please.)',
-    'alternates: "Bien cocida, va." (Well done, sure.) / "Termino medio." (Medium.)',
+    "Waiter: \"como quieres la carne?\"",
+    "best_reply: \"Al punto, porfa.\" (Medium, please.)",
+    "alternates: \"Bien cocida, va.\" (Well done, sure.) / \"Termino medio.\" (Medium.)",
     "",
-    'Waiter: "que tipo de arroz prefieres?"',
-    'best_reply: "El blanco, porfa." (White, please.)',
-    'alternates: "El rojo, va." (Red, sure.) / "Cual me recomiendas?" (Which one do you recommend?)',
+    "Waiter: \"que tipo de arroz prefieres?\"",
+    "best_reply: \"El blanco, porfa.\" (White, please.)",
+    "alternates: \"El rojo, va.\" (Red, sure.) / \"Cual me recomiendas?\" (Which one do you recommend?)",
     "",
-    'Waiter: "bienvenidos, cuantos son?"',
-    'best_reply: "Somos dos." (Two of us.)',
-    'alternates: "Nomas yo." (Just me.) / "Tres, porfa." (Three, please.)',
+    "Waiter: \"bienvenidos, cuantos son?\"",
+    "best_reply: \"Somos dos.\" (Two of us.)",
+    "alternates: \"Nomas yo.\" (Just me.) / \"Tres, porfa.\" (Three, please.)",
     "",
-    'Waiter: "todo bien con su comida?"',
-    'best_reply: "Todo chido, gracias." (All good, thanks.)',
-    'alternates: "Muy rico, neta." (Really tasty, for real.) / "Si, esta chido." (Yeah, it\'s great.)',
+    "Waiter: \"todo bien con su comida?\"",
+    "best_reply: \"Todo chido, gracias.\" (All good, thanks.)",
+    "alternates: \"Muy rico, neta.\" (Really tasty, for real.) / \"Si, esta chido.\" (Yeah, it's great.)",
     "",
-    'Waiter: "quieres postre?"',
-    'best_reply: "Si, que hay?" (Yeah, what\'s there?)',
-    'alternates: "Nel, estoy lleno." (Nah, I\'m full.) / "Un cafecito nomas." (Just a coffee.)',
+    "Waiter: \"quieres postre?\"",
+    "best_reply: \"Si, que hay?\" (Yeah, what's there?)",
+    "alternates: \"Nel, estoy lleno.\" (Nah, I'm full.) / \"Un cafecito nomas.\" (Just a coffee.)",
     "",
-    'Waiter: "con tarjeta o efectivo?"',
-    'best_reply: "Tarjeta, porfa." (Card, please.)',
-    'alternates: "Efectivo, va." (Cash, sure.) / "Jala contactless?" (Does contactless work?)',
+    "Waiter: \"con tarjeta o efectivo?\"",
+    "best_reply: \"Tarjeta, porfa.\" (Card, please.)",
+    "alternates: \"Efectivo, va.\" (Cash, sure.) / \"Jala contactless?\" (Does contactless work?)",
   ].join("\n"),
 
   neutral: [
@@ -257,37 +256,37 @@ const TONE_EXAMPLES: Record<string, string> = {
     "",
     "FEW-SHOT EXAMPLES (match this vibe):",
     "",
-    'Waiter: "quieres algo de tomar?"',
-    'best_reply: "Una cerveza, por favor." (A beer, please.)',
-    'alternates: "Agua, por favor." (Water, please.) / "Que tienen?" (What do you have?)',
+    "Waiter: \"quieres algo de tomar?\"",
+    "best_reply: \"Una cerveza, por favor.\" (A beer, please.)",
+    "alternates: \"Agua, por favor.\" (Water, please.) / \"Que tienen?\" (What do you have?)",
     "",
-    'Waiter: "algo mas?"',
-    'best_reply: "No, gracias." (No, thanks.)',
-    'alternates: "Si, un momento." (Yes, one moment.) / "La cuenta, por favor." (The check, please.)',
+    "Waiter: \"algo mas?\"",
+    "best_reply: \"No, gracias.\" (No, thanks.)",
+    "alternates: \"Si, un momento.\" (Yes, one moment.) / \"La cuenta, por favor.\" (The check, please.)",
     "",
-    'Waiter: "como quieres la carne?"',
-    'best_reply: "Termino medio, por favor." (Medium, please.)',
-    'alternates: "Bien cocida, por favor." (Well done, please.) / "Que me recomienda?" (What do you recommend?)',
+    "Waiter: \"como quieres la carne?\"",
+    "best_reply: \"Termino medio, por favor.\" (Medium, please.)",
+    "alternates: \"Bien cocida, por favor.\" (Well done, please.) / \"Que me recomienda?\" (What do you recommend?)",
     "",
-    'Waiter: "que tipo de arroz prefieres?"',
-    'best_reply: "Arroz blanco, por favor." (White rice, please.)',
-    'alternates: "Arroz rojo, por favor." (Red rice, please.) / "Cual recomienda?" (Which do you recommend?)',
+    "Waiter: \"que tipo de arroz prefieres?\"",
+    "best_reply: \"Arroz blanco, por favor.\" (White rice, please.)",
+    "alternates: \"Arroz rojo, por favor.\" (Red rice, please.) / \"Cual recomienda?\" (Which do you recommend?)",
     "",
-    'Waiter: "bienvenidos, cuantos son?"',
-    'best_reply: "Para dos, por favor." (For two, please.)',
-    'alternates: "Para uno, por favor." (For one, please.) / "Somos tres." (We are three.)',
+    "Waiter: \"bienvenidos, cuantos son?\"",
+    "best_reply: \"Para dos, por favor.\" (For two, please.)",
+    "alternates: \"Para uno, por favor.\" (For one, please.) / \"Somos tres.\" (We are three.)",
     "",
-    'Waiter: "todo bien con su comida?"',
-    'best_reply: "Todo bien, gracias." (Everything\'s good, thanks.)',
-    'alternates: "Muy rico, gracias." (Very tasty, thanks.) / "Si, esta muy bueno." (Yes, it\'s very good.)',
+    "Waiter: \"todo bien con su comida?\"",
+    "best_reply: \"Todo bien, gracias.\" (Everything's good, thanks.)",
+    "alternates: \"Muy rico, gracias.\" (Very tasty, thanks.) / \"Si, esta muy bueno.\" (Yes, it's very good.)",
     "",
-    'Waiter: "quieres postre?"',
-    'best_reply: "Si, que tiene?" (Yes, what do you have?)',
-    'alternates: "No, gracias." (No, thanks.) / "Un cafe, por favor." (A coffee, please.)',
+    "Waiter: \"quieres postre?\"",
+    "best_reply: \"Si, que tiene?\" (Yes, what do you have?)",
+    "alternates: \"No, gracias.\" (No, thanks.) / \"Un cafe, por favor.\" (A coffee, please.)",
     "",
-    'Waiter: "con tarjeta o efectivo?"',
-    'best_reply: "Con tarjeta, por favor." (By card, please.)',
-    'alternates: "En efectivo." (In cash.) / "Puede ser contactless?" (Can it be contactless?)',
+    "Waiter: \"con tarjeta o efectivo?\"",
+    "best_reply: \"Con tarjeta, por favor.\" (By card, please.)",
+    "alternates: \"En efectivo.\" (In cash.) / \"Puede ser contactless?\" (Can it be contactless?)",
   ].join("\n"),
 
   formal: [
@@ -299,49 +298,50 @@ const TONE_EXAMPLES: Record<string, string> = {
     "",
     "FEW-SHOT EXAMPLES (match this vibe):",
     "",
-    'Waiter: "quieres algo de tomar?"',
-    'best_reply: "Una cerveza, si es tan amable." (A beer, if you\'d be so kind.)',
-    'alternates: "Agua mineral, por favor." (Mineral water, please.) / "Que nos recomienda?" (What would you recommend?)',
+    "Waiter: \"quieres algo de tomar?\"",
+    "best_reply: \"Una cerveza, si es tan amable.\" (A beer, if you'd be so kind.)",
+    "alternates: \"Agua mineral, por favor.\" (Mineral water, please.) / \"Que nos recomienda?\" (What would you recommend?)",
     "",
-    'Waiter: "algo mas?"',
-    'best_reply: "No, muchas gracias, muy amable." (No, thank you very much, very kind.)',
-    'alternates: "Si, un momento por favor." (Yes, one moment please.) / "La cuenta, si es tan amable." (The check, if you\'d be so kind.)',
+    "Waiter: \"algo mas?\"",
+    "best_reply: \"No, muchas gracias, muy amable.\" (No, thank you very much, very kind.)",
+    "alternates: \"Si, un momento por favor.\" (Yes, one moment please.) / \"La cuenta, si es tan amable.\" (The check, if you'd be so kind.)",
     "",
-    'Waiter: "como quieres la carne?"',
-    'best_reply: "Termino medio, por favor, si es tan amable." (Medium, please, if you\'d be so kind.)',
-    'alternates: "Tres cuartos, por favor." (Medium-well, please.) / "Que termino me recomienda usted?" (What doneness would you recommend?)',
+    "Waiter: \"como quieres la carne?\"",
+    "best_reply: \"Termino medio, por favor, si es tan amable.\" (Medium, please, if you'd be so kind.)",
+    "alternates: \"Tres cuartos, por favor.\" (Medium-well, please.) / \"Que termino me recomienda usted?\" (What doneness would you recommend?)",
     "",
-    'Waiter: "que tipo de arroz prefieres?"',
-    'best_reply: "Arroz blanco, por favor." (White rice, please.)',
-    'alternates: "Arroz rojo, si es tan amable." (Red rice, if you\'d be so kind.) / "Cual me recomienda usted?" (Which would you recommend?)',
+    "Waiter: \"que tipo de arroz prefieres?\"",
+    "best_reply: \"Arroz blanco, por favor.\" (White rice, please.)",
+    "alternates: \"Arroz rojo, si es tan amable.\" (Red rice, if you'd be so kind.) / \"Cual me recomienda usted?\" (Which would you recommend?)",
     "",
-    'Waiter: "bienvenidos, cuantos son?"',
-    'best_reply: "Buenas noches, somos dos, por favor." (Good evening, we are two, please.)',
-    'alternates: "Mesa para uno, si es tan amable." (Table for one, if you\'d be so kind.) / "Somos tres personas." (We are three people.)',
+    "Waiter: \"bienvenidos, cuantos son?\"",
+    "best_reply: \"Buenas noches, somos dos, por favor.\" (Good evening, we are two, please.)",
+    "alternates: \"Mesa para uno, si es tan amable.\" (Table for one, if you'd be so kind.) / \"Somos tres personas.\" (We are three people.)",
     "",
-    'Waiter: "todo bien con su comida?"',
-    'best_reply: "Todo excelente, le agradezco mucho." (Everything\'s excellent, I appreciate it very much.)',
-    'alternates: "Muy rico, muchas gracias." (Very tasty, many thanks.) / "Estamos muy contentos, gracias." (We are very happy, thank you.)',
+    "Waiter: \"todo bien con su comida?\"",
+    "best_reply: \"Todo excelente, le agradezco mucho.\" (Everything's excellent, I appreciate it very much.)",
+    "alternates: \"Muy rico, muchas gracias.\" (Very tasty, many thanks.) / \"Estamos muy contentos, gracias.\" (We are very happy, thank you.)",
     "",
-    'Waiter: "quieres postre?"',
-    'best_reply: "Si, que nos recomienda usted?" (Yes, what would you recommend?)',
-    'alternates: "No, gracias, estamos bien." (No, thank you, we\'re fine.) / "Un cafe, si es tan amable." (A coffee, if you\'d be so kind.)',
+    "Waiter: \"quieres postre?\"",
+    "best_reply: \"Si, que nos recomienda usted?\" (Yes, what would you recommend?)",
+    "alternates: \"No, gracias, estamos bien.\" (No, thank you, we're fine.) / \"Un cafe, si es tan amable.\" (A coffee, if you'd be so kind.)",
     "",
-    'Waiter: "con tarjeta o efectivo?"',
-    'best_reply: "Con tarjeta, por favor." (By card, please.)',
-    'alternates: "En efectivo, si me permite." (In cash, if you\'ll allow me.) / "Seria posible pagar con contactless?" (Would it be possible to pay contactless?)',
+    "Waiter: \"con tarjeta o efectivo?\"",
+    "best_reply: \"Con tarjeta, por favor.\" (By card, please.)",
+    "alternates: \"En efectivo, si me permite.\" (In cash, if you'll allow me.) / \"Seria posible pagar con contactless?\" (Would it be possible to pay contactless?)",
   ].join("\n"),
 };
 
-/** Build the full system prompt for a given tone */
-export function getLLMSystemPrompt(tone: "street" | "neutral" | "formal" = "neutral"): string {
-  return LLM_BASE_PROMPT + (TONE_EXAMPLES[tone] ?? TONE_EXAMPLES.neutral);
+export function getLLMSystemPrompt(tone: "street" | "neutral" | "formal"): string {
+  if (tone === "street") return LLM_BASE_PROMPT + TONE_EXAMPLES.street;
+  if (tone === "formal") return LLM_BASE_PROMPT + TONE_EXAMPLES.formal;
+  return LLM_BASE_PROMPT + TONE_EXAMPLES.neutral;
 }
 
 // Keep for backward compat -- defaults to neutral
-export const LLM_SYSTEM_PROMPT = getLLMSystemPrompt("neutral");
+export var LLM_SYSTEM_PROMPT = getLLMSystemPrompt("neutral");
 
-// ── Parse LLM response ─────────────────────────────────────────────────
+// -- Parse LLM response --
 
 export interface LLMListenResponse {
   intent?: string;
@@ -366,72 +366,64 @@ export function validateAndBuildFromLLM(
   data: LLMListenResponse,
   normalizedTranscript: string,
 ): ListenMatch {
-  const intent = data.intent ?? "unknown";
-  const english = data.english ?? "Not sure what they said.";
-  const literalEnglish = data.literal_english ?? english;
-  const rawConfidence = Math.max(0, Math.min(100, data.confidence ?? 15));
-  const aiEvidence = data.evidence ?? data.keywords ?? [];
+  var intent = data.intent || "unknown";
+  var english = data.english || "Not sure what they said.";
+  var literalEnglish = data.literal_english || english;
+  var rawConfidence = Math.max(0, Math.min(100, data.confidence || 15));
+  var aiEvidence = data.evidence || data.keywords || [];
 
-  // Sanity check: is intent in our allowed list?
-  const section = INTENT_TO_SECTION[intent];
+  var section = INTENT_TO_SECTION[intent];
   if (!section) {
     return buildUnknown({ rejectedReason: "AI returned unknown intent: " + intent });
   }
 
-  // Validate evidence tokens appear in transcript
-  const validEvidence: string[] = [];
-  for (const token of aiEvidence) {
-    const normedToken = normalizeTranscript(token);
+  var validEvidence: string[] = [];
+  for (var i = 0; i < aiEvidence.length; i++) {
+    var normedToken = normalizeTranscript(aiEvidence[i]);
     if (wordMatch(normedToken, normalizedTranscript)) {
-      validEvidence.push(token);
+      validEvidence.push(aiEvidence[i]);
     }
   }
 
-  // Build best reply from LLM
-  const bestReply: ListenReply = {
-    spanish: data.best_reply ?? "Si, por favor.",
+  var bestReply: ListenReply = {
+    spanish: data.best_reply || "Si, por favor.",
     english: data.best_reply_english || english,
     pronunciation: "",
     isAIGenerated: true,
   };
 
-  // Build alternates from LLM
-  const alternates: ListenReply[] = (data.alternates ?? []).map((alt) => {
-    const isObj = typeof alt === "object" && alt !== null;
+  var alternates: ListenReply[] = (data.alternates || []).map(function(alt) {
+    var isObj = typeof alt === "object" && alt !== null;
     return {
       spanish: isObj ? (alt as { spanish: string }).spanish : (alt as string),
       english: isObj ? (alt as { english: string }).english : "",
       pronunciation: "",
       isAIGenerated: true,
     };
-  }).filter((a) => a.spanish !== bestReply.spanish).slice(0, 2);
+  }).filter(function(a) { return a.spanish !== bestReply.spanish; }).slice(0, 2);
 
-  // Build follow-ups from LLM
-  const followUps: FollowUp[] = (data.follow_ups ?? []).map((f) => ({
-    spanish: f.spanish,
-    english: f.english,
-  })).slice(0, 3);
+  var followUps: FollowUp[] = (data.follow_ups || []).map(function(f) {
+    return { spanish: f.spanish, english: f.english };
+  }).slice(0, 3);
 
-  // Build alternate meanings (only meaningful when confidence < 70)
-  const alternateMeanings: AlternateMeaning[] = (data.alternate_meanings ?? []).map((a) => ({
-    english: a.english,
-    intent: a.intent,
-  })).slice(0, 2);
+  var alternateMeanings: AlternateMeaning[] = (data.alternate_meanings || []).map(function(a) {
+    return { english: a.english, intent: a.intent };
+  }).slice(0, 2);
 
   return {
-    intent,
-    english,
-    literalEnglish,
+    intent: intent,
+    english: english,
+    literalEnglish: literalEnglish,
     confidence: rawConfidence,
     source: "ai",
     routerPath: "ai" as RouterPath,
     evidence: validEvidence,
     keywords: validEvidence,
-    bestReply,
-    alternates,
-    followUps,
+    bestReply: bestReply,
+    alternates: alternates,
+    followUps: followUps,
     alternateMeanings: rawConfidence < 70 ? alternateMeanings : [],
-    section,
+    section: section,
     debug: { matchedRule: "llm-primary", constraintsPassed: true },
   };
 }
