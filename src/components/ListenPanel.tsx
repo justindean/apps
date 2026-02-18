@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
-import { getLLMSystemPrompt, validateAndBuildFromLLM, normalizeTranscript } from "../data/listenClassifier";
-import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/listenClassifier";
+import { getLLMSystemPrompt, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
+import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
 
 /* ── TTS helper ── */
 function speakPhrase(text: string) {
@@ -361,74 +361,6 @@ function OpenAIPingButton({ addLog }: { addLog: (type: DebugLog["type"], text: s
   );
 }
 
-/* ── Session-level LLM result cache ──────────────────────────────────── */
-const MAX_CACHE = 50;
-interface CachedResult {
-  normalizedKey: string;       // scenario+tone+normalizedTranscript
-  match: ListenMatch;
-  raw: LLMListenResponse;
-  ts: number;
-}
-const _llmCache: CachedResult[] = [];
-
-/** Dice coefficient on character bigrams -- fast similarity metric */
-function similarity(a: string, b: string): number {
-  if (a === b) return 1;
-  if (a.length < 2 || b.length < 2) return 0;
-  const bigrams = (s: string) => {
-    const set = new Map<string, number>();
-    for (let i = 0; i < s.length - 1; i++) {
-      const bi = s.slice(i, i + 2);
-      set.set(bi, (set.get(bi) ?? 0) + 1);
-    }
-    return set;
-  };
-  const aB = bigrams(a);
-  const bB = bigrams(b);
-  let overlap = 0;
-  for (const [bi, count] of aB) overlap += Math.min(count, bB.get(bi) ?? 0);
-  return (2 * overlap) / (a.length - 1 + b.length - 1);
-}
-
-function cacheKey(scenario: string, tone: string, normalized: string): string {
-  return scenario + "|" + tone + "|" + normalized;
-}
-
-function cacheLookup(
-  scenario: string,
-  tone: string,
-  normalized: string,
-): { entry: CachedResult; type: "exact" | "similar"; score: number } | null {
-  const key = cacheKey(scenario, tone, normalized);
-  // Exact match
-  const exact = _llmCache.find((c) => c.normalizedKey === key);
-  if (exact) return { entry: exact, type: "exact", score: 1.0 };
-  // Similar match -- only within same scenario+tone prefix
-  const prefix = scenario + "|" + tone + "|";
-  let bestScore = 0;
-  let bestEntry: CachedResult | null = null;
-  for (const c of _llmCache) {
-    if (!c.normalizedKey.startsWith(prefix)) continue;
-    const cachedTranscript = c.normalizedKey.slice(prefix.length);
-    const s = similarity(normalized, cachedTranscript);
-    if (s > bestScore) { bestScore = s; bestEntry = c; }
-  }
-  if (bestEntry && bestScore >= 0.92) {
-    return { entry: bestEntry, type: "similar", score: bestScore };
-  }
-  return null;
-}
-
-function cacheStore(scenario: string, tone: string, normalized: string, match: ListenMatch, raw: LLMListenResponse) {
-  const key = cacheKey(scenario, tone, normalized);
-  // Remove existing entry with same key
-  const idx = _llmCache.findIndex((c) => c.normalizedKey === key);
-  if (idx >= 0) _llmCache.splice(idx, 1);
-  _llmCache.push({ normalizedKey: key, match, raw, ts: Date.now() });
-  // Evict oldest if over limit
-  while (_llmCache.length > MAX_CACHE) _llmCache.shift();
-}
-
 /* ── Session-level mic manager (survives across component re-mounts) ── */
 type MicStatus = "unknown" | "granted" | "denied";
 let _micStatus: MicStatus = "unknown";
@@ -478,7 +410,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [match, setMatch] = useState<ListenMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
-  const [cacheSource, setCacheSource] = useState<"exact" | "similar" | null>(null);
   const [micStatus, setMicStatus] = useState<MicStatus>(_micStatus);
 
   // Mode detection
@@ -522,78 +453,52 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
    * 2. LLM responds (~800ms) with intent, translation, and reply options
    * 3. If LLM fails, show error -- no wrong-guess fallback
    */
-  const scenario = "restaurant"; // future: pass from parent when more scenarios exist
-
-  /** Core LLM call (extracted so refresh can reuse it) */
-  const callLLM = useCallback(
-    async (corrected: string): Promise<{ match: ListenMatch; raw: LLMListenResponse } | null> => {
-      const resp = await fetch("/api/classify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transcript: corrected,
-          tone: mode,
-          systemPromptOverride: getLLMSystemPrompt(mode),
-        }),
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
-        return null;
-      }
-
-      const data: LLMListenResponse = await resp.json();
-      addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
-
-      const llmMatch = validateAndBuildFromLLM(data, normalizeTranscript(corrected));
-
-      if (llmMatch.debug?.rejectedReason) {
-        addLog("error", `[LLM REJECTED] ${llmMatch.debug.rejectedReason}`);
-        return null;
-      }
-
-      return { match: llmMatch, raw: data };
-    },
-    [mode, addLog],
-  );
-
   const processTranscript = useCallback(
-    (rawText: string, skipCache = false) => {
+    (rawText: string) => {
       if (!rawText.trim()) return;
 
       setMatch(null);
-      setCacheSource(null);
 
       const corrected = correctSpanish(rawText);
       setCorrectedText(corrected);
       setInstantEnglish(quickTranslate(corrected));
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      const normed = normalizeTranscript(corrected);
-
-      // ── Check cache first ──
-      if (!skipCache) {
-        const cached = cacheLookup(scenario, mode, normed);
-        if (cached) {
-          addLog("info", `[CACHE ${cached.type}] score=${cached.score.toFixed(2)} key=${cached.entry.normalizedKey}`);
-          setCacheSource(cached.type);
-          setMatch(cached.entry.match);
-          return;
-        }
-      }
-      addLog("info", `[CACHE miss] key=${cacheKey(scenario, mode, normed)}`);
-
-      // ── LLM call ──
+      // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
 
       (async () => {
         try {
-          const result = await callLLM(corrected);
-          if (result) {
-            cacheStore(scenario, mode, normed, result.match, result.raw);
-            setMatch(result.match);
+          console.log("[v0] Calling /api/classify with tone:", mode, "transcript:", corrected);
+          const resp = await fetch("/api/classify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transcript: corrected,
+              tone: mode,
+              systemPromptOverride: getLLMSystemPrompt(mode),
+            }),
+          });
+
+          console.log("[v0] /api/classify response status:", resp.status);
+          if (!resp.ok) {
+            const errText = await resp.text();
+            console.log("[v0] /api/classify error:", errText.slice(0, 200));
+            addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
+            return;
           }
+
+          const data: LLMListenResponse = await resp.json();
+          addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
+
+          const llmMatch = validateAndBuildFromLLM(data, normalizeTranscript(corrected));
+
+          if (llmMatch.debug?.rejectedReason) {
+            addLog("error", `[LLM REJECTED] ${llmMatch.debug.rejectedReason}`);
+            return;
+          }
+
+          setMatch(llmMatch);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
           addLog("error", `LLM: ${msg}`);
@@ -602,31 +507,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         }
       })();
     },
-    [mode, addLog, callLLM, scenario],
+    [mode, addLog],
   );
-
-  /** Force a fresh LLM call for the current transcript (bypasses cache) */
-  const forceRefreshLLM = useCallback(() => {
-    if (!correctedText.trim()) return;
-    setCacheSource(null);
-    setLlmClassifying(true);
-    const normed = normalizeTranscript(correctedText);
-
-    (async () => {
-      try {
-        const result = await callLLM(correctedText);
-        if (result) {
-          cacheStore(scenario, mode, normed, result.match, result.raw);
-          setMatch(result.match);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "LLM failed";
-        addLog("error", `LLM refresh: ${msg}`);
-      } finally {
-        setLlmClassifying(false);
-      }
-    })();
-  }, [correctedText, mode, addLog, callLLM, scenario]);
 
   /* ═══════════════════════════════════════════════════════════════════���═══
      CAPTURE MODE — fallback: record audio blob -> server Whisper
@@ -768,9 +650,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     }
   }, [addLog]);
 
-  /* ══════════���════════════��═══════════════════════════════════════════════
+  /* ═══════════════════════��═══════════════════════════════════════════════
      REALTIME MODE — SpeechRecognition streaming
-     ══════════════════════════════════════════════���════════════════════════ */
+     ═══════════════════════════════════════════════════════════════════════ */
   const startRealtime = useCallback(async () => {
     setError(null);
     setInterimText("");
@@ -1071,40 +953,18 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                 {match.confidence >= 80 ? "High" : match.confidence >= 50 ? "Med" : "Low"}
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
-              {/* Cache indicator */}
-              {cacheSource && (
-                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-sky-600 dark:bg-sky-900/40 dark:text-sky-400">
-                  Cached
-                </span>
-              )}
-              {/* Refresh button */}
-              {cacheSource && (
-                <button
-                  onClick={forceRefreshLLM}
-                  className="rounded-full p-1 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600 active:scale-90 dark:hover:bg-stone-700 dark:hover:text-stone-300"
-                  aria-label="Refresh with new LLM call"
-                  title="Get a fresh response"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <polyline points="23 4 23 10 17 10" />
-                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                  </svg>
-                </button>
-              )}
-              {match.intent !== "unknown" && (
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
-                  {INTENT_LABELS[match.intent] ?? match.section}
-                </span>
-              )}
-            </div>
+            {match.intent !== "unknown" && (
+              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
+                {INTENT_LABELS[match.intent] ?? match.section}
+              </span>
+            )}
           </div>
           <p className="text-[20px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
             {`\u201C${match.english}\u201D`}
           </p>
 
           {/* Alternate meanings for low/medium confidence */}
-          {match.alternateMeanings && match.alternateMeanings.length > 0 && (
+          {match.alternateMeanings.length > 0 && (
             <div className="mt-3 flex flex-col gap-1.5 border-t border-stone-200/40 pt-3 dark:border-stone-700/30">
               <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/40">Or possibly</p>
               {match.alternateMeanings.map((alt, i) => (
@@ -1195,7 +1055,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           )}
 
           {/* ── Follow-ups (conversation continuations) ── */}
-          {Array.isArray(match.followUps) && match.followUps.length > 0 && (
+          {match.followUps && match.followUps.length > 0 && (
             <div className="mt-4 border-t border-stone-200/40 pt-3 dark:border-stone-700/30">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
                 You could also say next
