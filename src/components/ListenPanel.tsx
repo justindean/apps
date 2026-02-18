@@ -245,45 +245,9 @@ const sectionBorderColor: Record<string, string> = {
   AI: "border-sky-300/60 dark:border-sky-600/40",
 };
 
-const sectionBadgeColor: Record<string, string> = {
-  Arrival: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
-  Drinks: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
-  Menu: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400",
-  Food: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
-  Bill: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
-  Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
-  Clarify: "bg-stone-100 text-stone-600 dark:bg-stone-800/40 dark:text-stone-400",
-  Smalltalk: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
-  AI: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
-};
+// sectionBadgeColor removed -- confidence dot replaced badge pills
 
-/* ── Humanized intent labels for badge ── */
-const INTENT_LABELS: Record<string, string> = {
-  menu_offer: "MENU",
-  table_preference: "TABLE",
-  party_size: "PARTY",
-  greeting: "GREETING",
-  order_ready: "ORDER",
-  order_items: "ORDER",
-  doneness_preference: "STEAK",
-  soups_available: "SOUPS",
-  drinks_offer: "DRINKS",
-  drinks_hot_offer: "HOT DRINKS",
-  anything_else: "MORE?",
-  check_in_food: "CHECK-IN",
-  bill_offer: "BILL",
-  payment_method: "PAYMENT",
-  tip_service: "TIP",
-  receipt: "RECEIPT",
-  not_available: "UNAVAILABLE",
-  clarification: "CLARIFY",
-  smalltalk_origin: "SMALLTALK",
-  smalltalk_live_here: "SMALLTALK",
-  smalltalk_first_time: "SMALLTALK",
-  smalltalk_enjoying: "SMALLTALK",
-  ai_understood: "AI",
-  unknown: "UNKNOWN",
-};
+// INTENT_LABELS removed -- section badge replaced by confidence dot
 
 /* ── Convert ListenReply to Phrase (for onSpeak/onCopy compatibility) ── */
 function replyToPhrase(r: ListenReply): Phrase {
@@ -940,8 +904,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   /* ── Unified start/stop ── */
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
-  const isActive = state === "listening" || state === "recording" || state === "processing";
-
   /* ── Cleanup (recognition only -- mic stream stays alive for session) ── */
   useEffect(() => {
     return () => {
