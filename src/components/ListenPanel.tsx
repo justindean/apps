@@ -464,32 +464,54 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setInstantEnglish(quickTranslate(corrected));
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
-      // ── sessionStorage cache helpers (inline, no external modules) ──
-      const CACHE_PREFIX = "th_cache_";
-      const CACHE_TTL = 30 * 60 * 1000; // 30 min
-      const CACHE_MAX = 50;
+      // ── Cache helpers (sessionStorage primary, localStorage fallback) ──
+      const CP = "th_cache_";
+      const TTL = 30 * 60 * 1000; // 30 min
+      const MAX = 50;
       const normed = normalizeTranscript(corrected);
-      const cacheKey = CACHE_PREFIX + "restaurant|" + mode + "|" + normed;
+      const cacheKey = CP + "restaurant|" + mode + "|" + normed;
+
+      // Safari-safe storage: try sessionStorage, fall back to localStorage
+      function cacheGet(key: string): string | null {
+        try { const v = sessionStorage.getItem(key); if (v !== null) return v; } catch {}
+        try { return localStorage.getItem(key); } catch {}
+        return null;
+      }
+      function cacheSet(key: string, val: string) {
+        try { sessionStorage.setItem(key, val); } catch {}
+        try { localStorage.setItem(key, val); } catch {}
+      }
+      function cacheRemove(key: string) {
+        try { sessionStorage.removeItem(key); } catch {}
+        try { localStorage.removeItem(key); } catch {}
+      }
+      function cacheKeys(): string[] {
+        const found = new Set<string>();
+        try { for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k && k.startsWith(CP)) found.add(k); } } catch {}
+        try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(CP)) found.add(k); } } catch {}
+        return Array.from(found);
+      }
 
       // Check cache
       try {
-        const raw = sessionStorage.getItem(cacheKey);
+        const raw = cacheGet(cacheKey);
         if (raw) {
           const entry = JSON.parse(raw);
-          if (entry && entry.ts && Date.now() - entry.ts < CACHE_TTL && entry.data) {
-            console.log("[v0] CACHE HIT sessionStorage", cacheKey);
-            addLog("info", "[CACHE HIT] " + cacheKey.slice(CACHE_PREFIX.length));
+          if (entry && entry.ts && Date.now() - entry.ts < TTL && entry.data) {
+            addLog("info", "[CACHE HIT] " + cacheKey.slice(CP.length));
             const data: LLMListenResponse = entry.data;
             const llmMatch = validateAndBuildFromLLM(data, normed);
             if (!llmMatch.debug?.rejectedReason) {
               setMatch(llmMatch);
               return; // skip LLM call entirely
             }
+          } else if (entry && entry.ts && Date.now() - entry.ts >= TTL) {
+            cacheRemove(cacheKey); // expired
           }
         }
       } catch { /* parse error = cache miss */ }
 
-      console.log("[v0] CACHE MISS sessionStorage", cacheKey);
+      addLog("info", "[CACHE MISS] " + cacheKey.slice(CP.length));
 
       // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
@@ -515,23 +537,19 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           const data: LLMListenResponse = await resp.json();
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
-          // Store in sessionStorage cache
+          // Store in cache (both session + local for Safari resilience)
           try {
-            const entry = JSON.stringify({ data, ts: Date.now() });
-            sessionStorage.setItem(cacheKey, entry);
+            const val = JSON.stringify({ data, ts: Date.now() });
+            cacheSet(cacheKey, val);
             // Evict oldest if over limit
-            const keys: string[] = [];
-            for (let i = 0; i < sessionStorage.length; i++) {
-              const k = sessionStorage.key(i);
-              if (k && k.startsWith(CACHE_PREFIX)) keys.push(k);
-            }
-            if (keys.length > CACHE_MAX) {
+            const keys = cacheKeys();
+            if (keys.length > MAX) {
               const sorted = keys
-                .map((k) => { try { const e = JSON.parse(sessionStorage.getItem(k) || ""); return { k, ts: e.ts || 0 }; } catch { return { k, ts: 0 }; } })
+                .map((k) => { try { const e = JSON.parse(cacheGet(k) || ""); return { k, ts: e.ts || 0 }; } catch { return { k, ts: 0 }; } })
                 .sort((a, b) => a.ts - b.ts);
-              while (sorted.length > CACHE_MAX) {
+              while (sorted.length > MAX) {
                 const oldest = sorted.shift();
-                if (oldest) sessionStorage.removeItem(oldest.k);
+                if (oldest) cacheRemove(oldest.k);
               }
             }
           } catch { /* storage full or unavailable -- ignore */ }
@@ -557,7 +575,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
   /* ═══════════════════════════════════════════════════════════════════���═══
      CAPTURE MODE — fallback: record audio blob -> server Whisper
-     ═══════════════════════════════════════════════════════════════════════ */
+     ═══════���═══════════════════════════════════════════════════════════════ */
   const startCapture = useCallback(async () => {
     setError(null);
     setInterimText("");
