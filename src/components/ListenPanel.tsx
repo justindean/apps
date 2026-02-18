@@ -26,13 +26,7 @@ function MicIcon({ size = 20, className = "" }: { size?: number; className?: str
   );
 }
 
-function StopIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-    </svg>
-  );
-}
+// StopIcon removed -- active listening state uses MicIcon
 
 function VolumeIcon({ size = 14 }: { size?: number }) {
   return (
@@ -245,45 +239,9 @@ const sectionBorderColor: Record<string, string> = {
   AI: "border-sky-300/60 dark:border-sky-600/40",
 };
 
-const sectionBadgeColor: Record<string, string> = {
-  Arrival: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
-  Drinks: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
-  Menu: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400",
-  Food: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
-  Bill: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
-  Tip: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
-  Clarify: "bg-stone-100 text-stone-600 dark:bg-stone-800/40 dark:text-stone-400",
-  Smalltalk: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
-  AI: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
-};
+// sectionBadgeColor removed -- confidence dot replaced badge pills
 
-/* ── Humanized intent labels for badge ── */
-const INTENT_LABELS: Record<string, string> = {
-  menu_offer: "MENU",
-  table_preference: "TABLE",
-  party_size: "PARTY",
-  greeting: "GREETING",
-  order_ready: "ORDER",
-  order_items: "ORDER",
-  doneness_preference: "STEAK",
-  soups_available: "SOUPS",
-  drinks_offer: "DRINKS",
-  drinks_hot_offer: "HOT DRINKS",
-  anything_else: "MORE?",
-  check_in_food: "CHECK-IN",
-  bill_offer: "BILL",
-  payment_method: "PAYMENT",
-  tip_service: "TIP",
-  receipt: "RECEIPT",
-  not_available: "UNAVAILABLE",
-  clarification: "CLARIFY",
-  smalltalk_origin: "SMALLTALK",
-  smalltalk_live_here: "SMALLTALK",
-  smalltalk_first_time: "SMALLTALK",
-  smalltalk_enjoying: "SMALLTALK",
-  ai_understood: "AI",
-  unknown: "UNKNOWN",
-};
+// INTENT_LABELS removed -- section badge replaced by confidence dot
 
 /* ── Convert ListenReply to Phrase (for onSpeak/onCopy compatibility) ── */
 function replyToPhrase(r: ListenReply): Phrase {
@@ -940,8 +898,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   /* ── Unified start/stop ── */
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
-  const isActive = state === "listening" || state === "recording" || state === "processing";
-
   /* ── Cleanup (recognition only -- mic stream stays alive for session) ── */
   useEffect(() => {
     return () => {
@@ -968,11 +924,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── Mode indicator + Debug toggle ── */}
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-medium text-stone-400 dark:text-stone-500">
-          {captureMode ? "Capture mode (Whisper)" : "Realtime mode"}{" \u00B7 "}{deviceInfo}
-        </p>
+      {/* ── Debug toggle (top-right, minimal) ── */}
+      <div className="flex items-center justify-end">
         <button
           onClick={() => setShowDebug((p) => !p)}
           className={`rounded-lg p-1.5 transition ${showDebug ? "bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200" : "text-stone-300 hover:text-stone-500 dark:text-stone-600 dark:hover:text-stone-400"}`}
@@ -982,46 +935,89 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </button>
       </div>
 
-      {/* ── MIC BUTTON ── */}
-      <div className="flex flex-col items-center gap-2.5">
-        <button
-          onClick={isActive && state !== "processing" ? stopListening : !isActive ? startListening : undefined}
-          className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
-            state === "listening" || state === "recording"
-              ? "bg-red-500 text-white shadow-lg shadow-red-500/30 active:scale-95"
-              : state === "processing"
-                ? "bg-stone-300 text-stone-500 dark:bg-stone-600 dark:text-stone-400"
-                : "bg-[#D94F2A] text-white shadow-lg shadow-[#D94F2A]/25 active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
-          }`}
-          disabled={state === "processing"}
-          aria-label={isActive ? "Stop listening" : "Start listening"}
-        >
-          {(state === "listening" || state === "recording") && (
-            <span className="absolute inset-0 animate-ping rounded-full bg-red-500/30" />
+      {/* ════════════════════════════════════════════════════════════════
+         ACTIVE LISTENING — full-focus screen
+         ════════════════════════════════════════════════════════════════ */}
+      {(state === "listening" || state === "recording") && (
+        <div className="flex flex-col items-center gap-6 py-8">
+          {/* Large pulsing mic */}
+          <button
+            onClick={stopListening}
+            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-red-500 text-white shadow-xl shadow-red-500/30 transition-transform active:scale-95"
+            aria-label="Stop listening"
+          >
+            <span className="absolute inset-0 animate-ping rounded-full bg-red-400/25" />
+            <span className="absolute inset-[-8px] animate-pulse rounded-full border-2 border-red-400/30" />
+            <MicIcon size={36} />
+          </button>
+
+          {/* Headlines */}
+          <div className="flex flex-col items-center gap-2 text-center">
+            <h2 className="text-[28px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">
+              {"Listening\u2026"}
+            </h2>
+            <p className="text-[16px] font-medium text-stone-500 dark:text-stone-400">
+              Let them speak into the phone.
+            </p>
+            <p className="text-[15px] font-medium italic text-stone-400 dark:text-stone-500">
+              Puede hablar aqui.
+            </p>
+          </div>
+
+          {/* Live interim text (if any) */}
+          {interimText && (
+            <div className="w-full rounded-2xl border border-stone-200/40 bg-white/60 px-4 py-3 text-center dark:border-stone-700/30 dark:bg-stone-800/40">
+              <p className="text-[15px] font-semibold text-stone-600 opacity-70 dark:text-stone-300">
+                {interimText}
+              </p>
+            </div>
           )}
-          {state === "listening" || state === "recording" ? <StopIcon size={24} /> : <MicIcon size={28} />}
-        </button>
 
-        <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">
-          {state === "idle" && !displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
-          {state === "idle" && !displayText && micStatus === "unknown" && "Tap to allow mic & start listening"}
-          {state === "idle" && !displayText && micStatus === "granted" && "Mic ready. Tap to listen"}
-          {state === "idle" && displayText && "Tap to listen again"}
-          {state === "listening" && "Listening... tap to stop"}
-          {state === "recording" && "Recording... tap to stop"}
-          {state === "processing" && "Processing..."}
-        </p>
-      </div>
-
-      {/* ── Error ── */}
-      {error && (
-        <div className="rounded-xl bg-red-50 px-4 py-3 dark:bg-red-950/30">
-          <p className="text-center text-[12px] font-medium text-red-600 dark:text-red-400">{error}</p>
+          {/* Tap to stop hint */}
+          <p className="text-[12px] font-medium text-stone-400/60 dark:text-stone-500/50">
+            Tap the mic to stop
+          </p>
         </div>
       )}
 
+      {/* ════════════════════════════════════════════════════════════════
+         IDLE / PROCESSING — mic button + helper text
+         ════════════════════════════════════════════════════════════════ */}
+      {state !== "listening" && state !== "recording" && (
+        <>
+          <div className="flex flex-col items-center gap-2.5">
+            <button
+              onClick={state !== "processing" ? startListening : undefined}
+              className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
+                state === "processing"
+                  ? "bg-stone-300 text-stone-500 dark:bg-stone-600 dark:text-stone-400"
+                  : "bg-[#D94F2A] text-white shadow-lg shadow-[#D94F2A]/25 active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
+              }`}
+              disabled={state === "processing"}
+              aria-label="Start listening"
+            >
+              <MicIcon size={28} />
+            </button>
+
+            <p className="text-center text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
+              {state === "idle" && !displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
+              {state === "idle" && !displayText && micStatus !== "denied" && "Tap and hand them the phone."}
+              {state === "idle" && displayText && "Tap and hand them the phone."}
+              {state === "processing" && "Processing..."}
+            </p>
+          </div>
+
+          {/* ── Error ── */}
+          {error && (
+            <div className="rounded-xl bg-red-50 px-4 py-3 dark:bg-red-950/30">
+              <p className="text-center text-[12px] font-medium text-red-600 dark:text-red-400">{error}</p>
+            </div>
+          )}
+        </>
+      )}
+
       {/* ── CARD 1: WHAT WE HEARD (Spanish + literal English) ── */}
-      {displayText && (
+      {displayText && state !== "listening" && state !== "recording" && (
         <div className="animate-fade-in rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
             {isInterim ? "Hearing..." : "We heard"}
@@ -1043,7 +1039,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       {/* ── CARD 2: WHAT THEY MEANT (LLM interpretation) ── */}
       {/* Show loading placeholder while LLM is working */}
-      {llmClassifying && !isInterim && displayText && (
+      {llmClassifying && !isInterim && displayText && state !== "listening" && state !== "recording" && (
         <div className="animate-fade-in rounded-2xl border border-dashed border-stone-300/60 bg-gradient-to-b from-stone-50/50 to-stone-100/30 p-4 dark:border-stone-600/40 dark:from-stone-800/50 dark:to-stone-800/30">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They likely meant</p>
           <div className="flex items-center gap-2">
@@ -1057,27 +1053,18 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {/* Show actual interpretation once LLM responds */}
       {match && hasResults && !llmClassifying && (
         <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-                {match.confidence < 50 ? "Did they mean...?" : "They likely meant"}
-              </p>
-              {/* Confidence pill */}
-              <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider ${
-                match.confidence >= 80
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
-                  : match.confidence >= 50
-                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
-                    : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
-              }`}>
-                {match.confidence >= 80 ? "High" : match.confidence >= 50 ? "Med" : "Low"}
-              </span>
-            </div>
-            {match.intent !== "unknown" && (
-              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sectionBadgeColor[match.section] ?? ""}`}>
-                {INTENT_LABELS[match.intent] ?? match.section}
-              </span>
-            )}
+          <div className="mb-2 flex items-center gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
+              {match.confidence < 50 ? "Did they mean...?" : "They likely meant"}
+            </p>
+            {/* Confidence dot -- minimal, secondary */}
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${
+              match.confidence >= 80
+                ? "bg-emerald-400 dark:bg-emerald-500"
+                : match.confidence >= 50
+                  ? "bg-amber-400 dark:bg-amber-500"
+                  : "bg-red-400 dark:bg-red-500"
+            }`} title={`Confidence: ${match.confidence}%`} />
           </div>
           <p className="text-[20px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
             {`\u201C${match.english}\u201D`}
@@ -1101,9 +1088,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {match && hasResults && !llmClassifying && (
         <div className="animate-fade-in">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            {match.section === "Clarify"
-              ? "Not sure \u2014 try asking"
-              : "Best reply"}
+            {match.section === "Clarify" ? "Try saying" : "Best response"}
           </p>
 
           <button
