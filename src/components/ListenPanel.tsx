@@ -466,10 +466,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       // ── Cache helpers (sessionStorage primary, localStorage fallback) ──
       const CP = "th_cache_";
+      const SP = "th_sig_";
       const TTL = 30 * 60 * 1000; // 30 min
       const MAX = 50;
       const normed = normalizeTranscript(corrected);
-      const cacheKey = CP + "restaurant|" + mode + "|" + normed;
+      const exactKey = CP + "restaurant|" + mode + "|" + normed;
 
       // Safari-safe storage: try sessionStorage, fall back to localStorage
       function cacheGet(key: string): string | null {
@@ -492,26 +493,75 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         return Array.from(found);
       }
 
-      // Check cache
+      // ── Fuzzy signature for Tier 2 cache ──
+      const STOPWORDS = new Set(["un","una","uno","el","la","los","las","de","del","por","para","y","o","que","quieres","quiere","me","te","se","nos","les","lo","al","en","con","su","es","hay","no","si","como","a","mi","tu","mas","muy","eso","esto","esa","esta","ese","este","pero","tambien","ya","le","ser","tiene","puede","favor","aqui"]);
+      const KEYWORDS = new Set(["menu","carta","cuenta","agua","cafe","te","cerveza","vino","picante","propina","tarjeta","efectivo","mesa","terminal","bano","reservacion","postre","ensalada","sopa","pollo","carne","pescado","arroz","pan","sal","pimienta","salsa","hielo","limon","leche","azucar","servilleta","cuchillo","tenedor","cuchara","plato","vaso","copa","botella","refresco","jugo","comida","entrada","bebida","especial","alergias","vegetariano","vegano","gluten","mariscos","queso","frijoles","tortilla","tacos","enchiladas","mole","guacamole","chile","cambiar","ordenar","pedir","traer","recomendar","pagar","llevar","separar","dividir","caliente","frio","grande","chico","otra","otro","mas","bien","mal","listo","ocupada","libre","afuera","adentro","bano","emergencia","ayuda","doctor","policia","hospital","perder","robar"]);
+      function makeSignature(text: string): string {
+        const stripped = text.toLowerCase().trim()
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9\s]/g, "")
+          .replace(/\s+/g, " ");
+        const tokens = stripped.split(" ").filter((t) => t.length > 1 && !STOPWORDS.has(t));
+        // Keep only keyword tokens; if none survive, keep first 2 tokens
+        const kws = tokens.filter((t) => KEYWORDS.has(t));
+        const sig = kws.length > 0 ? kws.slice(0, 3) : tokens.slice(0, 2);
+        return sig.sort().join("|");
+      }
+
+      const signature = makeSignature(corrected);
+      const sigKey = SP + "restaurant|" + mode + "|" + signature;
+      const currentTokens = new Set(corrected.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length > 1));
+
+      // Tier 1: exact-match cache
+      let cacheResult: "exact" | "fuzzy" | "miss" = "miss";
       try {
-        const raw = cacheGet(cacheKey);
+        const raw = cacheGet(exactKey);
         if (raw) {
           const entry = JSON.parse(raw);
           if (entry && entry.ts && Date.now() - entry.ts < TTL && entry.data) {
-            addLog("info", "[CACHE HIT] " + cacheKey.slice(CP.length));
+            addLog("info", "[CACHE EXACT] " + exactKey.slice(CP.length));
             const data: LLMListenResponse = entry.data;
             const llmMatch = validateAndBuildFromLLM(data, normed);
             if (!llmMatch.debug?.rejectedReason) {
               setMatch(llmMatch);
-              return; // skip LLM call entirely
+              cacheResult = "exact";
             }
           } else if (entry && entry.ts && Date.now() - entry.ts >= TTL) {
-            cacheRemove(cacheKey); // expired
+            cacheRemove(exactKey);
           }
         }
       } catch { /* parse error = cache miss */ }
 
-      addLog("info", "[CACHE MISS] " + cacheKey.slice(CP.length));
+      // Tier 2: fuzzy signature cache (only if exact missed)
+      if (cacheResult === "miss" && signature.length > 0) {
+        try {
+          const raw = cacheGet(sigKey);
+          if (raw) {
+            const entry = JSON.parse(raw);
+            if (entry && entry.ts && Date.now() - entry.ts < TTL && entry.data) {
+              // Guardrail: only use if original had high confidence
+              const conf = entry.data.confidence;
+              // Guardrail: at least one keyword in common
+              const cachedKws = (entry.keywords as string[]) || [];
+              const hasOverlap = cachedKws.some((k: string) => currentTokens.has(k));
+              if (typeof conf === "number" && conf >= 0.75 && hasOverlap) {
+                addLog("info", "[CACHE FUZZY] sig=" + signature + " conf=" + conf);
+                const data: LLMListenResponse = entry.data;
+                const llmMatch = validateAndBuildFromLLM(data, normed);
+                if (!llmMatch.debug?.rejectedReason) {
+                  setMatch(llmMatch);
+                  cacheResult = "fuzzy";
+                }
+              }
+            } else if (entry && entry.ts && Date.now() - entry.ts >= TTL) {
+              cacheRemove(sigKey);
+            }
+          }
+        } catch { /* parse error = miss */ }
+      }
+
+      addLog("info", "[CACHE] exact=" + exactKey.slice(CP.length) + " sig=" + signature + " result=" + cacheResult);
+      if (cacheResult !== "miss") return; // cache served the result
 
       // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
@@ -537,10 +587,17 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           const data: LLMListenResponse = await resp.json();
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
-          // Store in cache (both session + local for Safari resilience)
+          // Store in cache under both exact key and signature key
           try {
-            const val = JSON.stringify({ data, ts: Date.now() });
-            cacheSet(cacheKey, val);
+            const ts = Date.now();
+            const kws = Array.from(currentTokens).filter((t) => KEYWORDS.has(t));
+            const exactVal = JSON.stringify({ data, ts });
+            cacheSet(exactKey, exactVal);
+            // Signature entry includes keywords for guardrail check on read
+            if (signature.length > 0) {
+              const sigVal = JSON.stringify({ data, ts, keywords: kws });
+              cacheSet(sigKey, sigVal);
+            }
             // Evict oldest if over limit
             const keys = cacheKeys();
             if (keys.length > MAX) {
