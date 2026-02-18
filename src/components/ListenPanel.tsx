@@ -2,7 +2,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "../data/phrases";
 import { getLLMSystemPrompt, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
-import { cachedClassify } from "../lib/classifyCache";
 
 /* ── TTS helper ── */
 function speakPhrase(text: string) {
@@ -470,19 +469,27 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       (async () => {
         try {
-          const result = await cachedClassify("restaurant", mode, corrected, {
-            transcript: corrected,
-            tone: mode,
-            systemPromptOverride: getLLMSystemPrompt(mode),
+          console.log("[v0] Calling /api/classify with tone:", mode, "transcript:", corrected);
+          const resp = await fetch("/api/classify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transcript: corrected,
+              tone: mode,
+              systemPromptOverride: getLLMSystemPrompt(mode),
+            }),
           });
 
-          if (!result.ok) {
-            addLog("error", `LLM ${result.status}: ${result.text.slice(0, 100)}`);
+          console.log("[v0] /api/classify response status:", resp.status);
+          if (!resp.ok) {
+            const errText = await resp.text();
+            console.log("[v0] /api/classify error:", errText.slice(0, 200));
+            addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
             return;
           }
 
-          const data = result.data as unknown as LLMListenResponse;
-          addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}${(result.data as { cached?: boolean }).cached ? " (cached)" : ""}`);
+          const data: LLMListenResponse = await resp.json();
+          addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
           const llmMatch = validateAndBuildFromLLM(data, normalizeTranscript(corrected));
 
