@@ -527,7 +527,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   /** Core LLM call (extracted so refresh can reuse it) */
   const callLLM = useCallback(
     async (corrected: string): Promise<{ match: ListenMatch; raw: LLMListenResponse } | null> => {
-      console.log("[v0] callLLM called with:", corrected, "mode:", mode);
       const resp = await fetch("/api/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -538,16 +537,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         }),
       });
 
-      console.log("[v0] callLLM: resp status:", resp.status);
       if (!resp.ok) {
         const errText = await resp.text();
-        console.log("[v0] callLLM: error:", errText.slice(0, 200));
         addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
         return null;
       }
 
       const data: LLMListenResponse = await resp.json();
-      console.log("[v0] callLLM: parsed data:", JSON.stringify(data).slice(0, 200));
       addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
       const llmMatch = validateAndBuildFromLLM(data, normalizeTranscript(corrected));
@@ -564,8 +560,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
   const processTranscript = useCallback(
     (rawText: string, skipCache = false) => {
-      console.log("[v0] processTranscript called with:", rawText, "skipCache:", skipCache);
-      if (!rawText.trim()) { console.log("[v0] processTranscript: empty text, returning"); return; }
+      if (!rawText.trim()) return;
 
       setMatch(null);
       setCacheSource(null);
@@ -576,7 +571,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
       const normed = normalizeTranscript(corrected);
-      console.log("[v0] processTranscript: normed=", normed, "mode=", mode);
 
       // ── Check cache first ──
       if (!skipCache) {
@@ -595,16 +589,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       (async () => {
         try {
-          console.log("[v0] processTranscript: calling LLM...");
           const result = await callLLM(corrected);
-          console.log("[v0] processTranscript: LLM result:", result ? "got match" : "null");
           if (result) {
             cacheStore(scenario, mode, normed, result.match, result.raw);
             setMatch(result.match);
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
-          console.log("[v0] processTranscript: LLM error:", msg);
           addLog("error", `LLM: ${msg}`);
         } finally {
           setLlmClassifying(false);
@@ -1113,7 +1104,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           </p>
 
           {/* Alternate meanings for low/medium confidence */}
-          {match.alternateMeanings.length > 0 && (
+          {match.alternateMeanings && match.alternateMeanings.length > 0 && (
             <div className="mt-3 flex flex-col gap-1.5 border-t border-stone-200/40 pt-3 dark:border-stone-700/30">
               <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/40">Or possibly</p>
               {match.alternateMeanings.map((alt, i) => (
@@ -1204,7 +1195,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           )}
 
           {/* ── Follow-ups (conversation continuations) ── */}
-          {match.followUps && match.followUps.length > 0 && (
+          {Array.isArray(match.followUps) && match.followUps.length > 0 && (
             <div className="mt-4 border-t border-stone-200/40 pt-3 dark:border-stone-700/30">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
                 You could also say next
