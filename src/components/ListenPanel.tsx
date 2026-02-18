@@ -361,9 +361,46 @@ function OpenAIPingButton({ addLog }: { addLog: (type: DebugLog["type"], text: s
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
+/* ── Session-level mic manager (survives across component re-mounts) ── */
+type MicStatus = "unknown" | "granted" | "denied";
+let _micStatus: MicStatus = "unknown";
+let _cachedStream: MediaStream | null = null;
+
+/** Get a mic stream, reusing cached one if still alive */
+async function ensureMicStream(constraints: MediaStreamConstraints): Promise<MediaStream> {
+  // If we have a cached stream and its tracks are still live, reuse it
+  if (_cachedStream) {
+    const tracks = _cachedStream.getAudioTracks();
+    if (tracks.length > 0 && tracks[0].readyState === "live") {
+      return _cachedStream;
+    }
+    // Stream died, clear it
+    _cachedStream = null;
+  }
+  // Request new stream (will trigger permission prompt only if not yet granted)
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  _micStatus = "granted";
+  _cachedStream = stream;
+  return stream;
+}
+
+/** Check mic permission without triggering a prompt */
+async function probeMicPermission(): Promise<MicStatus> {
+  if (_micStatus === "granted") return "granted";
+  try {
+    // navigator.permissions.query for "microphone" works in Chrome but NOT Safari
+    const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+    if (result.state === "granted") { _micStatus = "granted"; return "granted"; }
+    if (result.state === "denied") { _micStatus = "denied"; return "denied"; }
+  } catch {
+    // Safari: permissions.query not supported for microphone -- stay "unknown"
+  }
+  return _micStatus;
+}
+
+/* -----------------------------------------------------------------------
    ListenPanel
-   ═══════════════════════════════════════════════════════════════════════ */
+   ----------------------------------------------------------------------- */
 export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
@@ -373,6 +410,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const [match, setMatch] = useState<ListenMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
+  const [micStatus, setMicStatus] = useState<MicStatus>(_micStatus);
 
   // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
@@ -402,6 +440,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const addLog = useCallback((type: DebugLog["type"], text: string) => {
     const time = new Date().toLocaleTimeString("en-US", { hour12: false });
     setDebugLogs((prev) => [...prev.slice(-60), { time, type, text }]);
+  }, []);
+
+  // Probe mic permission on mount (no prompt triggered)
+  useEffect(() => {
+    probeMicPermission().then((s) => setMicStatus(s));
   }, []);
 
   /* ── Process transcript (shared by both modes) ──
@@ -481,9 +524,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     addLog("capture", "Requesting mic (capture mode)...");
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await ensureMicStream({
         audio: { channelCount: 1, sampleRate: { ideal: 44100 }, echoCancellation: true, noiseSuppression: true },
       });
+      setMicStatus("granted");
 
       const track = stream.getAudioTracks()[0];
       if (track) {
@@ -501,14 +545,16 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       addLog("capture", `Recording: ${mimeType}`);
 
       chunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType });
+      // Clone the stream so stopping the recorder doesn't kill our cached mic stream
+      const recStream = stream.clone();
+      const recorder = new MediaRecorder(recStream, { mimeType });
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
+        recStream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: mimeType });
         addLog("capture", `Recorded ${(blob.size / 1024).toFixed(1)}KB`);
 
@@ -583,8 +629,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       }, 12000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("NotAllowedError") || msg.includes("Permission") || msg.includes("denied")) {
+        _micStatus = "denied";
+        setMicStatus("denied");
+      }
       setError(`Mic error: ${msg}`);
       addLog("error", msg);
+      setState("idle");
     }
   }, [addLog, processTranscript]);
 
@@ -618,9 +669,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await ensureMicStream({
         audio: { channelCount: 1, sampleRate: { ideal: 48000 }, autoGainControl: true, noiseSuppression: true, echoCancellation: true },
       });
+      setMicStatus("granted");
       mediaStreamRef.current = stream;
 
       const track = stream.getAudioTracks()[0];
@@ -631,6 +683,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("NotAllowedError") || msg.includes("Permission") || msg.includes("denied")) {
+        _micStatus = "denied";
+        setMicStatus("denied");
+      }
       setError(`Mic error: ${msg}`);
       addLog("error", msg);
       return;
@@ -691,6 +747,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       addLog("error", `${event.error} ${event.message ?? ""}`);
       if (event.error === "no-speech" || event.error === "aborted") return;
+      if (event.error === "not-allowed") {
+        _micStatus = "denied";
+        setMicStatus("denied");
+      }
       setError(event.error === "not-allowed" ? "Microphone permission denied." : `Error: ${event.error}`);
       setState("idle");
     };
@@ -700,10 +760,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         clearInterval(silenceTimerRef.current);
         silenceTimerRef.current = null;
       }
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-        mediaStreamRef.current = null;
-      }
+      // NOTE: Do NOT stop mediaStreamRef tracks here -- we reuse the cached stream
       // Only process on end if we never got a final result during onresult
       if (finalTextRef.current.trim() && !processedFinalRef.current) {
         processedFinalRef.current = true;
@@ -765,11 +822,11 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const stopListening = captureMode ? stopCapture : stopRealtime;
   const isActive = state === "listening" || state === "recording" || state === "processing";
 
-  /* ── Cleanup ── */
+  /* ── Cleanup (recognition only -- mic stream stays alive for session) ── */
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
-      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      // Do NOT stop the cached mic stream -- it survives across listens and screen changes
       if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
       if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
       if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
@@ -826,7 +883,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </button>
 
         <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">
-          {state === "idle" && !displayText && "Tap to listen"}
+          {state === "idle" && !displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
+          {state === "idle" && !displayText && micStatus === "unknown" && "Tap to allow mic & start listening"}
+          {state === "idle" && !displayText && micStatus === "granted" && "Mic ready. Tap to listen"}
           {state === "idle" && displayText && "Tap to listen again"}
           {state === "listening" && "Listening... tap to stop"}
           {state === "recording" && "Recording... tap to stop"}
@@ -1030,8 +1089,24 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             <button onClick={() => setDebugLogs([])} className="font-sans text-[10px] font-semibold text-stone-400 hover:text-stone-600">Clear</button>
           </div>
 
-          {/* System info */}
+          {/* Mic + system status */}
           <div className="mb-2 border-b border-stone-200/50 pb-2 dark:border-stone-700/30">
+            <p>
+              <span className="text-stone-400">Mic: </span>
+              <span className={micStatus === "granted" ? "text-emerald-600" : micStatus === "denied" ? "text-red-500" : "text-amber-500"}>
+                {micStatus}
+              </span>
+              {" | "}
+              <span className="text-stone-400">Stream: </span>
+              {_cachedStream && _cachedStream.getAudioTracks()[0]?.readyState === "live" ? (
+                <span className="text-emerald-600">ready</span>
+              ) : (
+                <span className="text-stone-400">not ready</span>
+              )}
+              {" | "}
+              <span className="text-stone-400">State: </span>
+              <span className={state === "listening" || state === "recording" ? "text-red-500" : state === "processing" ? "text-amber-500" : "text-stone-400"}>{state}</span>
+            </p>
             <p><span className="text-stone-400">Device: </span>{deviceInfo}</p>
             <p><span className="text-stone-400">Mode: </span>{captureMode ? "Capture (Whisper)" : "Realtime (SpeechRecognition)"}</p>
             <p><span className="text-stone-400">Lang: </span>es-MX</p>
