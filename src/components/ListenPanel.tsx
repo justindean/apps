@@ -464,12 +464,38 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       setInstantEnglish(quickTranslate(corrected));
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
+      // ── sessionStorage cache helpers (inline, no external modules) ──
+      const CACHE_PREFIX = "th_cache_";
+      const CACHE_TTL = 30 * 60 * 1000; // 30 min
+      const CACHE_MAX = 50;
+      const normed = normalizeTranscript(corrected);
+      const cacheKey = CACHE_PREFIX + "restaurant|" + mode + "|" + normed;
+
+      // Check cache
+      try {
+        const raw = sessionStorage.getItem(cacheKey);
+        if (raw) {
+          const entry = JSON.parse(raw);
+          if (entry && entry.ts && Date.now() - entry.ts < CACHE_TTL && entry.data) {
+            console.log("[v0] CACHE HIT sessionStorage", cacheKey);
+            addLog("info", "[CACHE HIT] " + cacheKey.slice(CACHE_PREFIX.length));
+            const data: LLMListenResponse = entry.data;
+            const llmMatch = validateAndBuildFromLLM(data, normed);
+            if (!llmMatch.debug?.rejectedReason) {
+              setMatch(llmMatch);
+              return; // skip LLM call entirely
+            }
+          }
+        }
+      } catch { /* parse error = cache miss */ }
+
+      console.log("[v0] CACHE MISS sessionStorage", cacheKey);
+
       // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
 
       (async () => {
         try {
-          console.log("[v0] Calling /api/classify with tone:", mode, "transcript:", corrected);
           const resp = await fetch("/api/classify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -480,16 +506,35 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             }),
           });
 
-          console.log("[v0] /api/classify response status:", resp.status);
           if (!resp.ok) {
             const errText = await resp.text();
-            console.log("[v0] /api/classify error:", errText.slice(0, 200));
             addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
             return;
           }
 
           const data: LLMListenResponse = await resp.json();
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
+
+          // Store in sessionStorage cache
+          try {
+            const entry = JSON.stringify({ data, ts: Date.now() });
+            sessionStorage.setItem(cacheKey, entry);
+            // Evict oldest if over limit
+            const keys: string[] = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const k = sessionStorage.key(i);
+              if (k && k.startsWith(CACHE_PREFIX)) keys.push(k);
+            }
+            if (keys.length > CACHE_MAX) {
+              const sorted = keys
+                .map((k) => { try { const e = JSON.parse(sessionStorage.getItem(k) || ""); return { k, ts: e.ts || 0 }; } catch { return { k, ts: 0 }; } })
+                .sort((a, b) => a.ts - b.ts);
+              while (sorted.length > CACHE_MAX) {
+                const oldest = sorted.shift();
+                if (oldest) sessionStorage.removeItem(oldest.k);
+              }
+            }
+          } catch { /* storage full or unavailable -- ignore */ }
 
           const llmMatch = validateAndBuildFromLLM(data, normalizeTranscript(corrected));
 
