@@ -1,14 +1,14 @@
 {
   "name": "taphabla",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start"
   },
   "dependencies": {
-    "ai": "^6.0.0",
+    "ai": "^6.0.93",
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
