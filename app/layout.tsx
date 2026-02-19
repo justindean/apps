@@ -1,6 +1,24 @@
-"use client";
-
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+
+export const metadata: Metadata = {
+  title: "TapHabla",
+  description:
+    "TapHabla - Tap a situation, get the right Spanish phrases fast.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  userScalable: false,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1120" },
+  ],
+};
 
 export default function RootLayout({
   children,
@@ -9,29 +27,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <meta charSet="UTF-8" />
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1.0, user-scalable=no"
-        />
-        <meta
-          name="theme-color"
-          content="#f8fafc"
-          media="(prefers-color-scheme: light)"
-        />
-        <meta
-          name="theme-color"
-          content="#0b1120"
-          media="(prefers-color-scheme: dark)"
-        />
-        <meta
-          name="description"
-          content="TapHabla - Tap a situation, get the right Spanish phrases fast."
-        />
-        <title>TapHabla</title>
-      </head>
-      <body>{children}</body>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }

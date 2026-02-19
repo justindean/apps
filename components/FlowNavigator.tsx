@@ -196,9 +196,12 @@ function FastCard({
       {/* Color identity bar */}
       <div className={`h-[3px] w-full ${barColor}`} />
 
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => { speakPhrase(phrase.spanish); onSpeak(phrase); }}
-        className="flex w-full flex-col items-start p-4 text-left"
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); speakPhrase(phrase.spanish); onSpeak(phrase); } }}
+        className="flex w-full cursor-pointer flex-col items-start p-4 text-left"
       >
         <p className="text-[17px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
           {phrase.spanish}
@@ -210,7 +213,7 @@ function FastCard({
           {phrase.pronunciation}
         </p>
         <SpeakPill onClick={() => { speakPhrase(phrase.spanish); onSpeak(phrase); }} />
-      </button>
+      </div>
 
       {/* Copy */}
       <div className="flex items-center justify-end border-t border-stone-100/60 px-3 py-1.5 dark:border-stone-700/30">
