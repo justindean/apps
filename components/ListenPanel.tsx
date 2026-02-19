@@ -811,6 +811,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         finalTextRef.current = final;
         setFinalText(final);
         setInterimText("");
+        const corrected = correctSpanish(final);
+        setCorrectedText(corrected);
+        setInstantEnglish(quickTranslate(corrected));
         if (!processedFinalRef.current) {
           processedFinalRef.current = true;
           processTranscript(final);
@@ -916,9 +919,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
   const displayText = finalText || interimText;
   const isInterim = !finalText && !!interimText;
-  const hasResults = !!finalText && (state === "idle" || !!match);
+  const hasResults = !!finalText;
 
-  /* ══════════════════════════���═════════════════��════════════���═══���═════════
+  /* ══════════════════════════���═════════════════��════════════���═══����═════════
      RENDER
      ��═════════════════════════════════════════════════════���════════════════ */
   return (
@@ -964,12 +967,20 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             </p>
           </div>
 
-          {/* Live interim text (if any) */}
-          {interimText && (
-            <div className="w-full rounded-2xl border border-stone-200/40 bg-white/60 px-4 py-3 text-center dark:border-stone-700/30 dark:bg-stone-800/40">
-              <p className="text-[15px] font-semibold text-stone-600 opacity-70 dark:text-stone-300">
-                {interimText}
+          {/* Live Card 1 -- real-time words + instant translation while listening */}
+          {(interimText || finalText) && (
+            <div className="w-full rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
+                {finalText ? "We heard" : "Hearing..."}
               </p>
+              <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${!finalText ? "opacity-60" : ""}`}>
+                {`\u201C${finalText || interimText}\u201D`}
+              </p>
+              {instantEnglish && (
+                <p className={`mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400 ${!finalText ? "opacity-50" : ""}`}>
+                  {instantEnglish}
+                </p>
+              )}
             </div>
           )}
 
@@ -1017,19 +1028,20 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       )}
 
       {/* ── CARD 1: WHAT WE HEARD (Spanish + literal English) ── */}
-      {displayText && state !== "listening" && state !== "recording" && (
-        <div className="animate-fade-in rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
+      {/* Always visible once we have text, persists through LLM loading */}
+      {(correctedText || finalText) && state !== "listening" && state !== "recording" && (
+        <div className="rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            {isInterim ? "Hearing..." : "We heard"}
+            We heard
           </p>
-          <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${isInterim ? "opacity-60" : ""}`}>
-            {`\u201C${displayText}\u201D`}
+          <p className="text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
+            {`\u201C${correctedText || finalText}\u201D`}
           </p>
-          {/* Literal English -- instant dictionary translation, upgrades to LLM once available */}
+          {/* Literal English -- instant dictionary, upgrades to LLM literalEnglish once available */}
           {(() => {
             const literalText = (match && !llmClassifying && match.literalEnglish) ? match.literalEnglish : instantEnglish;
             return literalText ? (
-              <p className={`mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400 ${isInterim ? "opacity-50" : ""}`}>
+              <p className="mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
                 {literalText}
               </p>
             ) : null;
