@@ -14,6 +14,7 @@ import { PhraseList } from "./components/PhraseList";
 import { FlowNavigator } from "./components/FlowNavigator";
 import SpeechModeToggle from "./components/SpeechModeToggle";
 import RescueModal from "./components/RescueModal";
+import { Logo } from "./components/Logo";
 
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
@@ -99,7 +100,7 @@ function App() {
               </span>
             </button>
           ) : (
-            <h1 className="text-lg font-extrabold tracking-tight">TapHabla</h1>
+            <Logo size={28} />
           )}
 
           <div className="flex items-center gap-2">
