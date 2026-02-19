@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import type { FlowStage, Phrase, StuckQuestion, SpeechMode } from "../data/phrases";
 import { flowUtilityPhrases, fastModePhrasesBySection } from "../data/phrases";
 import { ListenPanel } from "./ListenPanel";
+import SayPanel from "./SayPanel";
 
 interface FlowNavigatorProps {
   stages: FlowStage[];
@@ -610,6 +611,7 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
     return init;
   });
   const [recentPhrases, setRecentPhrases] = useState<Phrase[]>([]);
+  const [showSay, setShowSay] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const isScrollingTo = useRef(false);
 
@@ -684,6 +686,19 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
           </div>
 
           <ListenPanel mode={mode} onCopy={onCopy} onSpeak={addRecent} />
+
+          {/* "I want to say" trigger */}
+          <button
+            onClick={() => setShowSay(true)}
+            className="mx-auto flex items-center gap-2 rounded-full border border-stone-200/60 bg-white px-5 py-2.5 text-[13px] font-semibold text-stone-600 shadow-sm transition-all duration-150 active:scale-95 dark:border-stone-700/40 dark:bg-stone-800 dark:text-stone-300"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 20h9" /><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z" />
+            </svg>
+            I want to say something
+          </button>
+
+          {showSay && <SayPanel mode={mode} onClose={() => setShowSay(false)} onCopy={onCopy} />}
         </div>
       ) : (
         <div className="mt-4 flex flex-col gap-6 pb-28">
