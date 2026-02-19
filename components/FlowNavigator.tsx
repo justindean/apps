@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { FlowStage, Phrase, StuckQuestion, SpeechMode } from "../data/phrases";
-import { flowUtilityPhrases, fastModePhrasesBySection } from "../data/phrases";
+import type { FlowStage, Phrase, StuckQuestion, SpeechMode } from "@/data/phrases";
+import { flowUtilityPhrases, fastModePhrasesBySection } from "@/data/phrases";
 import { ListenPanel } from "./ListenPanel";
 
 interface FlowNavigatorProps {

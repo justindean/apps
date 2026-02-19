@@ -1,4 +1,4 @@
-import type { SpeechMode } from "../data/phrases";
+import type { SpeechMode } from "@/data/phrases";
 
 const labels: Record<SpeechMode, { label: string; short: string }> = {
   street: { label: "Street", short: "Casual everyday Spanish" },

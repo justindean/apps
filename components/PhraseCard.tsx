@@ -1,5 +1,5 @@
-import type { Phrase } from '../data/phrases'
-import { colorMap } from '../utils/colors'
+import type { Phrase } from '@/data/phrases'
+import { colorMap } from '@/utils/colors'
 
 interface PhraseCardProps {
   phrase: Phrase

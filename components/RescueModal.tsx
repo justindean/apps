@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Phrase } from "../data/phrases";
+import type { Phrase } from "@/data/phrases";
 
 interface RescueModalProps {
   phrases: Phrase[];
