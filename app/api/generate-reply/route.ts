@@ -1,4 +1,5 @@
 import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
@@ -6,7 +7,7 @@ export async function POST(req: NextRequest) {
     const { systemPrompt, userPrompt } = await req.json();
 
     const { text } = await generateText({
-      model: "openai/gpt-4o-mini",
+      model: openai("gpt-4o-mini"),
       system: systemPrompt,
       prompt: userPrompt,
       temperature: 0.15,
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(parsed);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Reply generation failed";
-    console.error("[v0] generate-reply error:", msg);
+    console.error("generate-reply error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

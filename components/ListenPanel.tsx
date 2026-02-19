@@ -526,7 +526,6 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       (async () => {
         try {
-          console.log("[v0] LLM classify starting for:", corrected);
           const resp = await fetch("/api/classify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -537,17 +536,13 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             }),
           });
 
-          console.log("[v0] LLM classify response status:", resp.status);
-
           if (!resp.ok) {
             const errText = await resp.text();
-            console.log("[v0] LLM classify error response:", errText.slice(0, 300));
             addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
             return;
           }
 
           const data: LLMListenResponse = await resp.json();
-          console.log("[v0] LLM classify parsed data:", JSON.stringify(data).slice(0, 500));
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
           // Store in cache under both exact key and signature key
@@ -575,19 +570,15 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           } catch { /* storage full or unavailable -- ignore */ }
 
           const llmMatch = validateAndBuildFromLLM(data, normalizeTranscript(corrected));
-          console.log("[v0] validateAndBuildFromLLM result:", JSON.stringify({ intent: llmMatch.intent, confidence: llmMatch.confidence, rejected: llmMatch.debug?.rejectedReason, source: llmMatch.source }));
 
           if (llmMatch.debug?.rejectedReason) {
-            console.log("[v0] LLM REJECTED:", llmMatch.debug.rejectedReason);
             addLog("error", `[LLM REJECTED] ${llmMatch.debug.rejectedReason}`);
             return;
           }
 
-          console.log("[v0] Setting match - intent:", llmMatch.intent, "bestReply:", llmMatch.bestReply.spanish);
           setMatch(llmMatch);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
-          console.log("[v0] LLM catch error:", msg, err);
           addLog("error", `LLM: ${msg}`);
         } finally {
           setLlmClassifying(false);
