@@ -1,30 +1,43 @@
-import { generateText } from "ai";
-import { openai } from "@ai-sdk/openai";
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) {
+    return NextResponse.json({ ok: false, error: "Missing OPENAI_API_KEY" }, { status: 500 });
+  }
+
   try {
-    const { text, usage } = await generateText({
-      model: openai("gpt-4o-mini"),
-      prompt: "ping",
-      system: "Reply with exactly: OK",
-      temperature: 0,
-      maxOutputTokens: 5,
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        max_tokens: 5,
+        messages: [
+          { role: "system", content: "Reply with exactly: OK" },
+          { role: "user", content: "ping" },
+        ],
+      }),
     });
 
+    if (!resp.ok) {
+      const errText = await resp.text();
+      return NextResponse.json({ ok: false, error: errText.slice(0, 200) }, { status: resp.status });
+    }
+
+    const data = await resp.json();
     return NextResponse.json({
       ok: true,
       model: "gpt-4o-mini",
-      reply: text,
-      usage: {
-        prompt_tokens: usage?.promptTokens ?? 0,
-        completion_tokens: usage?.completionTokens ?? 0,
-        total_tokens: usage?.totalTokens ?? 0,
-      },
+      reply: data.choices?.[0]?.message?.content,
+      usage: data.usage,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Ping failed";
-    console.error("openai-ping error:", msg);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 }
