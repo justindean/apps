@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 
+console.log('[v0] App mounting...')
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
