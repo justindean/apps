@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { Phrase, SpeechMode } from "../data/phrases";
-import { getLLMSystemPrompt, validateAndBuildFromLLM, normalizeTranscript } from "../data/restaurantIntents";
-import type { ListenMatch, ListenReply, LLMListenResponse } from "../data/restaurantIntents";
+import type { Phrase, SpeechMode } from "@/data/phrases";
+import { getLLMSystemPrompt, validateAndBuildFromLLM, normalizeTranscript } from "@/data/restaurantIntents";
+import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaurantIntents";
 
 /* ── TTS helper ── */
 function speakPhrase(text: string) {
@@ -918,7 +918,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText && (state === "idle" || !!match);
 
-  /* ══════════════════════════���═════════════════��════════════���═════════════
+  /* ══════════════════════════���═════════════════��════════════���═══��═════════
      RENDER
      ��═════════════════════════════════════════════════════���════════════════ */
   return (

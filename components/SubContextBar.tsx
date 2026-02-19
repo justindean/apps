@@ -1,4 +1,4 @@
-import { colorMap } from "../utils/colors";
+import { colorMap } from "@/utils/colors";
 
 interface SubContextItem {
   key: string;

@@ -1,6 +1,6 @@
-import type { Phrase } from "../data/phrases";
+import type { Phrase } from "@/data/phrases";
 import { PhraseCard } from "./PhraseCard";
-import { colorMap } from "../utils/colors";
+import { colorMap } from "@/utils/colors";
 
 interface PhraseListProps {
   phrases: Phrase[];

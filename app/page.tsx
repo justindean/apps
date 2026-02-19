@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useCallback } from "react";
 import {
   scenarios,
@@ -7,19 +9,19 @@ import {
   type Scenario,
   type IntentKey,
   type Phrase,
-} from "./data/phrases";
-import { CategoryGrid } from "./components/CategoryGrid";
-import { SubContextBar } from "./components/SubContextBar";
-import { PhraseList } from "./components/PhraseList";
-import { FlowNavigator } from "./components/FlowNavigator";
-import SpeechModeToggle from "./components/SpeechModeToggle";
-import RescueModal from "./components/RescueModal";
+} from "@/data/phrases";
+import { CategoryGrid } from "@/components/CategoryGrid";
+import { SubContextBar } from "@/components/SubContextBar";
+import { PhraseList } from "@/components/PhraseList";
+import { FlowNavigator } from "@/components/FlowNavigator";
+import SpeechModeToggle from "@/components/SpeechModeToggle";
+import RescueModal from "@/components/RescueModal";
 
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
 type ToastState = { visible: boolean; text: string };
 
-function App() {
+export default function Page() {
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [activeIntent, setActiveIntent] = useState<IntentKey>("order");
   const [mode, setMode] = useState<SpeechMode>("neutral");
@@ -66,7 +68,7 @@ function App() {
           : "bg-slate-50 text-slate-900 dark:bg-slate-925 dark:text-slate-100"
       }`}
     >
-      {/* ── Header ── */}
+      {/* Header */}
       <header
         className={`sticky top-0 z-30 border-b backdrop-blur-xl ${
           hasFlow
@@ -125,7 +127,7 @@ function App() {
         )}
       </header>
 
-      {/* ── Content ── */}
+      {/* Content */}
       <main className="mx-auto max-w-lg px-4 pb-24 pt-4">
         {!scenario ? (
           <>
@@ -161,7 +163,7 @@ function App() {
         )}
       </main>
 
-      {/* ── Toast ── */}
+      {/* Toast */}
       <div
         role="status"
         aria-live="polite"
@@ -178,7 +180,7 @@ function App() {
         {toast.text}
       </div>
 
-      {/* ── Rescue Modal ── */}
+      {/* Rescue Modal */}
       {showRescue && (
         <RescueModal
           phrases={rescuePhrases}
@@ -189,5 +191,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
