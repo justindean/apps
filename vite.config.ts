@@ -345,5 +345,14 @@ function openaiPingPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), transcribePlugin(), classifyPlugin(), replyGeneratorPlugin(), openaiPingPlugin()],
+  server: {
+    host: true,
+  },
+  plugins: [
+    react(),
+    // Only load API proxy plugins when OPENAI_API_KEY is available
+    ...(process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY
+      ? [transcribePlugin(), classifyPlugin(), replyGeneratorPlugin(), openaiPingPlugin()]
+      : []),
+  ],
 })
