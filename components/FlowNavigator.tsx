@@ -250,8 +250,7 @@ function FastModeView({
       {/* Header microcopy */}
       <div className="flex flex-col gap-0.5">
         <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Restaurant</h2>
-        <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Speak instantly. No typing.</p>
-        <p className="text-[11px] text-stone-300 dark:text-stone-600">Works offline.</p>
+        <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Tap what you need. Say it instantly.</p>
       </div>
 
       {/* Recent strip */}
@@ -683,7 +682,7 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
           {/* Listen mode header */}
           <div className="flex flex-col gap-0.5">
             <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Listen Mode</h2>
-            <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Speak naturally. TapHabla understands the situation and suggests what to say.</p>
+            <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Hand them the phone. We'll handle it.</p>
           </div>
 
           <ListenPanel mode={mode} onCopy={onCopy} onSpeak={addRecent} />
@@ -693,8 +692,7 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
           {/* Full mode header */}
           <div className="flex flex-col gap-0.5">
             <h2 className="text-[22px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">Restaurant</h2>
-            <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">All phrases by stage</p>
-            <p className="text-[11px] text-stone-300 dark:text-stone-600">Works offline.</p>
+            <p className="text-[13px] font-medium text-stone-400 dark:text-stone-500">Tap what you need. Say it instantly.</p>
           </div>
 
           <RecentStrip phrases={recentPhrases} onCopy={onCopy} />
@@ -719,8 +717,7 @@ export function FlowNavigator({ stages, color: _color, onCopy, mode }: FlowNavig
         </div>
       )}
 
-      {/* ── Premium glass mode toggle ── */}
-      <ModeToggle viewMode={viewMode} onToggle={setViewMode} />
+      {/* Mode toggle hidden -- singular focused experience */}
     </div>
   );
 }

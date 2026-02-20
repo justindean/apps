@@ -960,10 +960,10 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
               {"Listening\u2026"}
             </h2>
             <p className="text-[16px] font-medium text-stone-500 dark:text-stone-400">
-              Let them speak into the phone.
+              Hand them the phone.
             </p>
-            <p className="text-[15px] font-medium italic text-stone-400 dark:text-stone-500">
-              Puede hablar aqui.
+            <p className="mt-1 text-[15px] font-medium italic text-stone-400 dark:text-stone-500">
+              Puede hablar aqu&iacute;.
             </p>
           </div>
 
@@ -971,7 +971,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {(interimText || finalText) && (
             <div className="w-full rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-                {finalText ? "We heard" : "Hearing..."}
+                {finalText ? "They said:" : "Hearing..."}
               </p>
               <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${!finalText ? "opacity-60" : ""}`}>
                 {`\u201C${finalText || interimText}\u201D`}
@@ -1013,7 +1013,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
             <p className="text-center text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
               {state === "idle" && !displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
               {state === "idle" && !displayText && micStatus !== "denied" && "Tap and hand them the phone."}
-              {state === "idle" && displayText && "Tap and hand them the phone."}
+              {state === "idle" && displayText && "Tap to listen again."}
               {state === "processing" && "Processing..."}
             </p>
           </div>
@@ -1032,7 +1032,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {(correctedText || finalText) && state !== "listening" && state !== "recording" && (
         <div className="rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            We heard
+            They said:
           </p>
           <p className="text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
             {`\u201C${correctedText || finalText}\u201D`}
@@ -1049,25 +1049,25 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
         </div>
       )}
 
-      {/* ── CARD 2: WHAT THEY MEANT (LLM interpretation) ── */}
+      {/* ── CARD 2: MEANING (LLM interpretation) ── */}
       {/* Show loading placeholder while LLM is working */}
       {llmClassifying && !isInterim && displayText && state !== "listening" && state !== "recording" && (
-        <div className="animate-fade-in rounded-2xl border border-dashed border-stone-300/60 bg-gradient-to-b from-stone-50/50 to-stone-100/30 p-4 dark:border-stone-600/40 dark:from-stone-800/50 dark:to-stone-800/30">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">They likely meant</p>
+        <div className="mt-2 animate-fade-in rounded-2xl border border-dashed border-stone-300/60 bg-gradient-to-b from-stone-50/50 to-stone-100/30 p-4 dark:border-stone-600/40 dark:from-stone-800/50 dark:to-stone-800/30">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">Meaning:</p>
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
             <p className="animate-pulse text-[14px] font-semibold text-sky-600 dark:text-sky-400">
-              Checking what they most likely meant...
+              Working out what they meant...
             </p>
           </div>
         </div>
       )}
       {/* Show actual interpretation once LLM responds */}
       {match && hasResults && !llmClassifying && (
-        <div className={`animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
+        <div className={`mt-2 animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center gap-2">
             <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-              {match.confidence < 50 ? "Did they mean...?" : "They likely meant"}
+              {match.confidence < 50 ? "Possibly:" : "Meaning:"}
             </p>
             {/* Confidence dot -- minimal, secondary */}
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${
@@ -1098,21 +1098,21 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
       {/* ── BEST REPLY -- only shown after LLM responds ── */}
       {match && hasResults && !llmClassifying && (
-        <div className="animate-fade-in">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            {match.section === "Clarify" ? "Try saying" : "Best response"}
+        <div className="mt-3 animate-fade-in">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
+            Say this:
           </p>
 
           <button
             onClick={() => handleReply(match.bestReply)}
-            className={`group relative flex w-full flex-col overflow-hidden rounded-[18px] border-2 bg-gradient-to-b from-white to-warm-50 p-4 text-left shadow-card-elevated card-highlight transition-all duration-150 active:translate-y-px active:shadow-card-press dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-300/60"}`}
+            className="group relative flex w-full flex-col overflow-hidden rounded-[18px] border-2 border-[#D94F2A]/30 bg-gradient-to-b from-white to-warm-50 p-5 text-left shadow-card-elevated shadow-[#D94F2A]/[0.06] ring-1 ring-[#D94F2A]/10 card-highlight transition-all duration-150 active:translate-y-px active:shadow-card-press dark:border-[#E8734F]/25 dark:from-stone-800/90 dark:to-stone-800/70 dark:shadow-[#E8734F]/[0.04] dark:ring-[#E8734F]/10"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
-                <p className="text-[20px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
+                <p className="text-[22px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
                   {match.bestReply.spanish}
                 </p>
-                <p className="mt-1 text-[14px] leading-snug text-stone-500 dark:text-stone-400">
+                <p className="mt-1.5 text-[14px] leading-snug text-stone-500 dark:text-stone-400">
                   {match.bestReply.english || match.english}
                 </p>
                 {match.bestReply.pronunciation && (
@@ -1121,22 +1121,12 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-3.5 py-2 text-white shadow-md shadow-[#D94F2A]/25 transition-transform active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20">
-                <WaveformIcon size={13} />
-                <span className="text-[12px] font-extrabold">Speak</span>
+              <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-4 py-2.5 text-white shadow-lg shadow-[#D94F2A]/30 transition-transform active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/25">
+                <WaveformIcon size={14} />
+                <span className="text-[13px] font-extrabold">Speak</span>
               </div>
             </div>
           </button>
-
-          {/* Copy */}
-          <div className="mt-1.5 flex justify-end">
-            <button
-              onClick={() => onCopy(match.bestReply.spanish)}
-              className="rounded-md px-2 py-0.5 text-[10px] font-semibold text-stone-400 transition hover:text-stone-600 active:scale-95 dark:text-stone-500 dark:hover:text-stone-300"
-            >
-              Copy
-            </button>
-          </div>
 
           {/* ── Alternates ── */}
           {match.alternates.length > 0 && (
