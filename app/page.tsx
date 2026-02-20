@@ -183,26 +183,26 @@ export default function Page() {
       </header>
 
       {/* Content */}
-      <main className="mx-auto max-w-lg px-5 pb-24 pt-6">
+      <main className="mx-auto max-w-lg px-5 pb-28 pt-8">
         {isHome && !expandedCategory ? (
           /* ── HOME SCREEN ── */
           <>
             {/* Hero */}
-            <section className="mb-10 mt-4 text-center">
+            <section className="mb-12 mt-6 text-center">
               <h2 className="text-balance text-[28px] font-extrabold leading-tight tracking-tight text-stone-900">
-                Handle it in Spanish.
+                Speak Spanish with confidence.
               </h2>
-              <p className="mt-2.5 text-[15px] leading-relaxed text-stone-400">
-                Real-world phrases for real moments.
+              <p className="mt-3 text-[15px] leading-relaxed text-stone-400">
+                No studying. No typing. Just real conversations.
               </p>
             </section>
 
             {/* Primary: Where are you right now? */}
             <section>
-              <h3 className="mb-4 text-[13px] font-bold uppercase tracking-widest text-stone-400">
+              <h3 className="mb-5 text-[13px] font-bold uppercase tracking-widest text-stone-400">
                 Where are you right now?
               </h3>
-              <div className="grid grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-2 gap-4">
                 {homeCategories.map((cat) => (
                   <button
                     key={cat.id}
@@ -226,7 +226,7 @@ export default function Page() {
             </section>
 
             {/* Divider */}
-            <div className="my-10 flex items-center gap-4">
+            <div className="my-12 flex items-center gap-4">
               <div className="h-px flex-1 bg-stone-200/60" />
               <span className="text-[11px] font-bold uppercase tracking-widest text-stone-300">or</span>
               <div className="h-px flex-1 bg-stone-200/60" />
@@ -243,19 +243,19 @@ export default function Page() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                 </svg>
               </button>
-              <p className="mt-4 text-[15px] font-bold text-stone-700">
+              <p className="mt-5 text-[15px] font-bold text-stone-700">
                 Hand them the phone
               </p>
-              <p className="mt-1 text-[13px] text-stone-400">
-                Let them speak.
+              <p className="mt-1.5 text-[13px] text-stone-400">
+                We'll figure out what they said.
               </p>
             </section>
           </>
         ) : isHome && expandedCategory ? (
           /* ── EXPANDED CATEGORY: Show sub-scenarios ── */
           <section>
-            <h3 className="mb-4 text-[13px] font-bold uppercase tracking-widest text-stone-400">
-              Choose a situation
+            <h3 className="mb-5 text-[13px] font-bold uppercase tracking-widest text-stone-400">
+              {"What\u2019s happening?"}
             </h3>
             <div className="flex flex-col gap-2.5">
               {expandedScenarios.map((s) => (

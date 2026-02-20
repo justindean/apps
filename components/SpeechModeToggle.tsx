@@ -15,8 +15,10 @@ interface Props {
 
 export default function SpeechModeToggle({ current, onChange }: Props) {
   return (
-    <div className="flex items-center gap-0.5 rounded-xl bg-stone-200/50 p-1 backdrop-blur-sm dark:bg-stone-800/50">
-      {modes.map((m) => (
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-[9px] font-semibold uppercase tracking-widest text-stone-300 dark:text-stone-600">Tone</span>
+      <div className="flex items-center gap-0.5 rounded-xl bg-stone-200/50 p-1 backdrop-blur-sm dark:bg-stone-800/50">
+        {modes.map((m) => (
         <button
           key={m}
           onClick={() => onChange(m)}
@@ -30,6 +32,7 @@ export default function SpeechModeToggle({ current, onChange }: Props) {
           {labels[m].label}
         </button>
       ))}
+      </div>
     </div>
   );
 }
