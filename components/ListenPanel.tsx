@@ -921,7 +921,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   const isInterim = !finalText && !!interimText;
   const hasResults = !!finalText;
 
-  /* ══════════════════════════���═════════════════��════════════���═══����═════════
+  /* ══════════════════════════���══��══════════════��════════════���═══����═════════
      RENDER
      ��═════════════════════════════════════════════════════���════════════════ */
   return (
@@ -1105,7 +1105,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
 
           <button
             onClick={() => handleReply(match.bestReply)}
-            className="group relative flex w-full flex-col overflow-hidden rounded-[18px] border-2 border-[#D94F2A]/30 bg-gradient-to-b from-white to-warm-50 p-5 text-left shadow-card-elevated shadow-[#D94F2A]/[0.06] ring-1 ring-[#D94F2A]/10 card-highlight transition-all duration-150 active:translate-y-px active:shadow-card-press dark:border-[#E8734F]/25 dark:from-stone-800/90 dark:to-stone-800/70 dark:shadow-[#E8734F]/[0.04] dark:ring-[#E8734F]/10"
+            className="group relative flex w-full flex-col overflow-hidden rounded-[20px] border-[2.5px] border-[#D94F2A]/35 bg-gradient-to-b from-white to-warm-50 px-5 py-6 text-left shadow-[0_4px_24px_-4px_rgba(217,79,42,0.12)] ring-1 ring-[#D94F2A]/10 card-highlight transition-all duration-150 active:translate-y-px active:shadow-[0_1px_4px_rgba(0,0,0,0.04)] dark:border-[#E8734F]/30 dark:from-stone-800/90 dark:to-stone-800/70 dark:shadow-[0_4px_24px_-4px_rgba(232,115,79,0.08)] dark:ring-[#E8734F]/10"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
@@ -1121,9 +1121,9 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-4 py-2.5 text-white shadow-lg shadow-[#D94F2A]/30 transition-transform active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/25">
-                <WaveformIcon size={14} />
-                <span className="text-[13px] font-extrabold">Speak</span>
+              <div className="flex shrink-0 items-center gap-2 rounded-full bg-[#D94F2A] px-5 py-3 text-white shadow-lg shadow-[#D94F2A]/30 transition-transform active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/25">
+                <WaveformIcon size={15} />
+                <span className="text-[14px] font-extrabold">Speak</span>
               </div>
             </div>
           </button>
