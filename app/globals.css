@@ -19,6 +19,11 @@
   }
 }
 
+@keyframes mic-glow {
+  0%, 100% { box-shadow: 0 4px 24px -2px rgba(217, 79, 42, 0.4); }
+  50% { box-shadow: 0 4px 32px -2px rgba(217, 79, 42, 0.55); }
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;

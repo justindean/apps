@@ -27,7 +27,7 @@ const homeCategories = [
     subtitle: "Ordering, paying, small talk",
     scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"],
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-8 w-8">
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.871c1.355 0 2.697.056 4.024.166C17.155 8.51 18 9.473 18 10.608v2.513M15 8.25v-1.5m-6 1.5v-1.5m12 9.75-1.5.75a3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0L3 16.5m15-3.379a48.474 48.474 0 0 0-6-.371c-2.032 0-4.034.126-6 .371m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.169c0 .621-.504 1.125-1.125 1.125H4.125A1.125 1.125 0 0 1 3 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 0 1 6 13.12" />
       </svg>
     ),
@@ -38,7 +38,7 @@ const homeCategories = [
     subtitle: "Taxi, directions, transport",
     scenarioKeys: ["taxi", "transport"],
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-8 w-8">
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
       </svg>
@@ -50,7 +50,7 @@ const homeCategories = [
     subtitle: "Hotel, shopping, help",
     scenarioKeys: ["hotel", "shopping", "greetings"],
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-8 w-8">
         <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.015a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72M6.75 18h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .414.336.75.75.75Z" />
       </svg>
     ),
@@ -61,7 +61,7 @@ const homeCategories = [
     subtitle: "Medical, urgent",
     scenarioKeys: ["emergency"],
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-8 w-8">
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.25-8.25-3.286ZM12 15h.008v.008H12V15Z" />
       </svg>
     ),
@@ -187,12 +187,12 @@ export default function Page() {
         {isHome && !expandedCategory ? (
           /* ── HOME SCREEN ── */
           <>
-            {/* Hero */}
-            <section className="mb-12 mt-6 text-center">
+            {/* Hero -- compressed vertical padding */}
+            <section className="mb-8 mt-2 text-center">
               <h2 className="text-balance text-[28px] font-extrabold leading-tight tracking-tight text-stone-900">
                 Speak Spanish with confidence.
               </h2>
-              <p className="mt-3 text-[15px] leading-relaxed text-stone-400">
+              <p className="mt-2.5 text-[15px] leading-relaxed text-stone-400">
                 No studying. No typing. Just real conversations.
               </p>
             </section>
@@ -207,7 +207,7 @@ export default function Page() {
                   <button
                     key={cat.id}
                     onClick={() => handleCategoryTap(cat.id)}
-                    className="group flex flex-col items-start gap-3 rounded-2xl border border-stone-200/60 bg-white p-5 text-left shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card-hover active:translate-y-px active:scale-[0.98] active:shadow-card-press"
+                    className="group flex flex-col items-start gap-3.5 rounded-[20px] border border-stone-200/60 bg-white p-5 text-left shadow-[0_2px_12px_-2px_rgba(0,0,0,0.06)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] active:translate-y-px active:scale-[0.98] active:shadow-[0_1px_4px_rgba(0,0,0,0.04)]"
                   >
                     <span className="text-stone-400 transition-colors group-hover:text-stone-600">
                       {cat.icon}
@@ -216,7 +216,7 @@ export default function Page() {
                       <p className="text-[15px] font-bold leading-tight text-stone-900">
                         {cat.title}
                       </p>
-                      <p className="mt-1 text-[12px] leading-snug text-stone-400">
+                      <p className="mt-1 text-[12px] leading-snug text-stone-500/80">
                         {cat.subtitle}
                       </p>
                     </div>
@@ -225,31 +225,24 @@ export default function Page() {
               </div>
             </section>
 
-            {/* Divider */}
-            <div className="my-12 flex items-center gap-4">
-              <div className="h-px flex-1 bg-stone-200/60" />
-              <span className="text-[11px] font-bold uppercase tracking-widest text-stone-300">or</span>
-              <div className="h-px flex-1 bg-stone-200/60" />
-            </div>
-
-            {/* Listen CTA */}
-            <section className="flex flex-col items-center">
+            {/* Floating Mic Button -- fixed to bottom center */}
+            <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col items-center pb-7 pt-10 pointer-events-none bg-gradient-to-t from-[#FAF9F7] via-[#FAF9F7]/80 to-transparent">
+              <p className="mb-2 text-[13px] font-bold text-stone-600 pointer-events-auto">
+                Hand them the phone
+              </p>
+              <p className="mb-3 text-[11px] text-stone-400 pointer-events-auto">
+                {"We\u2019ll figure out what they said."}
+              </p>
               <button
                 onClick={() => setShowListen(true)}
-                className="group flex h-20 w-20 items-center justify-center rounded-full bg-[#D94F2A] shadow-lg shadow-[#D94F2A]/20 transition-all duration-150 hover:shadow-xl hover:shadow-[#D94F2A]/30 active:scale-95"
+                className="pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#D94F2A] shadow-[0_4px_24px_-2px_rgba(217,79,42,0.4)] ring-4 ring-[#D94F2A]/10 transition-all duration-200 hover:shadow-[0_6px_32px_-2px_rgba(217,79,42,0.5)] hover:ring-[#D94F2A]/20 active:scale-90 animate-[mic-glow_3s_ease-in-out_infinite]"
                 aria-label="Start listening"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-8 w-8 text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-7 w-7 text-white">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                 </svg>
               </button>
-              <p className="mt-5 text-[15px] font-bold text-stone-700">
-                Hand them the phone
-              </p>
-              <p className="mt-1.5 text-[13px] text-stone-400">
-                We'll figure out what they said.
-              </p>
-            </section>
+            </div>
           </>
         ) : isHome && expandedCategory ? (
           /* ── EXPANDED CATEGORY: Show sub-scenarios ── */
