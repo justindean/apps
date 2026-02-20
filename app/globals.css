@@ -20,8 +20,17 @@
 }
 
 @keyframes mic-glow {
-  0%, 100% { box-shadow: 0 4px 24px -2px rgba(217, 79, 42, 0.4); }
-  50% { box-shadow: 0 4px 32px -2px rgba(217, 79, 42, 0.55); }
+  0%, 100% { box-shadow: 0 8px 40px -4px rgba(217, 79, 42, 0.5); }
+  50% { box-shadow: 0 8px 48px -4px rgba(217, 79, 42, 0.65); }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @layer utilities {
