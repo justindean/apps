@@ -10,22 +10,73 @@ import {
   type IntentKey,
   type Phrase,
 } from "@/data/phrases";
-import { CategoryGrid } from "@/components/CategoryGrid";
 import { SubContextBar } from "@/components/SubContextBar";
 import { PhraseList } from "@/components/PhraseList";
 import { FlowNavigator } from "@/components/FlowNavigator";
 import SpeechModeToggle from "@/components/SpeechModeToggle";
 import RescueModal from "@/components/RescueModal";
+import { ListenPanel } from "@/components/ListenPanel";
 
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
+
+/* ── Home category cards (grouped from the 16 scenarios) ── */
+const homeCategories = [
+  {
+    id: "food-drink",
+    title: "Food & Drink",
+    subtitle: "Ordering, paying, small talk",
+    scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"],
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.871c1.355 0 2.697.056 4.024.166C17.155 8.51 18 9.473 18 10.608v2.513M15 8.25v-1.5m-6 1.5v-1.5m12 9.75-1.5.75a3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0L3 16.5m15-3.379a48.474 48.474 0 0 0-6-.371c-2.032 0-4.034.126-6 .371m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.169c0 .621-.504 1.125-1.125 1.125H4.125A1.125 1.125 0 0 1 3 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 0 1 6 13.12" />
+      </svg>
+    ),
+  },
+  {
+    id: "getting-around",
+    title: "Getting Around",
+    subtitle: "Taxi, directions, transport",
+    scenarioKeys: ["taxi", "transport"],
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+      </svg>
+    ),
+  },
+  {
+    id: "places-services",
+    title: "Places & Services",
+    subtitle: "Hotel, shopping, help",
+    scenarioKeys: ["hotel", "shopping", "greetings"],
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.015a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72M6.75 18h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .414.336.75.75.75Z" />
+      </svg>
+    ),
+  },
+  {
+    id: "emergency",
+    title: "Emergency",
+    subtitle: "Medical, urgent",
+    scenarioKeys: ["emergency"],
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.25-8.25-3.286ZM12 15h.008v.008H12V15Z" />
+      </svg>
+    ),
+  },
+];
 
 type ToastState = { visible: boolean; text: string };
 
 export default function Page() {
   const [scenario, setScenario] = useState<Scenario | null>(null);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [activeIntent, setActiveIntent] = useState<IntentKey>("order");
   const [mode, setMode] = useState<SpeechMode>("neutral");
   const [showRescue, setShowRescue] = useState(false);
+  const [showListen, setShowListen] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
 
   const copyPhrase = useCallback(async (phrase: string) => {
@@ -43,80 +94,84 @@ export default function Page() {
     if (found) {
       setScenario(found);
       setActiveIntent("order");
+      setExpandedCategory(null);
     }
   };
 
   const handleBack = () => {
-    setScenario(null);
-    setActiveIntent("order");
+    if (scenario) {
+      setScenario(null);
+      setActiveIntent("order");
+    } else if (showListen) {
+      setShowListen(false);
+    }
+  };
+
+  const handleCategoryTap = (categoryId: string) => {
+    const cat = homeCategories.find((c) => c.id === categoryId);
+    if (!cat) return;
+    // If only one scenario in this category, go directly
+    if (cat.scenarioKeys.length === 1) {
+      handleSelectScenario(cat.scenarioKeys[0]);
+    } else {
+      setExpandedCategory(categoryId);
+    }
   };
 
   // Does the active scenario use a conversation flow?
   const hasFlow = scenario?.flowStages && scenario.flowStages.length > 0;
 
-  // Get active phrases based on scenario + intent + mode (only for non-flow scenarios)
+  // Get active phrases based on scenario + intent + mode
   const activePhrases: Phrase[] =
     scenario && !hasFlow
       ? scenario.intents[activeIntent]?.[mode] ?? scenario.intents[activeIntent]?.neutral ?? []
       : [];
 
+  // Get scenarios for expanded category
+  const expandedCategoryData = expandedCategory
+    ? homeCategories.find((c) => c.id === expandedCategory)
+    : null;
+  const expandedScenarios = expandedCategoryData
+    ? scenarios.filter((s) => expandedCategoryData.scenarioKeys.includes(s.key))
+    : [];
+
+  const isHome = !scenario && !showListen;
+  const showBackButton = scenario || showListen || expandedCategory;
+
   return (
-    <div
-      className={`min-h-dvh transition-colors ${
-        hasFlow
-          ? "bg-warm-50 text-stone-900 dark:bg-warm-950 dark:text-stone-100"
-          : "bg-slate-50 text-slate-900 dark:bg-slate-925 dark:text-slate-100"
-      }`}
-    >
+    <div className="min-h-dvh bg-[#FAF9F7] text-stone-800 transition-colors">
       {/* Header */}
-      <header
-        className={`sticky top-0 z-30 border-b backdrop-blur-xl ${
-          hasFlow
-            ? "border-stone-200/40 bg-warm-50/85 dark:border-stone-800/40 dark:bg-warm-950/85"
-            : "border-slate-200/60 bg-slate-50/90 dark:border-slate-800/60 dark:bg-slate-925/90"
-        }`}
-      >
-        <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
-          {scenario ? (
+      <header className="sticky top-0 z-30 border-b border-stone-200/40 bg-[#FAF9F7]/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-3.5">
+          {showBackButton ? (
             <button
-              onClick={handleBack}
-              className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              onClick={() => {
+                if (scenario) handleBack();
+                else if (expandedCategory) setExpandedCategory(null);
+                else if (showListen) setShowListen(false);
+              }}
+              className="flex items-center gap-1.5 text-sm font-semibold text-stone-400 transition hover:text-stone-700"
               aria-label="Go back"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                className="h-4 w-4"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z"
-                  clipRule="evenodd"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
               </svg>
-              <span className="flex items-center gap-1.5">
-                <span aria-hidden>{scenario.emoji}</span>
-                {scenario.name}
-              </span>
+              {scenario ? (
+                <span>{scenario.name}</span>
+              ) : expandedCategory ? (
+                <span>{expandedCategoryData?.title}</span>
+              ) : (
+                <span>Listen</span>
+              )}
             </button>
           ) : (
-            <h1 className="text-lg font-extrabold tracking-tight">TapHabla</h1>
+            <h1 className="text-lg font-extrabold tracking-tight text-stone-900">TapHabla</h1>
           )}
 
-          <div className="flex items-center gap-2">
-            <SpeechModeToggle current={mode} onChange={setMode} />
-            <button
-              onClick={() => setShowRescue(true)}
-              className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 active:scale-95"
-              aria-label="Emergency phrases"
-            >
-              SOS
-            </button>
-          </div>
+          <SpeechModeToggle current={mode} onChange={setMode} />
         </div>
 
-        {/* Intent tabs when a scenario is selected (not for flow-based) */}
+        {/* Intent tabs when a non-flow scenario is selected */}
         {scenario && !hasFlow && (
           <SubContextBar
             items={intentKeys.map((k) => ({ key: k, name: intentMeta[k].label }))}
@@ -128,26 +183,98 @@ export default function Page() {
       </header>
 
       {/* Content */}
-      <main className="mx-auto max-w-lg px-4 pb-24 pt-4">
-        {!scenario ? (
+      <main className="mx-auto max-w-lg px-5 pb-24 pt-6">
+        {isHome && !expandedCategory ? (
+          /* ── HOME SCREEN ── */
           <>
-            <p className="mb-4 text-center text-sm text-slate-500 dark:text-slate-400">
-              Tap a situation, get the right phrase.
-            </p>
-            <CategoryGrid
-              categories={scenarios.map((s) => ({
-                key: s.key,
-                name: s.name,
-                emoji: s.emoji,
-                color: s.color,
-              }))}
-              onSelect={handleSelectScenario}
-            />
-            <footer className="mt-8 text-center text-xs text-slate-400 dark:text-slate-600">
-              {scenarios.length} scenarios
-            </footer>
+            {/* Hero */}
+            <section className="mb-10 mt-4 text-center">
+              <h2 className="text-balance text-[28px] font-extrabold leading-tight tracking-tight text-stone-900">
+                Handle it in Spanish.
+              </h2>
+              <p className="mt-2.5 text-[15px] leading-relaxed text-stone-400">
+                Real-world phrases for real moments.
+              </p>
+            </section>
+
+            {/* Primary: Where are you right now? */}
+            <section>
+              <h3 className="mb-4 text-[13px] font-bold uppercase tracking-widest text-stone-400">
+                Where are you right now?
+              </h3>
+              <div className="grid grid-cols-2 gap-3.5">
+                {homeCategories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleCategoryTap(cat.id)}
+                    className="group flex flex-col items-start gap-3 rounded-2xl border border-stone-200/60 bg-white p-5 text-left shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card-hover active:translate-y-px active:scale-[0.98] active:shadow-card-press"
+                  >
+                    <span className="text-stone-400 transition-colors group-hover:text-stone-600">
+                      {cat.icon}
+                    </span>
+                    <div>
+                      <p className="text-[15px] font-bold leading-tight text-stone-900">
+                        {cat.title}
+                      </p>
+                      <p className="mt-1 text-[12px] leading-snug text-stone-400">
+                        {cat.subtitle}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Divider */}
+            <div className="my-10 flex items-center gap-4">
+              <div className="h-px flex-1 bg-stone-200/60" />
+              <span className="text-[11px] font-bold uppercase tracking-widest text-stone-300">or</span>
+              <div className="h-px flex-1 bg-stone-200/60" />
+            </div>
+
+            {/* Listen CTA */}
+            <section className="flex flex-col items-center">
+              <button
+                onClick={() => setShowListen(true)}
+                className="group flex h-20 w-20 items-center justify-center rounded-full bg-[#D94F2A] shadow-lg shadow-[#D94F2A]/20 transition-all duration-150 hover:shadow-xl hover:shadow-[#D94F2A]/30 active:scale-95"
+                aria-label="Start listening"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-8 w-8 text-white">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                </svg>
+              </button>
+              <p className="mt-4 text-[15px] font-bold text-stone-700">
+                Hand them the phone
+              </p>
+              <p className="mt-1 text-[13px] text-stone-400">
+                Let them speak.
+              </p>
+            </section>
           </>
-        ) : hasFlow && scenario.flowStages ? (
+        ) : isHome && expandedCategory ? (
+          /* ── EXPANDED CATEGORY: Show sub-scenarios ── */
+          <section>
+            <h3 className="mb-4 text-[13px] font-bold uppercase tracking-widest text-stone-400">
+              Choose a situation
+            </h3>
+            <div className="flex flex-col gap-2.5">
+              {expandedScenarios.map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => handleSelectScenario(s.key)}
+                  className="flex items-center gap-4 rounded-2xl border border-stone-200/60 bg-white p-4 text-left shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card-hover active:translate-y-px active:scale-[0.99] active:shadow-card-press"
+                >
+                  <span className="text-2xl" aria-hidden>{s.emoji}</span>
+                  <span className="text-[15px] font-bold text-stone-900">{s.name}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : showListen ? (
+          /* ── LISTEN MODE ── */
+          <ListenPanel mode={mode} />
+        ) : hasFlow && scenario?.flowStages ? (
+          /* ── FLOW NAVIGATOR ── */
           <FlowNavigator
             stages={scenario.flowStages}
             color={scenario.color}
@@ -155,9 +282,10 @@ export default function Page() {
             mode={mode}
           />
         ) : (
+          /* ── PHRASE LIST ── */
           <PhraseList
             phrases={activePhrases}
-            color={scenario.color}
+            color={scenario?.color ?? "stone"}
             onCopy={copyPhrase}
           />
         )}
@@ -167,11 +295,7 @@ export default function Page() {
       <div
         role="status"
         aria-live="polite"
-        className={`fixed left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-sm font-medium shadow-lg transition-all duration-200 ${
-          hasFlow
-            ? "bottom-24 bg-stone-900 text-white shadow-glass dark:bg-stone-100 dark:text-stone-900"
-            : "bottom-6 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-        } ${
+        className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg transition-all duration-200 ${
           toast.visible
             ? "translate-y-0 opacity-100"
             : "pointer-events-none translate-y-2 opacity-0"
