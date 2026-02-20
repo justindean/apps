@@ -19,54 +19,13 @@ import { ListenPanel } from "@/components/ListenPanel";
 
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
-/* ── Context categories for bottom sheet ── */
-const contextCategories = [
-  {
-    id: "food-drink",
-    title: "Food & Drink",
-    subtitle: "Ordering, menus, paying",
-    scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"],
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.871c1.355 0 2.697.056 4.024.166C17.155 8.51 18 9.473 18 10.608v2.513M15 8.25v-1.5m-6 1.5v-1.5m12 9.75-1.5.75a3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0 3.354 3.354 0 0 0-3 0 3.354 3.354 0 0 1-3 0L3 16.5m15-3.379a48.474 48.474 0 0 0-6-.371c-2.032 0-4.034.126-6 .371m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.169c0 .621-.504 1.125-1.125 1.125H4.125A1.125 1.125 0 0 1 3 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 0 1 6 13.12" />
-      </svg>
-    ),
-  },
-  {
-    id: "getting-around",
-    title: "Getting Around",
-    subtitle: "Taxi, directions, transport",
-    scenarioKeys: ["taxi", "transport"],
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-      </svg>
-    ),
-  },
-  {
-    id: "places-services",
-    title: "Places & Services",
-    subtitle: "Hotel, shopping, help",
-    scenarioKeys: ["hotel", "shopping", "greetings"],
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.015a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72M6.75 18h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .414.336.75.75.75Z" />
-      </svg>
-    ),
-  },
-  {
-    id: "emergency",
-    title: "Emergency",
-    subtitle: "Medical, urgent",
-    scenarioKeys: ["emergency"],
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.25-8.25-3.286ZM12 15h.008v.008H12V15Z" />
-      </svg>
-    ),
-  },
-];
+/* ── Situation chips ── */
+const situations = [
+  { id: "food-drink", label: "Food", emoji: "\uD83C\uDF7D", scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"] },
+  { id: "getting-around", label: "Getting Around", emoji: "\uD83D\uDE95", scenarioKeys: ["taxi", "transport"] },
+  { id: "places-services", label: "Services", emoji: "\uD83C\uDFE8", scenarioKeys: ["hotel", "shopping", "greetings"] },
+  { id: "emergency", label: "Emergency", emoji: "\uD83D\uDEA8", scenarioKeys: ["emergency"] },
+] as const;
 
 type ToastState = { visible: boolean; text: string };
 
@@ -77,12 +36,14 @@ export default function Page() {
   const [showRescue, setShowRescue] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
 
-  // Listen overlay state
+  // Listen overlay
   const [showListen, setShowListen] = useState(false);
 
-  // Context state
-  const [activeContext, setActiveContext] = useState<string | null>(null);
-  const [showContextSheet, setShowContextSheet] = useState(false);
+  // Situation chip
+  const [activeSituation, setActiveSituation] = useState<string | null>(null);
+
+  // Nudge state -- pulse chips once when mic opened with no situation
+  const [nudgeChips, setNudgeChips] = useState(false);
 
   const copyPhrase = useCallback(async (phrase: string) => {
     try {
@@ -109,21 +70,25 @@ export default function Page() {
     }
   };
 
-  const handleContextSelect = (categoryId: string) => {
-    setActiveContext(categoryId);
-    setShowContextSheet(false);
+  const handleMicTap = () => {
+    if (!activeSituation) {
+      setNudgeChips(true);
+      setTimeout(() => setNudgeChips(false), 1200);
+    }
+    setShowListen(true);
   };
 
-  const clearContext = () => setActiveContext(null);
+  const toggleSituation = (id: string) => {
+    setActiveSituation((prev) => (prev === id ? null : id));
+  };
 
-  const activeContextData = activeContext
-    ? contextCategories.find((c) => c.id === activeContext)
+  const activeSituationData = activeSituation
+    ? situations.find((s) => s.id === activeSituation)
     : null;
 
-  // Does the active scenario use a conversation flow?
+  // Scenario flow check
   const hasFlow = scenario?.flowStages && scenario.flowStages.length > 0;
 
-  // Get active phrases based on scenario + intent + mode
   const activePhrases: Phrase[] =
     scenario && !hasFlow
       ? scenario.intents[activeIntent]?.[mode] ?? scenario.intents[activeIntent]?.neutral ?? []
@@ -132,14 +97,14 @@ export default function Page() {
   const isHome = !scenario;
 
   return (
-    <div className="min-h-dvh bg-[#FAF9F7] text-stone-800 transition-colors">
+    <div className="min-h-dvh bg-[#FAF9F7] text-stone-800">
       {/* ════════════════════════════════════════════════════════════════
          LISTENING OVERLAY -- full-screen modal
          ════════════════════════════════════════════════════════════════ */}
       {showListen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-[#FAF9F7]">
           {/* Overlay header */}
-          <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex items-center justify-between px-5 pt-[env(safe-area-inset-top,12px)] pb-2">
             <button
               onClick={() => setShowListen(false)}
               className="flex items-center justify-center rounded-full p-2 text-stone-400 transition hover:text-stone-700 active:scale-95"
@@ -150,63 +115,41 @@ export default function Page() {
               </svg>
             </button>
 
-            {/* Context pill (if set) */}
-            {activeContextData && (
+            {/* Context pill (if situation set) */}
+            {activeSituationData && (
               <div className="flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1.5">
+                <span className="text-[12px]">{activeSituationData.emoji}</span>
                 <span className="text-[11px] font-semibold text-stone-500">
-                  {activeContextData.title}
+                  {activeSituationData.label}
                 </span>
+                <button
+                  onClick={() => setActiveSituation(null)}
+                  className="ml-0.5 text-stone-400 transition hover:text-stone-600"
+                  aria-label="Clear context"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                    <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
+                  </svg>
+                </button>
               </div>
             )}
 
-            <div className="w-9" /> {/* Spacer to balance header */}
+            {/* Gear */}
+            <div className="w-9" />
           </div>
 
-          {/* Listen panel content -- fills remaining space */}
+          {/* Nudge if no situation */}
+          {!activeSituation && (
+            <p className="px-5 text-center text-[12px] font-medium text-stone-400/80">
+              Pick a situation for smarter results.
+            </p>
+          )}
+
+          {/* Listen panel content */}
           <div className="flex-1 overflow-y-auto px-5 pb-8">
             <ListenPanel mode={mode} onCopy={copyPhrase} onSpeak={() => {}} />
           </div>
         </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════
-         CONTEXT BOTTOM SHEET
-         ════════════════════════════════════════════════════════════════ */}
-      {showContextSheet && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] transition-opacity"
-            onClick={() => setShowContextSheet(false)}
-          />
-          {/* Sheet */}
-          <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-lg animate-slide-up rounded-t-3xl bg-white px-6 pb-10 pt-6 shadow-[0_-8px_40px_-4px_rgba(0,0,0,0.12)]">
-            {/* Handle */}
-            <div className="mx-auto mb-6 h-1 w-10 rounded-full bg-stone-200" />
-            <h3 className="mb-5 text-[15px] font-bold text-stone-900">Set the situation</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {contextCategories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => handleContextSelect(cat.id)}
-                  className={`flex flex-col items-start gap-2.5 rounded-2xl border p-4 text-left transition-all duration-150 active:scale-[0.97] ${
-                    activeContext === cat.id
-                      ? "border-[#D94F2A]/40 bg-[#D94F2A]/[0.04] shadow-sm"
-                      : "border-stone-200/60 bg-white hover:border-stone-300/80"
-                  }`}
-                >
-                  <span className={activeContext === cat.id ? "text-[#D94F2A]" : "text-stone-400"}>
-                    {cat.icon}
-                  </span>
-                  <div>
-                    <p className="text-[14px] font-bold leading-tight text-stone-900">{cat.title}</p>
-                    <p className="mt-0.5 text-[11px] text-stone-400">{cat.subtitle}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
       )}
 
       {/* ════════════════════════════════════════════════════════════════
@@ -246,41 +189,26 @@ export default function Page() {
       </header>
 
       {/* Content */}
-      <main className="mx-auto max-w-lg px-5 pb-28 pt-8">
+      <main className="mx-auto max-w-lg px-5 pb-28 pt-6">
         {isHome ? (
           /* ── HOME SCREEN ── */
-          <div className="flex min-h-[calc(100dvh-160px)] flex-col items-center justify-center">
+          <div className="flex min-h-[calc(100dvh-140px)] flex-col items-center justify-center">
             {/* Hero */}
-            <section className="mb-14 text-center">
-              <h2 className="text-[38px] font-extrabold leading-[1.05] tracking-tight text-stone-900">
+            <section className="mb-10 text-center">
+              <h2 className="text-[40px] font-extrabold leading-[1.05] tracking-tight text-stone-900">
                 {"Land. Go."}
               </h2>
-              <p className="mt-3.5 text-[17px] leading-relaxed text-stone-400">
+              <p className="mt-3 text-[17px] leading-relaxed text-stone-400">
                 {"We\u2019ll handle the Spanish."}
+              </p>
+              <p className="mt-2 text-[13px] text-stone-300">
+                Works instantly. No signup.
               </p>
             </section>
 
-            {/* Context pill (if active) */}
-            {activeContextData && (
-              <div className="mb-8 flex items-center gap-2 rounded-full bg-stone-100 px-4 py-2">
-                <span className="text-[12px] font-semibold text-stone-600">
-                  Context: {activeContextData.title}
-                </span>
-                <button
-                  onClick={clearContext}
-                  className="flex items-center justify-center rounded-full text-stone-400 transition hover:text-stone-600"
-                  aria-label="Clear context"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
-                    <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
             {/* Primary: Large Mic Button */}
             <button
-              onClick={() => setShowListen(true)}
+              onClick={handleMicTap}
               className="group flex h-28 w-28 items-center justify-center rounded-full bg-[#D94F2A] shadow-[0_8px_40px_-4px_rgba(217,79,42,0.5)] ring-4 ring-[#D94F2A]/10 transition-all duration-200 hover:shadow-[0_12px_48px_-4px_rgba(217,79,42,0.6)] hover:ring-[#D94F2A]/20 active:scale-90 animate-[mic-glow_3s_ease-in-out_infinite]"
               aria-label="Start listening"
             >
@@ -289,13 +217,31 @@ export default function Page() {
               </svg>
             </button>
 
-            {/* Set the situation (optional) */}
-            <button
-              onClick={() => setShowContextSheet(true)}
-              className="mt-12 text-[14px] font-semibold text-stone-400 transition hover:text-stone-600 active:scale-95"
-            >
-              Set the situation (optional)
-            </button>
+            {/* Situation chips -- always visible */}
+            <section className="mt-14 w-full text-center">
+              <p className="mb-4 text-[13px] font-medium text-stone-400">
+                {"What\u2019s the situation?"}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2.5">
+                {situations.map((sit) => {
+                  const isActive = activeSituation === sit.id;
+                  return (
+                    <button
+                      key={sit.id}
+                      onClick={() => toggleSituation(sit.id)}
+                      className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-[13px] font-semibold transition-all duration-200 active:scale-95 ${
+                        isActive
+                          ? "border-[#D94F2A]/30 bg-[#D94F2A]/[0.06] text-[#D94F2A] shadow-sm shadow-[#D94F2A]/10"
+                          : `border-stone-200 bg-white text-stone-600 hover:border-stone-300 ${nudgeChips ? "animate-[chip-nudge_0.4s_ease-in-out]" : ""}`
+                      }`}
+                    >
+                      <span className="text-[14px]">{sit.emoji}</span>
+                      {sit.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
           </div>
         ) : hasFlow && scenario?.flowStages ? (
           /* ── FLOW NAVIGATOR ── */
