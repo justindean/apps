@@ -272,7 +272,7 @@ export default function Page() {
           </section>
         ) : showListen ? (
           /* ── LISTEN MODE ── */
-          <ListenPanel mode={mode} />
+          <ListenPanel mode={mode} onCopy={copyPhrase} onSpeak={() => {}} />
         ) : hasFlow && scenario?.flowStages ? (
           /* ── FLOW NAVIGATOR ── */
           <FlowNavigator
