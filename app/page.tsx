@@ -188,19 +188,19 @@ export default function Page() {
           /* ── HOME SCREEN ── */
           <>
             {/* Hero -- compressed vertical padding */}
-            <section className="mb-8 mt-2 text-center">
-              <h2 className="text-balance text-[28px] font-extrabold leading-tight tracking-tight text-stone-900">
-                Speak Spanish with confidence.
+            <section className="mb-10 mt-4 text-center">
+              <h2 className="text-balance text-[30px] font-extrabold leading-[1.15] tracking-tight text-stone-900">
+                Land and go.
               </h2>
-              <p className="mt-2.5 text-[15px] leading-relaxed text-stone-400">
-                No studying. No typing. Just real conversations.
+              <p className="mt-3 text-[16px] leading-relaxed text-stone-400">
+                {"We\u2019ll handle the Spanish."}
               </p>
             </section>
 
             {/* Primary: Where are you right now? */}
             <section>
-              <h3 className="mb-5 text-[13px] font-bold uppercase tracking-widest text-stone-400">
-                Where are you right now?
+              <h3 className="mb-5 text-[14px] font-bold tracking-wide text-stone-400">
+                What are you walking into?
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 {homeCategories.map((cat) => (
@@ -226,19 +226,16 @@ export default function Page() {
             </section>
 
             {/* Floating Mic Button -- fixed to bottom center */}
-            <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col items-center pb-7 pt-10 pointer-events-none bg-gradient-to-t from-[#FAF9F7] via-[#FAF9F7]/80 to-transparent">
-              <p className="mb-2 text-[13px] font-bold text-stone-600 pointer-events-auto">
-                Hand them the phone
-              </p>
-              <p className="mb-3 text-[11px] text-stone-400 pointer-events-auto">
-                {"We\u2019ll figure out what they said."}
+            <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col items-center pb-5 pt-12 pointer-events-none bg-gradient-to-t from-[#FAF9F7] via-[#FAF9F7]/80 to-transparent">
+              <p className="mb-3.5 text-[13px] font-bold text-stone-500 pointer-events-auto">
+                {"They\u2019re talking? Tap."}
               </p>
               <button
                 onClick={() => setShowListen(true)}
-                className="pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#D94F2A] shadow-[0_4px_24px_-2px_rgba(217,79,42,0.4)] ring-4 ring-[#D94F2A]/10 transition-all duration-200 hover:shadow-[0_6px_32px_-2px_rgba(217,79,42,0.5)] hover:ring-[#D94F2A]/20 active:scale-90 animate-[mic-glow_3s_ease-in-out_infinite]"
+                className="pointer-events-auto flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#D94F2A] shadow-[0_6px_28px_-2px_rgba(217,79,42,0.45)] ring-4 ring-[#D94F2A]/10 transition-all duration-200 hover:shadow-[0_8px_36px_-2px_rgba(217,79,42,0.55)] hover:ring-[#D94F2A]/20 active:scale-90 animate-[mic-glow_3s_ease-in-out_infinite]"
                 aria-label="Start listening"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-7 w-7 text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-8 w-8 text-white">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                 </svg>
               </button>
@@ -247,7 +244,7 @@ export default function Page() {
         ) : isHome && expandedCategory ? (
           /* ── EXPANDED CATEGORY: Show sub-scenarios ── */
           <section>
-            <h3 className="mb-5 text-[13px] font-bold uppercase tracking-widest text-stone-400">
+            <h3 className="mb-5 text-[14px] font-bold tracking-wide text-stone-400">
               {"What\u2019s happening?"}
             </h3>
             <div className="flex flex-col gap-2.5">

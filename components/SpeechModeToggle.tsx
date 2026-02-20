@@ -16,7 +16,7 @@ interface Props {
 export default function SpeechModeToggle({ current, onChange }: Props) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <span className="text-[9px] font-semibold uppercase tracking-widest text-stone-300 dark:text-stone-600">Tone</span>
+      <span className="text-[9px] font-semibold uppercase tracking-widest text-stone-300/60 dark:text-stone-600/50">Tone</span>
       <div className="flex items-center gap-0.5 rounded-xl bg-stone-200/50 p-1 backdrop-blur-sm dark:bg-stone-800/50">
         {modes.map((m) => (
         <button
