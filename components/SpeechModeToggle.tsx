@@ -1,9 +1,9 @@
 import type { SpeechMode } from "@/data/phrases";
 
 const labels: Record<SpeechMode, { label: string; short: string }> = {
-  street: { label: "Street", short: "Casual everyday Spanish" },
-  neutral: { label: "Neutral", short: "Standard polite Spanish" },
-  formal: { label: "Formal", short: "Business / respectful" },
+  street: { label: "Local", short: "Casual everyday Spanish" },
+  neutral: { label: "Standard", short: "Standard polite Spanish" },
+  formal: { label: "Polite", short: "Business / respectful" },
 };
 
 const modes: SpeechMode[] = ["street", "neutral", "formal"];
