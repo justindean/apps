@@ -25,7 +25,6 @@ const contexts = [
   { id: "getting-around", label: "Getting Around", scenarioKeys: ["taxi", "transport"] },
   { id: "shopping", label: "Shopping", scenarioKeys: ["shopping"] },
   { id: "medical", label: "Medical", scenarioKeys: ["emergency"] },
-  { id: "general", label: "General", scenarioKeys: ["greetings", "hotel"] },
 ] as const;
 
 type ActiveDrawer = null | "listen" | "say";
@@ -343,53 +342,42 @@ export default function Page() {
         {isHome ? (
           <div className="flex flex-col">
             {/* Tagline */}
-            <section className="mb-10 mt-4 text-center">
-              <h2 className="text-[40px] font-extrabold leading-[1.05] tracking-tight text-stone-900">
+            <section className="mb-8 mt-2 text-center">
+              <h2 className="text-[42px] font-extrabold leading-[1] tracking-tight text-stone-900">
                 {"Land. Go."}
               </h2>
             </section>
 
-            {/* Primary actions */}
-            <div className="mb-10 grid grid-cols-2 gap-3">
-              {/* Listen */}
-              <button
-                onClick={openListen}
-                className="group flex flex-col items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-6 shadow-sm transition-all duration-150 hover:border-stone-300 hover:shadow-md active:scale-[0.97]"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#D94F2A]/[0.08]">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-6 w-6 text-[#D94F2A]">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                  </svg>
-                </div>
-                <div className="text-center">
-                  <p className="text-[16px] font-extrabold text-stone-900">Listen</p>
-                  <p className="mt-0.5 text-[12px] font-medium text-stone-400">Catch what they said</p>
-                </div>
-              </button>
+            {/* PRIMARY: Listen -- dominates the screen */}
+            <button
+              onClick={openListen}
+              className="group mb-4 flex w-full items-center gap-5 rounded-2xl bg-[#D94F2A] px-6 py-6 shadow-lg shadow-[#D94F2A]/20 transition-all duration-150 hover:shadow-xl hover:shadow-[#D94F2A]/25 active:scale-[0.98]"
+            >
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/20">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-7 w-7 text-white">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="text-[20px] font-extrabold tracking-tight text-white">LISTEN</p>
+                <p className="mt-0.5 text-[13px] font-medium text-white/70">Catch what they said.</p>
+              </div>
+            </button>
 
-              {/* Say */}
-              <button
-                onClick={openSay}
-                className="group flex flex-col items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-6 shadow-sm transition-all duration-150 hover:border-stone-300 hover:shadow-md active:scale-[0.97]"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#D94F2A]/[0.08]">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-6 w-6 text-[#D94F2A]">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
-                  </svg>
-                </div>
-                <div className="text-center">
-                  <p className="text-[16px] font-extrabold text-stone-900">Say</p>
-                  <p className="mt-0.5 text-[12px] font-medium text-stone-400">Say it right</p>
-                </div>
-              </button>
-            </div>
+            {/* SECONDARY: Say -- ghost button */}
+            <button
+              onClick={openSay}
+              className="mb-10 flex w-full items-center justify-center gap-2 rounded-xl border border-stone-300 px-5 py-3 text-[15px] font-bold text-stone-600 transition-all duration-150 hover:border-stone-400 hover:bg-stone-50 active:scale-[0.98]"
+            >
+              {"Say it right"}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-stone-400">
+                <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+              </svg>
+            </button>
 
             {/* Context chips */}
             <section>
-              <div className="mb-3 flex items-baseline gap-2">
-                <p className="text-[13px] font-bold text-stone-600">Boost accuracy</p>
-                <p className="text-[11px] font-medium text-stone-300">Optional</p>
-              </div>
+              <p className="mb-3 text-[14px] font-bold text-stone-700">Where are you?</p>
               <div className="flex flex-wrap gap-2">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
