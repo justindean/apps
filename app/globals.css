@@ -5,10 +5,20 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
   }
 
   body {
     @apply antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* Body lock when bottom sheet is open -- prevents iOS pull-to-refresh */
+  body.sheet-open {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    -webkit-overflow-scrolling: auto;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -25,6 +35,15 @@
 
 .animate-slide-up {
   animation: slide-up 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes slide-down {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.22s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 @keyframes fade-in {

@@ -346,18 +346,31 @@ async function ensureMicStream(constraints: MediaStreamConstraints): Promise<Med
   return stream;
 }
 
-/** Check mic permission without triggering a prompt */
+/** Check mic permission without triggering a prompt (works across browsers) */
 async function probeMicPermission(): Promise<MicStatus> {
   if (_micStatus === "granted") return "granted";
+  if (_micStatus === "denied") return "denied";
+
+  // 1. Try Permissions API (Chrome, Firefox -- NOT Safari)
   try {
-    // navigator.permissions.query for "microphone" works in Chrome but NOT Safari
     const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
     if (result.state === "granted") { _micStatus = "granted"; return "granted"; }
     if (result.state === "denied") { _micStatus = "denied"; return "denied"; }
+    return "unknown"; // "prompt" state
   } catch {
-    // Safari: permissions.query not supported for microphone -- stay "unknown"
+    // Safari: permissions.query not supported for microphone
   }
-  return _micStatus;
+
+  // 2. Safari fallback: check if we have a cached live stream (means permission was granted before)
+  if (_cachedStream) {
+    const tracks = _cachedStream.getAudioTracks();
+    if (tracks.length > 0 && tracks[0].readyState === "live") {
+      _micStatus = "granted";
+      return "granted";
+    }
+  }
+
+  return "unknown";
 }
 
 /* -----------------------------------------------------------------------
@@ -826,7 +839,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
         }
       } else if (interim) {
         setInterimText(interim);
-        setInstantEnglish(quickTranslate(interim));
+        // Do NOT translate interim -- only translate final to avoid half-Spanish half-English
         addLog("partial", `"${interim}"`);
       }
     };
@@ -908,21 +921,33 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
 
-  /* ── Auto-start (shows pre-frame if mic not yet granted) ── */
+  /* ── Auto-start (probes permission first, skips pre-frame if already granted) ── */
   const autoStartFiredRef = useRef(false);
   useEffect(() => {
     if (autoStart && !autoStartFiredRef.current && state === "idle") {
       autoStartFiredRef.current = true;
-      if (_micStatus !== "granted") {
-        setShowMicPreFrame(true);
-        onDidAutoStart?.();
-      } else {
-        const timer = setTimeout(() => {
-          startListening();
+
+      // Probe permission state before deciding what to show
+      (async () => {
+        const status = await probeMicPermission();
+        setMicStatus(status);
+
+        if (status === "granted") {
+          // Already granted -- go straight to listening, zero friction
+          setTimeout(() => {
+            startListening();
+            onDidAutoStart?.();
+          }, 120);
+        } else if (status === "denied") {
+          // Denied -- show error, no pre-frame
+          setError("Mic blocked in settings.");
           onDidAutoStart?.();
-        }, 200);
-        return () => clearTimeout(timer);
-      }
+        } else {
+          // "unknown" / "prompt" -- show pre-frame to explain before browser prompt
+          setShowMicPreFrame(true);
+          onDidAutoStart?.();
+        }
+      })();
     }
   }, [autoStart, state, startListening, onDidAutoStart]);
 
@@ -1072,7 +1097,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
             </p>
           </div>
 
-          {/* Live transcript card */}
+          {/* Live transcript card -- Spanish ONLY while streaming, English only after final */}
           {(interimText || finalText) && (
             <div className="w-full rounded-xl border border-black/8 bg-white p-4 animate-fade-in">
               <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
@@ -1081,9 +1106,16 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               <p className={`text-[18px] font-extrabold leading-snug text-black ${!finalText ? "opacity-50" : ""}`}>
                 {finalText || interimText}
               </p>
-              {instantEnglish && (
-                <p className={`mt-1 text-[13px] font-medium leading-snug text-black/45 ${!finalText ? "opacity-40" : ""}`}>
-                  {instantEnglish}
+              {/* Only show English translation AFTER transcription is finalized -- never partial */}
+              {finalText ? (
+                instantEnglish && (
+                  <p className="mt-1 text-[13px] font-medium leading-snug text-black/45">
+                    {instantEnglish}
+                  </p>
+                )
+              ) : (
+                <p className="mt-1.5 text-[11px] font-semibold text-black/20">
+                  {"Translating when done\u2026"}
                 </p>
               )}
             </div>
