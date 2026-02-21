@@ -346,7 +346,8 @@ async function ensureMicStream(constraints: MediaStreamConstraints): Promise<Med
   return stream;
 }
 
-/** Check mic permission without triggering a prompt (works across browsers) */
+/** Check mic permission -- on Safari, does a silent getUserMedia probe since
+ *  Safari remembers the grant for the domain and won't re-prompt the user. */
 async function probeMicPermission(): Promise<MicStatus> {
   if (_micStatus === "granted") return "granted";
   if (_micStatus === "denied") return "denied";
@@ -356,21 +357,33 @@ async function probeMicPermission(): Promise<MicStatus> {
     const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
     if (result.state === "granted") { _micStatus = "granted"; return "granted"; }
     if (result.state === "denied") { _micStatus = "denied"; return "denied"; }
-    return "unknown"; // "prompt" state
+    // "prompt" -- user hasn't decided yet
+    return "unknown";
   } catch {
-    // Safari: permissions.query not supported for microphone
+    // Safari: permissions.query not supported for microphone -- fall through
   }
 
-  // 2. Safari fallback: check if we have a cached live stream (means permission was granted before)
-  if (_cachedStream) {
-    const tracks = _cachedStream.getAudioTracks();
-    if (tracks.length > 0 && tracks[0].readyState === "live") {
-      _micStatus = "granted";
-      return "granted";
+  // 2. Safari/WebKit fallback: attempt a real getUserMedia call.
+  //    Safari remembers mic grants per-domain for the session, so if the user
+  //    already granted, this resolves instantly without showing any prompt.
+  //    If they never granted (or denied), it either prompts or throws.
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, noiseSuppression: true, echoCancellation: true },
+    });
+    // Success -- user had already granted (or just granted silently)
+    _micStatus = "granted";
+    _cachedStream = stream;
+    return "granted";
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("NotAllowedError") || msg.includes("denied") || msg.includes("Permission")) {
+      _micStatus = "denied";
+      return "denied";
     }
+    // Other error (e.g. no mic hardware) -- treat as unknown
+    return "unknown";
   }
-
-  return "unknown";
 }
 
 /* -----------------------------------------------------------------------
