@@ -57,6 +57,33 @@ export default function Page() {
   const [sayLoading, setSayLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Drag-to-dismiss state
+  const [sheetDragY, setSheetDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef(0);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  const handleDragStart = useCallback((e: React.TouchEvent) => {
+    dragStartRef.current = e.touches[0].clientY;
+    setIsDragging(true);
+  }, []);
+
+  const handleDragMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const delta = e.touches[0].clientY - dragStartRef.current;
+    // Only allow dragging down (positive delta)
+    setSheetDragY(Math.max(0, delta));
+  }, [isDragging]);
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+    if (sheetDragY > 80) {
+      // Commit close -- threshold met
+      closeDrawer();
+    }
+    setSheetDragY(0);
+  }, [sheetDragY]);
+
   const copyPhrase = useCallback(async (phrase: string) => {
     try {
       await navigator.clipboard.writeText(phrase);
@@ -81,6 +108,24 @@ export default function Page() {
       setActiveIntent("order");
     }
   };
+
+  // Lock body scroll when sheet is open (prevents iOS pull-to-refresh)
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    if (activeDrawer) {
+      document.body.classList.add("sheet-open");
+      document.body.style.top = `-${scrollY}px`;
+    } else {
+      const top = document.body.style.top;
+      document.body.classList.remove("sheet-open");
+      document.body.style.top = "";
+      window.scrollTo(0, parseInt(top || "0") * -1);
+    }
+    return () => {
+      document.body.classList.remove("sheet-open");
+      document.body.style.top = "";
+    };
+  }, [activeDrawer]);
 
   const closeDrawer = () => {
     setActiveDrawer(null);
@@ -188,9 +233,21 @@ export default function Page() {
             onClick={closeDrawer}
             aria-hidden="true"
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[16px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.12)] animate-slide-up">
-            {/* Drag handle */}
-            <div className="flex justify-center pt-2 pb-1">
+          <div
+            ref={sheetRef}
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[16px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.12)] animate-slide-up"
+            style={{
+              transform: sheetDragY > 0 ? `translateY(${sheetDragY}px)` : undefined,
+              transition: isDragging ? "none" : "transform 0.25s ease-out",
+            }}
+          >
+            {/* Drag handle -- touch target for swipe-to-dismiss */}
+            <div
+              className="flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing"
+              onTouchStart={handleDragStart}
+              onTouchMove={handleDragMove}
+              onTouchEnd={handleDragEnd}
+            >
               <div className="h-[4px] w-9 rounded-full bg-black/10" />
             </div>
             {/* Header row */}
@@ -237,8 +294,19 @@ export default function Page() {
             onClick={closeDrawer}
             aria-hidden="true"
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[16px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.12)] animate-slide-up">
-            <div className="flex justify-center pt-2 pb-1">
+          <div
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[16px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.12)] animate-slide-up"
+            style={{
+              transform: sheetDragY > 0 ? `translateY(${sheetDragY}px)` : undefined,
+              transition: isDragging ? "none" : "transform 0.25s ease-out",
+            }}
+          >
+            <div
+              className="flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing"
+              onTouchStart={handleDragStart}
+              onTouchMove={handleDragMove}
+              onTouchEnd={handleDragEnd}
+            >
               <div className="h-[4px] w-9 rounded-full bg-black/10" />
             </div>
             <div className="flex items-center justify-between px-4 pb-2">
@@ -408,7 +476,7 @@ export default function Page() {
             </section>
 
             {/* Build stamp */}
-            <p className="mt-10 text-[10px] font-medium text-black/15">v0.76</p>
+            <p className="mt-10 text-[10px] font-medium text-black/15">v0.77</p>
           </div>
         ) : hasFlow && scenario?.flowStages ? (
           <FlowNavigator stages={scenario.flowStages} color={scenario.color} onCopy={copyPhrase} mode={mode} />
