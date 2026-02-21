@@ -167,31 +167,11 @@ export default function Page() {
          SAY OVERLAY -- full-screen modal
          ════════════════════════════════════════════════════════════════ */}
       {showSay && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#FAF9F7]">
-          {/* Overlay header */}
-          <div className="flex items-center justify-between px-5 pt-[env(safe-area-inset-top,12px)] pb-2">
-            <button
-              onClick={() => setShowSay(false)}
-              className="flex items-center justify-center rounded-full p-2 text-stone-400 transition hover:text-stone-700 active:scale-95"
-              aria-label="Close"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
-              </svg>
-            </button>
-            <h2 className="text-[15px] font-bold text-stone-700">Say This</h2>
-            <div className="w-9" />
-          </div>
-
-          {/* Say panel content */}
-          <div className="flex-1 overflow-y-auto px-5 pb-8">
-            <SayPanel
-              mode={mode}
-              context={activeSituationData?.label}
-              onCopy={copyPhrase}
-            />
-          </div>
-        </div>
+        <SayPanel
+          context={activeSituationData?.label}
+          onCopy={copyPhrase}
+          onClose={() => setShowSay(false)}
+        />
       )}
 
       {/* ════════════════════════════════════════════════════════════════
