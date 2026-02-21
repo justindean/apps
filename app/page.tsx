@@ -16,7 +16,6 @@ import { FlowNavigator } from "@/components/FlowNavigator";
 import SpeechModeToggle from "@/components/SpeechModeToggle";
 import RescueModal from "@/components/RescueModal";
 import { ListenPanel } from "@/components/ListenPanel";
-import { SayPanel } from "@/components/SayPanel";
 
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
@@ -37,10 +36,8 @@ export default function Page() {
   const [showRescue, setShowRescue] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
 
-  // Listen / Say overlays
+  // Listen overlay
   const [showListen, setShowListen] = useState(false);
-  const [showSay, setShowSay] = useState(false);
-  const [autoStartListen, setAutoStartListen] = useState(false);
 
   // Situation chip
   const [activeSituation, setActiveSituation] = useState<string | null>(null);
@@ -78,7 +75,6 @@ export default function Page() {
       setNudgeChips(true);
       setTimeout(() => setNudgeChips(false), 1200);
     }
-    setAutoStartListen(true);
     setShowListen(true);
   };
 
@@ -151,27 +147,9 @@ export default function Page() {
 
           {/* Listen panel content */}
           <div className="flex-1 overflow-y-auto px-5 pb-8">
-            <ListenPanel
-              mode={mode}
-              onCopy={copyPhrase}
-              onSpeak={() => {}}
-              autoStart={autoStartListen}
-              onDidAutoStart={() => setAutoStartListen(false)}
-              context={activeSituationData?.label}
-            />
+            <ListenPanel mode={mode} onCopy={copyPhrase} onSpeak={() => {}} />
           </div>
         </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════
-         SAY OVERLAY -- full-screen modal
-         ════════════════════════════════════════════════════════════════ */}
-      {showSay && (
-        <SayPanel
-          context={activeSituationData?.label}
-          onCopy={copyPhrase}
-          onClose={() => setShowSay(false)}
-        />
       )}
 
       {/* ════════════════════════════════════════════════════════════════
@@ -228,7 +206,7 @@ export default function Page() {
               </p>
             </section>
 
-            {/* Primary: LISTEN -- large mic */}
+            {/* Primary: Large Mic Button */}
             <button
               onClick={handleMicTap}
               className="group flex h-28 w-28 items-center justify-center rounded-full bg-[#D94F2A] shadow-[0_8px_40px_-4px_rgba(217,79,42,0.5)] ring-4 ring-[#D94F2A]/10 transition-all duration-200 hover:shadow-[0_12px_48px_-4px_rgba(217,79,42,0.6)] hover:ring-[#D94F2A]/20 active:scale-90 animate-[mic-glow_3s_ease-in-out_infinite]"
@@ -237,18 +215,6 @@ export default function Page() {
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-11 w-11 text-white transition-transform group-hover:scale-105">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
               </svg>
-            </button>
-            <p className="mt-2 text-[12px] font-semibold uppercase tracking-widest text-stone-300">Listen</p>
-
-            {/* Secondary: SAY -- text input approach */}
-            <button
-              onClick={() => setShowSay(true)}
-              className="mt-6 flex items-center gap-2 rounded-full border-2 border-stone-200 bg-white px-5 py-2.5 text-[14px] font-bold text-stone-600 shadow-sm transition-all duration-150 hover:border-stone-300 hover:shadow-md active:scale-95"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-5 w-5 text-stone-400">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
-              </svg>
-              Say this in Spanish
             </button>
 
             {/* Situation chips -- always visible */}
