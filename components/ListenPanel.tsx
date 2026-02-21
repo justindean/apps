@@ -960,34 +960,38 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
          ACTIVE LISTENING — full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {(state === "listening" || state === "recording") && (
-        <div className="flex flex-col items-center gap-6 py-8">
+        <div className="flex flex-col items-center gap-5 py-6">
           {/* Large pulsing mic */}
           <button
             onClick={stopListening}
-            className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#D94F2A] text-white shadow-xl shadow-[#D94F2A]/30 transition-transform active:scale-95"
+            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#D94F2A] text-white shadow-[0_8px_40px_-8px_rgba(217,79,42,0.5)] transition-transform active:scale-95"
             aria-label="Stop listening"
           >
-            <span className="absolute inset-0 animate-ping rounded-full bg-[#D94F2A]/20" />
-            <span className="absolute inset-[-8px] animate-pulse rounded-full border-2 border-[#D94F2A]/20" />
-            <MicIcon size={32} />
+            <span className="absolute inset-0 animate-ping rounded-full bg-[#D94F2A]/15" />
+            <span className="absolute inset-[-10px] animate-pulse rounded-full border-2 border-[#D94F2A]/15" />
+            <MicIcon size={36} />
           </button>
 
-          {/* Headline */}
-          <p className="text-[14px] font-bold text-stone-500 dark:text-stone-400">
-            {"Listening\u2026"}
-          </p>
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-[16px] font-extrabold text-black">
+              {"Listening\u2026"}
+            </p>
+            <p className="text-[13px] font-medium text-black/35">
+              Hold it toward them.
+            </p>
+          </div>
 
           {/* Live Card 1 -- real-time words + instant translation while listening */}
           {(interimText || finalText) && (
-            <div className="w-full rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+            <div className="w-full rounded-xl border border-black/8 bg-white p-4">
+              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/35">
                 {finalText ? "They said" : "Hearing..."}
               </p>
-              <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${!finalText ? "opacity-60" : ""}`}>
+              <p className={`text-[17px] font-extrabold leading-tight text-black ${!finalText ? "opacity-50" : ""}`}>
                 {`\u201C${finalText || interimText}\u201D`}
               </p>
               {instantEnglish && (
-                <p className={`mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400 ${!finalText ? "opacity-50" : ""}`}>
+                <p className={`mt-1.5 text-[14px] font-medium leading-snug text-black/50 ${!finalText ? "opacity-40" : ""}`}>
                   {instantEnglish}
                 </p>
               )}
@@ -1003,13 +1007,13 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
          ════════════════════════════════════════════════════════════════ */}
       {state !== "listening" && state !== "recording" && (
         <>
-          <div className="flex flex-col items-center gap-2.5">
+          <div className="flex flex-col items-center gap-2">
             <button
               onClick={state !== "processing" ? startListening : undefined}
-              className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
+              className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-150 ${
                 state === "processing"
-                  ? "bg-stone-300 text-stone-500 dark:bg-stone-600 dark:text-stone-400"
-                  : "bg-[#D94F2A] text-white shadow-lg shadow-[#D94F2A]/25 active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
+                  ? "bg-black/10 text-black/30"
+                  : "bg-[#D94F2A] text-white shadow-[0_6px_24px_-6px_rgba(217,79,42,0.45)] active:scale-95"
               }`}
               disabled={state === "processing"}
               aria-label="Start listening"
@@ -1017,7 +1021,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               <MicIcon size={28} />
             </button>
 
-            <p className="text-center text-[13px] font-semibold leading-snug text-stone-400 dark:text-stone-500">
+            <p className="text-center text-[13px] font-semibold leading-snug text-black/35">
               {state === "idle" && !displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
               {state === "idle" && !displayText && micStatus !== "denied" && "Tap to start"}
               {state === "idle" && displayText && "Tap to listen again"}
@@ -1037,18 +1041,18 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       {/* ── CARD 1: WHAT WE HEARD (Spanish + literal English) ── */}
       {/* Always visible once we have text, persists through LLM loading */}
       {(correctedText || finalText) && state !== "listening" && state !== "recording" && (
-        <div className="rounded-lg border border-stone-200/60 bg-white p-4 shadow-sm dark:border-stone-700/40 dark:bg-stone-800/90">
-          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-500 dark:text-stone-400">
+        <div className="rounded-xl border border-black/8 bg-white p-4">
+          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/40">
             They said
           </p>
-          <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
+          <p className="text-[18px] font-extrabold leading-tight text-black">
             {`\u201C${correctedText || finalText}\u201D`}
           </p>
           {/* Literal English -- instant dictionary, upgrades to LLM literalEnglish once available */}
           {(() => {
             const literalText = (match && !llmClassifying && match.literalEnglish) ? match.literalEnglish : instantEnglish;
             return literalText ? (
-              <p className="mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
+              <p className="mt-1.5 text-[14px] font-medium leading-snug text-black/50">
                 {literalText}
               </p>
             ) : null;
