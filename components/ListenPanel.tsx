@@ -265,6 +265,8 @@ interface ListenPanelProps {
   onDidAutoStart?: () => void;
   context?: string;
   onClose?: () => void;
+  /** Pre-acquired mic stream from the tap handler (keeps Safari gesture chain intact) */
+  micStream?: MediaStream | null;
 }
 
 /* ── OpenAI Ping Button (requirement F) ── */
@@ -395,7 +397,7 @@ async function probeMicPermission(): Promise<MicStatus> {
 /* -----------------------------------------------------------------------
    ListenPanel
    ----------------------------------------------------------------------- */
-export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, context, onClose }: ListenPanelProps) {
+export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, context, onClose, micStream: externalMicStream }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
@@ -407,7 +409,6 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   const [micStatus, setMicStatus] = useState<MicStatus>(_micStatus);
   const [showMicPreFrame, setShowMicPreFrame] = useState(false);
   const [micJustGranted, setMicJustGranted] = useState(false);
-  const [waitingForNativePrompt, setWaitingForNativePrompt] = useState(false);
 
   // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
@@ -941,54 +942,52 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
 
-  /* ── Auto-start (probes permission first, skips pre-frame if already granted) ── */
+  /* ── If parent passed a pre-acquired mic stream, cache it immediately ── */
+  useEffect(() => {
+    if (externalMicStream) {
+      _cachedStream = externalMicStream;
+      _micStatus = "granted";
+      setMicStatus("granted");
+      rememberMicGrant();
+    }
+  }, [externalMicStream]);
+
+  /* ── Auto-start ── */
   const autoStartFiredRef = useRef(false);
   useEffect(() => {
     if (autoStart && !autoStartFiredRef.current && state === "idle") {
       autoStartFiredRef.current = true;
 
-      // Probe permission state before deciding what to show
-      (async () => {
-        const status = await probeMicPermission();
-        setMicStatus(status === "granted-before" ? "unknown" : status);
+      if (externalMicStream) {
+        // Stream already acquired in tap handler -- go straight to listening
+        setTimeout(() => {
+          startListening();
+          onDidAutoStart?.();
+        }, 80);
+      } else {
+        // No stream provided -- probe permission and decide
+        (async () => {
+          const status = await probeMicPermission();
+          setMicStatus(status === "granted-before" ? "unknown" : status);
 
-        if (status === "granted") {
-          // Actively granted this session -- go straight to listening
-          setTimeout(() => {
-            startListening();
+          if (status === "granted" || status === "granted-before") {
+            // Already granted or was granted before -- start directly
+            setTimeout(() => {
+              startListening();
+              onDidAutoStart?.();
+            }, 120);
+          } else if (status === "denied") {
+            setError("Mic blocked in settings.");
             onDidAutoStart?.();
-          }, 120);
-        } else if (status === "granted-before") {
-          // Was granted on a previous page load (Safari resets per-refresh).
-          // Show a brief "connecting" state while getUserMedia triggers
-          // Safari's native prompt. This avoids showing our full pre-frame.
-          setWaitingForNativePrompt(true);
-          onDidAutoStart?.();
-          try {
-            await ensureMicStream({
-              audio: { channelCount: 1, sampleRate: { ideal: 48000 }, noiseSuppression: true, echoCancellation: true },
-            });
-            setMicStatus("granted");
-            setWaitingForNativePrompt(false);
-            startListening();
-          } catch {
-            // User denied this time -- clear memory, show pre-frame
-            setWaitingForNativePrompt(false);
-            try { localStorage.removeItem(MIC_GRANTED_KEY); } catch { /* noop */ }
+          } else {
+            // Truly first visit -- show pre-frame
             setShowMicPreFrame(true);
+            onDidAutoStart?.();
           }
-        } else if (status === "denied") {
-          // Denied -- show error, no pre-frame
-          setError("Mic blocked in settings.");
-          onDidAutoStart?.();
-        } else {
-          // "unknown" -- truly first visit, show our pre-frame
-          setShowMicPreFrame(true);
-          onDidAutoStart?.();
-        }
-      })();
+        })();
+      }
     }
-  }, [autoStart, state, startListening, onDidAutoStart]);
+  }, [autoStart, state, startListening, onDidAutoStart, externalMicStream]);
 
   /* ── Handle mic pre-frame "Enable Mic" tap ── */
   const handleEnableMic = useCallback(async () => {
@@ -1085,23 +1084,6 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       )}
 
       {/* ════════════════════════════════════════════════════════════════
-         WAITING FOR SAFARI NATIVE PROMPT -- returning user after refresh
-         ════════════════════════════════════════════════════════════════ */}
-      {waitingForNativePrompt && !showMicPreFrame && (
-        <div className="flex flex-col items-center gap-4 py-10 animate-fade-in">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#C7402A]/10">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-8 w-8 text-[#C7402A] animate-pulse">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-            </svg>
-          </div>
-          <div className="flex flex-col items-center gap-1">
-            <p className="text-[16px] font-extrabold text-black">Connecting mic...</p>
-            <p className="text-[13px] font-medium text-black/35">{"Tap \u201CAllow\u201D if prompted by your browser."}</p>
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════
          MIC JUST GRANTED -- brief success confirmation
          ════════════════════════════════════════════════════════════════ */}
       {micJustGranted && (
@@ -1118,7 +1100,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       {/* ══════════════════════════════════════��══════��══════════════════
          ACTIVE LISTENING -- full-focus screen
          ════════════════════════════════════════════════════════════════ */}
-      {!showMicPreFrame && !micJustGranted && !waitingForNativePrompt && (state === "listening" || state === "recording") && (
+      {!showMicPreFrame && !micJustGranted && (state === "listening" || state === "recording") && (
         <div className="flex flex-col items-center gap-4 py-4">
           {/* Large pulsing mic */}
           <button
@@ -1183,7 +1165,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       {/* ════════════════════════════════════════════════════════════════
          IDLE / PROCESSING — mic button + helper text
          ════════════════════════════════════════════════════════════════ */}
-      {!showMicPreFrame && !micJustGranted && !waitingForNativePrompt && state !== "listening" && state !== "recording" && (
+      {!showMicPreFrame && !micJustGranted && state !== "listening" && state !== "recording" && (
         <>
           <div className="flex flex-col items-center gap-2">
             <button
