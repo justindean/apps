@@ -343,11 +343,24 @@ async function ensureMicStream(constraints: MediaStreamConstraints): Promise<Med
   const stream = await navigator.mediaDevices.getUserMedia(constraints);
   _micStatus = "granted";
   _cachedStream = stream;
+  rememberMicGrant();
   return stream;
 }
 
-/** Check mic permission -- on Safari, does a silent getUserMedia probe since
- *  Safari remembers the grant for the domain and won't re-prompt the user. */
+const MIC_GRANTED_KEY = "taphabla_mic_granted";
+
+/** Check if user has EVER granted mic access on this device (survives refresh) */
+function hasEverGrantedMic(): boolean {
+  try { return localStorage.getItem(MIC_GRANTED_KEY) === "1"; } catch { return false; }
+}
+
+/** Remember that user granted mic access */
+function rememberMicGrant() {
+  try { localStorage.setItem(MIC_GRANTED_KEY, "1"); } catch { /* noop */ }
+}
+
+/** Lightweight permission probe -- does NOT call getUserMedia (avoids Safari re-prompt).
+ *  Uses Permissions API on Chrome/Firefox, falls back to localStorage memory on Safari. */
 async function probeMicPermission(): Promise<MicStatus> {
   if (_micStatus === "granted") return "granted";
   if (_micStatus === "denied") return "denied";
@@ -355,35 +368,28 @@ async function probeMicPermission(): Promise<MicStatus> {
   // 1. Try Permissions API (Chrome, Firefox -- NOT Safari)
   try {
     const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
-    if (result.state === "granted") { _micStatus = "granted"; return "granted"; }
+    if (result.state === "granted") { _micStatus = "granted"; rememberMicGrant(); return "granted"; }
     if (result.state === "denied") { _micStatus = "denied"; return "denied"; }
-    // "prompt" -- user hasn't decided yet
-    return "unknown";
+    return "unknown"; // "prompt" state
   } catch {
-    // Safari: permissions.query not supported for microphone -- fall through
+    // Safari: permissions.query not supported for microphone
   }
 
-  // 2. Safari/WebKit fallback: attempt a real getUserMedia call.
-  //    Safari remembers mic grants per-domain for the session, so if the user
-  //    already granted, this resolves instantly without showing any prompt.
-  //    If they never granted (or denied), it either prompts or throws.
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, noiseSuppression: true, echoCancellation: true },
-    });
-    // Success -- user had already granted (or just granted silently)
-    _micStatus = "granted";
-    _cachedStream = stream;
-    return "granted";
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("NotAllowedError") || msg.includes("denied") || msg.includes("Permission")) {
-      _micStatus = "denied";
-      return "denied";
+  // 2. Check if we've cached a live stream from earlier in this page session
+  if (_cachedStream) {
+    const tracks = _cachedStream.getAudioTracks();
+    if (tracks.length > 0 && tracks[0].readyState === "live") {
+      _micStatus = "granted";
+      return "granted";
     }
-    // Other error (e.g. no mic hardware) -- treat as unknown
-    return "unknown";
   }
+
+  // 3. Check localStorage -- user granted before on this device
+  if (hasEverGrantedMic()) {
+    return "granted-before";
+  }
+
+  return "unknown";
 }
 
 /* -----------------------------------------------------------------------
@@ -943,10 +949,12 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       // Probe permission state before deciding what to show
       (async () => {
         const status = await probeMicPermission();
-        setMicStatus(status);
+        setMicStatus(status === "granted-before" ? "unknown" : status);
 
-        if (status === "granted") {
-          // Already granted -- go straight to listening, zero friction
+        if (status === "granted" || status === "granted-before") {
+          // Already granted (or was granted on a previous visit) --
+          // go straight to listening. Safari may show its native prompt
+          // briefly on refresh, but that's expected and seamless.
           setTimeout(() => {
             startListening();
             onDidAutoStart?.();
@@ -956,7 +964,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
           setError("Mic blocked in settings.");
           onDidAutoStart?.();
         } else {
-          // "unknown" / "prompt" -- show pre-frame to explain before browser prompt
+          // "unknown" -- truly first visit, show our pre-frame
           setShowMicPreFrame(true);
           onDidAutoStart?.();
         }
@@ -972,6 +980,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
         audio: { channelCount: 1, sampleRate: { ideal: 48000 }, noiseSuppression: true, echoCancellation: true },
       });
       setMicStatus("granted");
+      rememberMicGrant();
       setMicJustGranted(true);
       // Brief success confirmation, then start listening
       setTimeout(() => {
