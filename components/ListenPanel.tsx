@@ -324,7 +324,7 @@ function OpenAIPingButton({ addLog }: { addLog: (type: DebugLog["type"], text: s
 }
 
 /* ── Session-level mic manager (survives across component re-mounts) ── */
-type MicStatus = "unknown" | "granted" | "denied";
+type MicStatus = "unknown" | "granted" | "granted-before" | "denied";
 let _micStatus: MicStatus = "unknown";
 let _cachedStream: MediaStream | null = null;
 
@@ -1080,7 +1080,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════════
+      {/* ═════════════════════════════════════════════��══════════════════
          ACTIVE LISTENING -- full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {!showMicPreFrame && !micJustGranted && (state === "listening" || state === "recording") && (
