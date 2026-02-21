@@ -17,23 +17,17 @@ import SpeechModeToggle from "@/components/SpeechModeToggle";
 import RescueModal from "@/components/RescueModal";
 import { ListenPanel } from "@/components/ListenPanel";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type SpeechRecognitionEvent = any;
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
-/* ── Context chips (no Auto -- auto is implicit default) ── */
+/* ── Context chips ── */
 const contexts = [
-  { id: "general", label: "General", scenarioKeys: ["greetings"] },
-  { id: "food-drink", label: "Food", scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"] },
+  { id: "food-drink", label: "Food & Drink", scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"] },
   { id: "getting-around", label: "Getting Around", scenarioKeys: ["taxi", "transport"] },
   { id: "shopping", label: "Shopping", scenarioKeys: ["shopping"] },
-  { id: "services", label: "Services", scenarioKeys: ["hotel"] },
-  { id: "emergency", label: "Emergency", scenarioKeys: ["emergency"] },
+  { id: "medical", label: "Medical", scenarioKeys: ["emergency"] },
 ] as const;
 
-type ActiveMode = "listen" | "say";
+type ActiveDrawer = null | "listen" | "say";
 type ToastState = { visible: boolean; text: string };
 
 interface TranslateResult {
@@ -49,9 +43,8 @@ export default function Page() {
   const [showRescue, setShowRescue] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
 
-  // Active mode + overlays
-  const [activeMode, setActiveMode] = useState<ActiveMode>("listen");
-  const [showListen, setShowListen] = useState(false);
+  // Drawer
+  const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
   const [autoStartListen, setAutoStartListen] = useState(false);
 
   // Context
@@ -66,7 +59,7 @@ export default function Page() {
   const copyPhrase = useCallback(async (phrase: string) => {
     try {
       await navigator.clipboard.writeText(phrase);
-      setToast({ visible: true, text: "Copied!" });
+      setToast({ visible: true, text: "Copied" });
     } catch {
       setToast({ visible: true, text: "Copy failed" });
     }
@@ -88,10 +81,18 @@ export default function Page() {
     }
   };
 
-  const handleListenTap = () => {
-    setActiveMode("listen");
+  const closeDrawer = () => {
+    setActiveDrawer(null);
+    setAutoStartListen(false);
+  };
+
+  const openListen = () => {
     setAutoStartListen(true);
-    setShowListen(true);
+    setActiveDrawer("listen");
+  };
+
+  const openSay = () => {
+    setActiveDrawer("say");
   };
 
   const toggleContext = (id: string) => {
@@ -147,6 +148,24 @@ export default function Page() {
     }
   };
 
+  // English voice capture for SAY
+  const startEnglishCapture = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0]?.[0]?.transcript;
+      if (transcript) {
+        setSayInput(transcript);
+        doTranslate(transcript);
+      }
+    };
+    recognition.start();
+  };
+
   // Scenario flow
   const hasFlow = scenario?.flowStages && scenario.flowStages.length > 0;
   const activePhrases: Phrase[] =
@@ -156,45 +175,37 @@ export default function Page() {
   const isHome = !scenario;
 
   return (
-    <div className="min-h-dvh bg-[#FAF9F7] text-stone-800">
-      {/* ════════════════════════════════════════════════════════════════
-         LISTENING OVERLAY
-         ════════════════════════════════════════════════════════════════ */}
-      {/* ── LISTENING OVERLAY -- slides up from bottom, same page ── */}
-      {showListen && (
+    <div className="min-h-dvh bg-white text-black">
+
+      {/* ══════════════════════════════════════════════════════════════
+         BOTTOM DRAWER -- LISTEN
+         ══════════════════════════════════════════════════════════════ */}
+      {activeDrawer === "listen" && (
         <>
-          {/* Scrim */}
           <div
-            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] animate-[fade-in_0.15s_ease-out]"
-            onClick={() => { setShowListen(false); setAutoStartListen(false); }}
+            className="fixed inset-0 z-40 bg-black/60"
+            onClick={closeDrawer}
             aria-hidden="true"
           />
-          {/* Panel */}
-          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-3xl bg-[#FAF9F7] shadow-2xl animate-slide-up">
-            {/* Drag handle */}
+          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-2xl bg-white shadow-2xl animate-slide-up">
             <div className="flex justify-center pt-3 pb-1">
-              <div className="h-1 w-10 rounded-full bg-stone-300/60" />
+              <div className="h-1 w-9 rounded-full bg-black/10" />
             </div>
-            {/* Overlay header */}
             <div className="flex items-center justify-between px-5 pb-2">
               <button
-                onClick={() => { setShowListen(false); setAutoStartListen(false); }}
-                className="flex items-center gap-1 rounded-full px-2 py-1 text-[13px] font-semibold text-stone-400 transition hover:text-stone-700 active:scale-95"
-                aria-label="Close"
+                onClick={closeDrawer}
+                className="text-[13px] font-bold text-black/40 transition hover:text-black active:scale-95"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                  <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
-                </svg>
                 Done
               </button>
               {activeContextData && (
-                <div className="flex items-center gap-1.5 rounded-full bg-stone-200/60 px-3 py-1">
-                  <span className="text-[11px] font-semibold text-stone-600">{activeContextData.label}</span>
-                </div>
+                <span className="rounded-md bg-black/5 px-2.5 py-0.5 text-[11px] font-bold text-black/50">
+                  {activeContextData.label}
+                </span>
               )}
-              <div className="w-14" />
+              <div className="w-10" />
             </div>
-            <div className="flex-1 overflow-y-auto px-5 pb-8">
+            <div className="flex-1 overflow-y-auto px-5 pb-10">
               <ListenPanel
                 mode={mode}
                 onCopy={copyPhrase}
@@ -202,27 +213,115 @@ export default function Page() {
                 autoStart={autoStartListen}
                 onDidAutoStart={() => setAutoStartListen(false)}
                 context={activeContextData?.label}
-                onClose={() => { setShowListen(false); setAutoStartListen(false); }}
+                onClose={closeDrawer}
               />
             </div>
           </div>
         </>
       )}
 
-      {/* ════════════════════════════════════════════════════════════════
+      {/* ══════════════════════════════════════════════════════════════
+         BOTTOM DRAWER -- SAY
+         ══════════════════════════════════════════════════════════════ */}
+      {activeDrawer === "say" && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/60"
+            onClick={closeDrawer}
+            aria-hidden="true"
+          />
+          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-2xl bg-white shadow-2xl animate-slide-up">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-9 rounded-full bg-black/10" />
+            </div>
+            <div className="flex items-center justify-between px-5 pb-2">
+              <button
+                onClick={closeDrawer}
+                className="text-[13px] font-bold text-black/40 transition hover:text-black active:scale-95"
+              >
+                Done
+              </button>
+              <span className="text-[14px] font-extrabold text-black">Say</span>
+              <div className="w-10" />
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 pb-10">
+              {/* Input */}
+              <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-black/[0.02] px-4 py-3 transition-all focus-within:border-black/20 focus-within:bg-white focus-within:shadow-sm">
+                <input
+                  type="text"
+                  value={sayInput}
+                  onChange={(e) => handleSayInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSaySubmit()}
+                  placeholder="What do you want to say?"
+                  className="flex-1 bg-transparent text-[15px] text-black placeholder:text-black/30 outline-none"
+                  autoFocus
+                />
+                <button
+                  onClick={startEnglishCapture}
+                  className="shrink-0 rounded-full p-2 text-black/25 transition hover:text-[#C7402A] active:scale-90"
+                  aria-label="Speak in English"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Translation result */}
+              {sayLoading && (
+                <div className="mt-5 flex items-center gap-2 px-1">
+                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C7402A]/50" />
+                  <span className="text-[13px] font-semibold text-black/30">Translating...</span>
+                </div>
+              )}
+              {sayResult && !sayLoading && (
+                <div className="mt-5 animate-fade-in">
+                  <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/40">Say this</p>
+                  <div className="rounded-xl border border-black/8 bg-white p-5">
+                    <p className="text-[22px] font-extrabold leading-tight text-black">{sayResult.spanish}</p>
+                    <p className="mt-1.5 text-[14px] text-black/50">{sayResult.english}</p>
+                    {sayResult.pronunciation && (
+                      <p className="mt-1 font-mono text-[11px] text-black/20">{sayResult.pronunciation}</p>
+                    )}
+                    <div className="mt-4 flex items-center gap-2">
+                      <button
+                        onClick={() => speakText(sayResult.spanish)}
+                        className="flex items-center gap-1.5 rounded-lg bg-[#C7402A] px-4 py-2 text-[13px] font-bold text-white transition active:scale-95"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="h-4 w-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2 12h2M6 8v8M10 4v16M14 6v12M18 8v8M22 12h2" />
+                        </svg>
+                        Speak
+                      </button>
+                      <button
+                        onClick={() => copyPhrase(sayResult.spanish)}
+                        className="rounded-lg border border-black/10 px-3.5 py-2 text-[13px] font-semibold text-black/50 transition hover:border-black/20 active:scale-95"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════
          HEADER
-         ════════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-30 border-b border-stone-200/40 bg-[#FAF9F7]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-3">
+         ══════════════════════════════════════════════════════════════ */}
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-transparent">
+        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-2.5">
           {scenario ? (
-            <button onClick={handleBack} className="flex items-center gap-1.5 text-sm font-semibold text-stone-400 transition hover:text-stone-700" aria-label="Go back">
+            <button onClick={handleBack} className="flex items-center gap-1.5 text-sm font-semibold text-black/40 transition hover:text-black" aria-label="Go back">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
                 <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
               </svg>
               <span>{scenario.name}</span>
             </button>
           ) : (
-            <h1 className="text-[20px] font-extrabold tracking-tight text-stone-900">TapHabla</h1>
+            <h1 className="text-[14px] font-extrabold tracking-tight text-[#111]">TapHabla</h1>
           )}
           <SpeechModeToggle current={mode} onChange={setMode} />
         </div>
@@ -236,147 +335,53 @@ export default function Page() {
         )}
       </header>
 
-      {/* ════════════════════════════════════════════════════════════════
+      {/* ══════════════════════════════════════════════════════════════
          MAIN
-         ════════════════════════════════════════════════════════════════ */}
-      <main className="mx-auto max-w-lg px-5 pb-28 pt-6">
+         ══════════════════════════════════════════════════════════════ */}
+      <main className="mx-auto max-w-lg px-5 pb-16">
         {isHome ? (
-          <div className="flex flex-col">
-            {/* Hero -- tight, intentional */}
-            <section className="mb-8 mt-2 text-center">
-              <h2 className="text-[36px] font-extrabold leading-[1.08] tracking-tight text-stone-900">
-                {"Land. Go."}
-              </h2>
-              <p className="mt-2 text-[16px] text-stone-500">
-                {"We\u2019ll handle the Spanish."}
-              </p>
-            </section>
+          <div className="flex flex-col items-center pt-10">
+            {/* Hero command */}
+            <h2 className="text-[48px] font-black uppercase leading-[0.9] -tracking-[0.05em] text-[#111]">
+              {"Land. Go."}
+            </h2>
 
-            {/* Action row: Listen | Say */}
-            <div className="mb-8 flex items-stretch gap-3">
-              <button
-                onClick={handleListenTap}
-                className={`flex flex-1 flex-col items-center gap-1.5 rounded-2xl border px-4 py-4 transition-all duration-150 active:scale-[0.97] ${
-                  activeMode === "listen"
-                    ? "border-[#D94F2A]/25 bg-[#D94F2A]/[0.04]"
-                    : "border-stone-200 bg-white hover:border-stone-300"
-                }`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-6 w-6 text-[#D94F2A]">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                </svg>
-                <span className="text-[14px] font-bold text-stone-800">Listen</span>
-                <span className="text-[11px] text-stone-400">{"What\u2019s being said?"}</span>
-              </button>
-              <button
-                onClick={() => setActiveMode("say")}
-                className={`flex flex-1 flex-col items-center gap-1.5 rounded-2xl border px-4 py-4 transition-all duration-150 active:scale-[0.97] ${
-                  activeMode === "say"
-                    ? "border-[#D94F2A]/25 bg-[#D94F2A]/[0.04]"
-                    : "border-stone-200 bg-white hover:border-stone-300"
-                }`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-6 w-6 text-[#D94F2A]">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
-                </svg>
-                <span className="text-[14px] font-bold text-stone-800">Say</span>
-                <span className="text-[11px] text-stone-400">Help me say it.</span>
-              </button>
-            </div>
+            {/* THE WEAPON -- massive circular mic button */}
+            <button
+              onClick={openListen}
+              className="group relative mt-10 flex h-40 w-40 items-center justify-center rounded-full bg-[#C7402A] shadow-[0_10px_50px_-10px_rgba(199,64,42,0.55)] transition-all duration-150 active:scale-[0.95] active:shadow-[0_4px_24px_-4px_rgba(199,64,42,0.4)]"
+              aria-label="Listen"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-14 w-14 text-white">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+              </svg>
+            </button>
+            <p className="mt-3 text-[15px] font-extrabold uppercase tracking-[0.08em] text-[#111]">
+              Listen
+            </p>
 
-            {/* SAY inline input (visible when Say mode is active) */}
-            {activeMode === "say" && (
-              <div className="mb-8 animate-[fade-in_0.2s_ease-out]">
-                <div className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm focus-within:border-stone-300 focus-within:shadow-md transition-all">
-                  <input
-                    type="text"
-                    value={sayInput}
-                    onChange={(e) => handleSayInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSaySubmit()}
-                    placeholder="Type what you want to say..."
-                    className="flex-1 bg-transparent text-[15px] text-stone-800 placeholder:text-stone-300 outline-none"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => {
-                      // English speech-to-text capture
-                      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                      if (!SR) return;
-                      const recognition = new SR();
-                      recognition.lang = "en-US";
-                      recognition.continuous = false;
-                      recognition.interimResults = false;
-                      recognition.onresult = (e: SpeechRecognitionEvent) => {
-                        const transcript = e.results[0]?.[0]?.transcript;
-                        if (transcript) {
-                          setSayInput(transcript);
-                          doTranslate(transcript);
-                        }
-                      };
-                      recognition.start();
-                    }}
-                    className="shrink-0 rounded-full p-1.5 text-stone-300 transition hover:text-[#D94F2A] active:scale-90"
-                    aria-label="Speak in English"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Translation result */}
-                {sayLoading && (
-                  <div className="mt-4 flex items-center gap-2 px-1">
-                    <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D94F2A]/40" />
-                    <span className="text-[13px] text-stone-400">Translating...</span>
-                  </div>
-                )}
-                {sayResult && !sayLoading && (
-                  <div className="mt-4 rounded-xl border border-stone-200/60 bg-white p-5 shadow-sm">
-                    <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-widest text-stone-300">Say this</p>
-                    <p className="text-[22px] font-extrabold leading-tight text-stone-900">{sayResult.spanish}</p>
-                    <p className="mt-1.5 text-[14px] text-stone-500">{sayResult.english}</p>
-                    {sayResult.pronunciation && (
-                      <p className="mt-1 font-mono text-[11px] text-stone-300">{sayResult.pronunciation}</p>
-                    )}
-                    <div className="mt-4 flex items-center gap-2">
-                      <button
-                        onClick={() => speakText(sayResult.spanish)}
-                        className="flex items-center gap-1.5 rounded-full bg-[#D94F2A] px-4 py-2 text-[13px] font-bold text-white shadow-sm shadow-[#D94F2A]/20 transition active:scale-95"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="h-4 w-4">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2 12h2M6 8v8M10 4v16M14 6v12M18 8v8M22 12h2" />
-                        </svg>
-                        Speak
-                      </button>
-                      <button
-                        onClick={() => copyPhrase(sayResult.spanish)}
-                        className="rounded-full border border-stone-200 px-4 py-2 text-[13px] font-semibold text-stone-500 transition hover:border-stone-300 active:scale-95"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Secondary: Say */}
+            <button
+              onClick={openSay}
+              className="mt-8 text-[13px] font-semibold text-black/45 transition-colors hover:text-black/70"
+            >
+              Or speak instead
+            </button>
 
             {/* Context chips */}
-            <section>
-              <p className="mb-3 text-[12px] font-semibold text-stone-500">
-                Choose context for smarter results.
-              </p>
-              <div className="flex flex-wrap gap-2">
+            <section className="mt-8 w-full">
+              <p className="mb-2 text-[12px] font-medium text-black/40">Where are you?</p>
+              <div className="flex flex-wrap gap-1.5">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
                   return (
                     <button
                       key={ctx.id}
                       onClick={() => toggleContext(ctx.id)}
-                      className={`rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 active:scale-95 ${
+                      className={`rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-all duration-100 active:scale-[0.97] ${
                         isActive
-                          ? "border-stone-400/30 bg-stone-800 text-white"
-                          : "border-stone-200 bg-white text-stone-500 hover:border-stone-300 hover:text-stone-600"
+                          ? "border-[#111] bg-[#111] text-white"
+                          : "border-black/15 text-black/55 hover:border-black/30"
                       }`}
                     >
                       {ctx.label}
@@ -397,7 +402,7 @@ export default function Page() {
       <div
         role="status"
         aria-live="polite"
-        className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg transition-all duration-200 ${
+        className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-black px-4 py-2 text-sm font-medium text-white shadow-lg transition-all duration-200 ${
           toast.visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
         }`}
       >

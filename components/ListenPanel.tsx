@@ -945,14 +945,14 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── Debug toggle (top-right, minimal) ── */}
-      <div className="flex items-center justify-end">
+      {/* ── Debug toggle (minimal, right-aligned) ── */}
+      <div className="flex items-center justify-end -mt-1 -mb-2">
         <button
           onClick={() => setShowDebug((p) => !p)}
-          className={`rounded-lg p-1.5 transition ${showDebug ? "bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200" : "text-stone-300 hover:text-stone-500 dark:text-stone-600 dark:hover:text-stone-400"}`}
+          className={`rounded-lg p-1 transition ${showDebug ? "bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-200" : "text-stone-200 hover:text-stone-400 dark:text-stone-700 dark:hover:text-stone-500"}`}
           aria-label="Toggle debug panel"
         >
-          <GearIcon size={16} />
+          <GearIcon size={14} />
         </button>
       </div>
 
@@ -960,52 +960,45 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
          ACTIVE LISTENING — full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {(state === "listening" || state === "recording") && (
-        <div className="flex flex-col items-center gap-6 py-8">
+        <div className="flex flex-col items-center gap-5 py-6">
           {/* Large pulsing mic */}
           <button
             onClick={stopListening}
-            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-red-500 text-white shadow-xl shadow-red-500/30 transition-transform active:scale-95"
+            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#C7402A] text-white shadow-[0_10px_50px_-10px_rgba(199,64,42,0.55)] transition-transform active:scale-95"
             aria-label="Stop listening"
           >
-            <span className="absolute inset-0 animate-ping rounded-full bg-red-400/25" />
-            <span className="absolute inset-[-8px] animate-pulse rounded-full border-2 border-red-400/30" />
+            <span className="absolute inset-0 animate-ping rounded-full bg-[#C7402A]/15" />
+            <span className="absolute inset-[-10px] animate-pulse rounded-full border-2 border-[#C7402A]/15" />
             <MicIcon size={36} />
           </button>
 
-          {/* Headlines */}
-          <div className="flex flex-col items-center gap-2 text-center">
-            <h2 className="text-[28px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-[16px] font-extrabold text-black">
               {"Listening\u2026"}
-            </h2>
-            <p className="text-[16px] font-medium text-stone-500 dark:text-stone-400">
-              Hand them the phone.
             </p>
-            <p className="mt-1 text-[15px] font-medium italic text-stone-400 dark:text-stone-500">
-              Puede hablar aqu&iacute;.
+            <p className="text-[13px] font-medium text-black/35">
+              Hold it toward them.
             </p>
           </div>
 
           {/* Live Card 1 -- real-time words + instant translation while listening */}
           {(interimText || finalText) && (
-            <div className="w-full rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+            <div className="w-full rounded-xl border border-black/8 bg-white p-4">
+              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/35">
                 {finalText ? "They said" : "Hearing..."}
               </p>
-              <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${!finalText ? "opacity-60" : ""}`}>
+              <p className={`text-[17px] font-extrabold leading-tight text-black ${!finalText ? "opacity-50" : ""}`}>
                 {`\u201C${finalText || interimText}\u201D`}
               </p>
               {instantEnglish && (
-                <p className={`mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400 ${!finalText ? "opacity-50" : ""}`}>
+                <p className={`mt-1.5 text-[14px] font-medium leading-snug text-black/50 ${!finalText ? "opacity-40" : ""}`}>
                   {instantEnglish}
                 </p>
               )}
             </div>
           )}
 
-          {/* Tap to stop hint */}
-          <p className="text-[12px] font-medium text-stone-400/60 dark:text-stone-500/50">
-            Tap the mic to stop
-          </p>
+
         </div>
       )}
 
@@ -1014,13 +1007,13 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
          ════════════════════════════════════════════════════════════════ */}
       {state !== "listening" && state !== "recording" && (
         <>
-          <div className="flex flex-col items-center gap-2.5">
+          <div className="flex flex-col items-center gap-2">
             <button
               onClick={state !== "processing" ? startListening : undefined}
-              className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
+              className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-150 ${
                 state === "processing"
-                  ? "bg-stone-300 text-stone-500 dark:bg-stone-600 dark:text-stone-400"
-                  : "bg-[#D94F2A] text-white shadow-lg shadow-[#D94F2A]/25 active:scale-95 dark:bg-[#E8734F] dark:shadow-[#E8734F]/20"
+                  ? "bg-black/10 text-black/30"
+                  : "bg-[#C7402A] text-white shadow-[0_8px_30px_-6px_rgba(199,64,42,0.5)] active:scale-95"
               }`}
               disabled={state === "processing"}
               aria-label="Start listening"
@@ -1028,10 +1021,10 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               <MicIcon size={28} />
             </button>
 
-            <p className="text-center text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
+            <p className="text-center text-[13px] font-semibold leading-snug text-black/35">
               {state === "idle" && !displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
-              {state === "idle" && !displayText && micStatus !== "denied" && "Tap and hand them the phone."}
-              {state === "idle" && displayText && "Tap to listen again."}
+              {state === "idle" && !displayText && micStatus !== "denied" && "Tap to start"}
+              {state === "idle" && displayText && "Tap to listen again"}
               {state === "processing" && "Processing..."}
             </p>
           </div>
@@ -1048,18 +1041,18 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       {/* ── CARD 1: WHAT WE HEARD (Spanish + literal English) ── */}
       {/* Always visible once we have text, persists through LLM loading */}
       {(correctedText || finalText) && state !== "listening" && state !== "recording" && (
-        <div className="rounded-xl border border-stone-200/60 bg-white p-4 shadow-sm dark:border-stone-700/40 dark:bg-stone-800/90">
-          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+        <div className="rounded-xl border border-black/8 bg-white p-4">
+          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/40">
             They said
           </p>
-          <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
+          <p className="text-[18px] font-extrabold leading-tight text-black">
             {`\u201C${correctedText || finalText}\u201D`}
           </p>
           {/* Literal English -- instant dictionary, upgrades to LLM literalEnglish once available */}
           {(() => {
             const literalText = (match && !llmClassifying && match.literalEnglish) ? match.literalEnglish : instantEnglish;
             return literalText ? (
-              <p className="mt-1.5 text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
+              <p className="mt-1.5 text-[14px] font-medium leading-snug text-black/50">
                 {literalText}
               </p>
             ) : null;
@@ -1123,7 +1116,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
 
           <button
             onClick={() => handleReply(match.bestReply)}
-            className="group relative flex w-full flex-col overflow-hidden rounded-xl border-2 border-[#D94F2A]/25 bg-white px-5 py-5 text-left shadow-sm transition-all duration-150 active:translate-y-px active:shadow-none dark:border-[#E8734F]/20 dark:bg-stone-800/90"
+            className="group relative flex w-full flex-col overflow-hidden rounded-lg border-2 border-[#C7402A]/20 bg-white px-5 py-4 text-left shadow-sm transition-all duration-150 active:translate-y-px active:shadow-none dark:border-[#E8734F]/20 dark:bg-stone-800/90"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
@@ -1139,7 +1132,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-4 py-2.5 text-white shadow-sm shadow-[#D94F2A]/20 transition-transform active:scale-95 dark:bg-[#E8734F]">
+              <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#C7402A] px-4 py-2 text-white shadow-sm shadow-[#C7402A]/15 transition-transform active:scale-95 dark:bg-[#E8734F]">
                 <WaveformIcon size={15} />
                 <span className="text-[14px] font-extrabold">Speak</span>
               </div>
