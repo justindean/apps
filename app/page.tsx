@@ -1,49 +1,45 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import {
-  scenarios,
-  intentMeta,
-  rescuePhrases,
-  type SpeechMode,
-  type Scenario,
-  type IntentKey,
-  type Phrase,
-} from "@/data/phrases";
-import { SubContextBar } from "@/components/SubContextBar";
-import { PhraseList } from "@/components/PhraseList";
-import { FlowNavigator } from "@/components/FlowNavigator";
+import { useState, useCallback, useRef, useEffect } from "react";
+import type { SpeechMode, Phrase } from "@/data/phrases";
 import SpeechModeToggle from "@/components/SpeechModeToggle";
-import RescueModal from "@/components/RescueModal";
 import { ListenPanel } from "@/components/ListenPanel";
-
-const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
 /* ── Situation chips ── */
 const situations = [
-  { id: "food-drink", label: "Food", emoji: "\uD83C\uDF7D", scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"] },
-  { id: "getting-around", label: "Getting Around", emoji: "\uD83D\uDE95", scenarioKeys: ["taxi", "transport"] },
-  { id: "places-services", label: "Services", emoji: "\uD83C\uDFE8", scenarioKeys: ["hotel", "shopping", "greetings"] },
-  { id: "emergency", label: "Emergency", emoji: "\uD83D\uDEA8", scenarioKeys: ["emergency"] },
+  { id: "auto",          label: "Auto",           emoji: "\u2728" },
+  { id: "food-drink",    label: "Food",           emoji: "\uD83C\uDF7D" },
+  { id: "getting-around", label: "Getting Around", emoji: "\uD83D\uDE95" },
+  { id: "places-services", label: "Services",     emoji: "\uD83C\uDFE8" },
+  { id: "emergency",     label: "Emergency",      emoji: "\uD83D\uDEA8" },
 ] as const;
+
+/* ── Translation result type ── */
+interface TranslateResult {
+  spanish: string;
+  pronunciation: string;
+  note?: string;
+  sourceEnglish: string;
+}
 
 type ToastState = { visible: boolean; text: string };
 
 export default function Page() {
-  const [scenario, setScenario] = useState<Scenario | null>(null);
-  const [activeIntent, setActiveIntent] = useState<IntentKey>("order");
   const [mode, setMode] = useState<SpeechMode>("neutral");
-  const [showRescue, setShowRescue] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
 
-  // Listen overlay
+  // Context chip
+  const [activeSituation, setActiveSituation] = useState("auto");
+
+  // Listening overlay
   const [showListen, setShowListen] = useState(false);
+  const [autoStartListen, setAutoStartListen] = useState(false);
 
-  // Situation chip
-  const [activeSituation, setActiveSituation] = useState<string | null>(null);
-
-  // Nudge state -- pulse chips once when mic opened with no situation
-  const [nudgeChips, setNudgeChips] = useState(false);
+  // Typing / SAY
+  const [typingText, setTypingText] = useState("");
+  const [translateResult, setTranslateResult] = useState<TranslateResult | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const copyPhrase = useCallback(async (phrase: string) => {
     try {
@@ -55,54 +51,79 @@ export default function Page() {
     window.setTimeout(() => setToast({ visible: false, text: "" }), 1200);
   }, []);
 
-  const handleSelectScenario = (key: string) => {
-    const found = scenarios.find((s) => s.key === key);
-    if (found) {
-      setScenario(found);
-      setActiveIntent("order");
+  // TTS
+  const speakSpanish = useCallback((text: string) => {
+    if ("speechSynthesis" in window) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "es-MX";
+      u.rate = 0.85;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
     }
-  };
+  }, []);
 
-  const handleBack = () => {
-    if (scenario) {
-      setScenario(null);
-      setActiveIntent("order");
+  // Translate English -> Spanish
+  const doTranslate = useCallback(async (english: string) => {
+    if (!english.trim()) { setTranslateResult(null); return; }
+    setTranslating(true);
+    try {
+      const resp = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          english: english.trim(),
+          tone: mode,
+          context: activeSituation === "auto" ? undefined : activeSituation,
+        }),
+      });
+      const data = await resp.json();
+      if (data.spanish) {
+        setTranslateResult({ ...data, sourceEnglish: english.trim() });
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setTranslating(false);
     }
-  };
+  }, [mode, activeSituation]);
 
-  const handleMicTap = () => {
-    if (!activeSituation) {
-      setNudgeChips(true);
-      setTimeout(() => setNudgeChips(false), 1200);
+  // Debounced typing
+  const handleTyping = useCallback((val: string) => {
+    setTypingText(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!val.trim()) { setTranslateResult(null); return; }
+    debounceRef.current = setTimeout(() => doTranslate(val), 700);
+  }, [doTranslate]);
+
+  // Enter key
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && typingText.trim()) {
+      e.preventDefault();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      doTranslate(typingText);
     }
+  }, [typingText, doTranslate]);
+
+  // Mic tap -- open overlay and auto-start
+  const handleMicTap = useCallback(() => {
+    setAutoStartListen(true);
     setShowListen(true);
-  };
+  }, []);
 
-  const toggleSituation = (id: string) => {
-    setActiveSituation((prev) => (prev === id ? null : id));
-  };
+  const contextLabel = activeSituation === "auto" ? undefined :
+    situations.find(s => s.id === activeSituation)?.label;
 
-  const activeSituationData = activeSituation
-    ? situations.find((s) => s.id === activeSituation)
-    : null;
-
-  // Scenario flow check
-  const hasFlow = scenario?.flowStages && scenario.flowStages.length > 0;
-
-  const activePhrases: Phrase[] =
-    scenario && !hasFlow
-      ? scenario.intents[activeIntent]?.[mode] ?? scenario.intents[activeIntent]?.neutral ?? []
-      : [];
-
-  const isHome = !scenario;
+  // Whether we have a SAY result to show
+  const hasTranslation = !!translateResult;
 
   return (
-    <div className="min-h-dvh bg-[#FAF9F7] text-stone-800">
+    <div className="flex min-h-dvh flex-col bg-[#FAF9F7] text-stone-800">
+
       {/* ════════════════════════════════════════════════════════════════
-         LISTENING OVERLAY -- full-screen modal
+         LISTENING OVERLAY
          ════════════════════════════════════════════════════════════════ */}
       {showListen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#FAF9F7]">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#FAF9F7]/95 backdrop-blur-sm">
           {/* Overlay header */}
           <div className="flex items-center justify-between px-5 pt-[env(safe-area-inset-top,12px)] pb-2">
             <button
@@ -114,174 +135,186 @@ export default function Page() {
                 <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
               </svg>
             </button>
-
-            {/* Context pill (if situation set) */}
-            {activeSituationData && (
-              <div className="flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1.5">
-                <span className="text-[12px]">{activeSituationData.emoji}</span>
-                <span className="text-[11px] font-semibold text-stone-500">
-                  {activeSituationData.label}
+            {/* Context + Tone */}
+            <div className="flex items-center gap-3">
+              {contextLabel && (
+                <span className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-semibold text-stone-500">
+                  {contextLabel}
                 </span>
-                <button
-                  onClick={() => setActiveSituation(null)}
-                  className="ml-0.5 text-stone-400 transition hover:text-stone-600"
-                  aria-label="Clear context"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                    <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
-            {/* Gear */}
-            <div className="w-9" />
+              )}
+              <SpeechModeToggle current={mode} onChange={setMode} />
+            </div>
           </div>
 
-          {/* Nudge if no situation */}
-          {!activeSituation && (
-            <p className="px-5 text-center text-[12px] font-medium text-stone-400/80">
-              Pick a situation for smarter results.
-            </p>
-          )}
-
-          {/* Listen panel content */}
+          {/* Listen panel -- auto-starts recording */}
           <div className="flex-1 overflow-y-auto px-5 pb-8">
-            <ListenPanel mode={mode} onCopy={copyPhrase} onSpeak={() => {}} />
+            <ListenPanel
+              mode={mode}
+              onCopy={copyPhrase}
+              onSpeak={() => {}}
+              autoStart={autoStartListen}
+              onDidAutoStart={() => setAutoStartListen(false)}
+              context={contextLabel}
+              onClose={() => setShowListen(false)}
+            />
           </div>
         </div>
       )}
 
       {/* ════════════════════════════════════════════════════════════════
-         MAIN APP
+         HEADER
          ════════════════════════════════════════════════════════════════ */}
-
-      {/* Header */}
       <header className="sticky top-0 z-30 border-b border-stone-200/40 bg-[#FAF9F7]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-3.5">
-          {scenario ? (
-            <button
-              onClick={handleBack}
-              className="flex items-center gap-1.5 text-sm font-semibold text-stone-400 transition hover:text-stone-700"
-              aria-label="Go back"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
-              </svg>
-              <span>{scenario.name}</span>
-            </button>
-          ) : (
-            <h1 className="text-[20px] font-extrabold tracking-tight text-stone-900">TapHabla</h1>
-          )}
-
+        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-3">
+          <h1 className="text-[20px] font-extrabold tracking-tight text-stone-900">TapHabla</h1>
           <SpeechModeToggle current={mode} onChange={setMode} />
         </div>
 
-        {/* Intent tabs when a non-flow scenario is selected */}
-        {scenario && !hasFlow && (
-          <SubContextBar
-            items={intentKeys.map((k) => ({ key: k, name: intentMeta[k].label }))}
-            activeKey={activeIntent}
-            onSelect={(key) => setActiveIntent(key as IntentKey)}
-            color={scenario.color}
-          />
-        )}
+        {/* Context pills -- always visible */}
+        <div className="mx-auto flex max-w-lg gap-2 overflow-x-auto px-5 pb-3 scrollbar-hide">
+          {situations.map((sit) => {
+            const isActive = activeSituation === sit.id;
+            return (
+              <button
+                key={sit.id}
+                onClick={() => setActiveSituation(sit.id)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 active:scale-95 ${
+                  isActive
+                    ? "border-[#D94F2A]/25 bg-[#D94F2A]/[0.06] text-[#D94F2A]"
+                    : "border-stone-200 bg-white text-stone-500 hover:border-stone-300"
+                }`}
+              >
+                <span className="text-[13px]">{sit.emoji}</span>
+                {sit.label}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
-      {/* Content */}
-      <main className="mx-auto max-w-lg px-5 pb-28 pt-6">
-        {isHome ? (
-          /* ── HOME SCREEN ── */
-          <div className="flex min-h-[calc(100dvh-140px)] flex-col items-center justify-center">
-            {/* Hero */}
-            <section className="mb-10 text-center">
-              <h2 className="text-[40px] font-extrabold leading-[1.05] tracking-tight text-stone-900">
-                {"Land. Go."}
-              </h2>
-              <p className="mt-3 text-[17px] leading-relaxed text-stone-400">
-                {"We\u2019ll handle the Spanish."}
-              </p>
-              <p className="mt-2 text-[13px] text-stone-300">
-                Works instantly. No signup.
-              </p>
-            </section>
+      {/* ════════════════════════════════════════════════════════════════
+         CENTER -- mic default or translation result
+         ════════════════════════════════════════════════════════════════ */}
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col px-5">
 
-            {/* Primary: Large Mic Button */}
+        {!hasTranslation ? (
+          /* ── Default: Dominant Mic ── */
+          <div className="flex flex-1 flex-col items-center justify-center gap-6 pb-24">
             <button
               onClick={handleMicTap}
-              className="group flex h-28 w-28 items-center justify-center rounded-full bg-[#D94F2A] shadow-[0_8px_40px_-4px_rgba(217,79,42,0.5)] ring-4 ring-[#D94F2A]/10 transition-all duration-200 hover:shadow-[0_12px_48px_-4px_rgba(217,79,42,0.6)] hover:ring-[#D94F2A]/20 active:scale-90 animate-[mic-glow_3s_ease-in-out_infinite]"
+              className="group flex h-32 w-32 items-center justify-center rounded-full bg-[#D94F2A] shadow-[0_8px_40px_-4px_rgba(217,79,42,0.5)] ring-4 ring-[#D94F2A]/10 transition-all duration-200 hover:shadow-[0_12px_48px_-4px_rgba(217,79,42,0.6)] hover:ring-[#D94F2A]/20 active:scale-90 animate-[mic-glow_3s_ease-in-out_infinite]"
               aria-label="Start listening"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-11 w-11 text-white transition-transform group-hover:scale-105">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-12 w-12 text-white transition-transform group-hover:scale-105">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
               </svg>
             </button>
-
-            {/* Situation chips -- always visible */}
-            <section className="mt-14 w-full text-center">
-              <p className="mb-4 text-[13px] font-medium text-stone-400">
-                {"What\u2019s the situation?"}
-              </p>
-              <div className="flex flex-wrap justify-center gap-2.5">
-                {situations.map((sit) => {
-                  const isActive = activeSituation === sit.id;
-                  return (
-                    <button
-                      key={sit.id}
-                      onClick={() => toggleSituation(sit.id)}
-                      className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-[13px] font-semibold transition-all duration-200 active:scale-95 ${
-                        isActive
-                          ? "border-[#D94F2A]/30 bg-[#D94F2A]/[0.06] text-[#D94F2A] shadow-sm shadow-[#D94F2A]/10"
-                          : `border-stone-200 bg-white text-stone-600 hover:border-stone-300 ${nudgeChips ? "animate-[chip-nudge_0.4s_ease-in-out]" : ""}`
-                      }`}
-                    >
-                      <span className="text-[14px]">{sit.emoji}</span>
-                      {sit.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+            <p className="text-[15px] font-medium text-stone-400">
+              Tap to listen.
+            </p>
           </div>
-        ) : hasFlow && scenario?.flowStages ? (
-          /* ── FLOW NAVIGATOR ── */
-          <FlowNavigator
-            stages={scenario.flowStages}
-            color={scenario.color}
-            onCopy={copyPhrase}
-            mode={mode}
-          />
         ) : (
-          /* ── PHRASE LIST ── */
-          <PhraseList
-            phrases={activePhrases}
-            color={scenario?.color ?? "stone"}
-            onCopy={copyPhrase}
-          />
+          /* ── Translation Result Card ── */
+          <div className="flex flex-col gap-4 pb-28 pt-6">
+            {/* What you said */}
+            <div className="rounded-2xl border border-stone-200/60 bg-white p-4">
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-stone-400/70">You want to say</p>
+              <p className="text-[15px] font-semibold text-stone-700">
+                {`\u201C${translateResult.sourceEnglish}\u201D`}
+              </p>
+            </div>
+
+            {/* Say this */}
+            <div className="rounded-[20px] border-[2.5px] border-[#D94F2A]/30 bg-gradient-to-b from-white to-[#faf8f6] px-5 py-5">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70">Say this:</p>
+              <p className="text-[22px] font-extrabold leading-tight text-stone-900">
+                {translateResult.spanish}
+              </p>
+              {translateResult.pronunciation && (
+                <p className="mt-1 font-mono text-[12px] text-stone-400">
+                  {translateResult.pronunciation}
+                </p>
+              )}
+              {translateResult.note && (
+                <p className="mt-2 text-[12px] text-stone-400/80 italic">
+                  {translateResult.note}
+                </p>
+              )}
+              <div className="mt-4 flex gap-3">
+                <button
+                  onClick={() => speakSpanish(translateResult.spanish)}
+                  className="flex items-center gap-2 rounded-full bg-[#D94F2A] px-5 py-2.5 text-[13px] font-bold text-white shadow-lg shadow-[#D94F2A]/25 transition active:scale-95"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="h-4 w-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2 12h2M6 8v8M10 4v16M14 6v12M18 8v8M22 12h2" />
+                  </svg>
+                  Speak
+                </button>
+                <button
+                  onClick={() => copyPhrase(translateResult.spanish)}
+                  className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-stone-500 transition hover:border-stone-300 active:scale-95"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            {/* Clear / Try again */}
+            <button
+              onClick={() => { setTranslateResult(null); setTypingText(""); }}
+              className="self-center text-[13px] font-medium text-stone-400 transition hover:text-stone-600"
+            >
+              Clear
+            </button>
+          </div>
         )}
       </main>
 
-      {/* Toast */}
+      {/* ════════════════════════════════════════════════════════════════
+         BOTTOM DOCK -- typing input
+         ════════════════════════════════════════════════════════════════ */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/40 bg-[#FAF9F7]/90 pb-[env(safe-area-inset-bottom,8px)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-lg items-center gap-3 px-5 py-3">
+          {/* Small mic button in dock */}
+          <button
+            onClick={handleMicTap}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#D94F2A] text-white shadow-md shadow-[#D94F2A]/20 transition active:scale-90"
+            aria-label="Listen"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+            </svg>
+          </button>
+
+          {/* Text input */}
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={typingText}
+              onChange={(e) => handleTyping(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type what you want to say\u2026"
+              className="w-full rounded-full border border-stone-200 bg-white px-4 py-2.5 text-[14px] text-stone-800 placeholder:text-stone-400/70 focus:border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-200"
+            />
+            {translating && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-stone-300 border-t-[#D94F2A]" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Toast ── */}
       <div
         role="status"
         aria-live="polite"
-        className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg transition-all duration-200 ${
-          toast.visible
-            ? "translate-y-0 opacity-100"
-            : "pointer-events-none translate-y-2 opacity-0"
+        className={`fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg transition-all duration-200 ${
+          toast.visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
         }`}
       >
         {toast.text}
       </div>
-
-      {/* Rescue Modal */}
-      {showRescue && (
-        <RescueModal
-          phrases={rescuePhrases}
-          onCopy={copyPhrase}
-          onClose={() => setShowRescue(false)}
-        />
-      )}
     </div>
   );
 }
