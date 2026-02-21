@@ -47,6 +47,7 @@ export default function Page() {
   // Drawer
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
   const [autoStartListen, setAutoStartListen] = useState(false);
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
 
   // Context
   const [activeContext, setActiveContext] = useState<string | null>(null);
@@ -130,9 +131,21 @@ export default function Page() {
   const closeDrawer = () => {
     setActiveDrawer(null);
     setAutoStartListen(false);
+    // Don't null the stream on close -- keep it cached for re-open
   };
 
-  const openListen = () => {
+  const openListen = async () => {
+    // Acquire mic IMMEDIATELY in the tap handler -- Safari requires getUserMedia
+    // to be called within the synchronous user-gesture call stack.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, sampleRate: { ideal: 48000 }, noiseSuppression: true, echoCancellation: true },
+      });
+      setMicStream(stream);
+    } catch {
+      // Permission denied or error -- still open the drawer, ListenPanel will handle
+      setMicStream(null);
+    }
     setAutoStartListen(true);
     setActiveDrawer("listen");
   };
@@ -278,6 +291,7 @@ export default function Page() {
                 onDidAutoStart={() => setAutoStartListen(false)}
                 context={activeContextData?.label}
                 onClose={closeDrawer}
+                micStream={micStream}
               />
             </div>
           </div>
