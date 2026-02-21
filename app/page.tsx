@@ -17,6 +17,10 @@ import SpeechModeToggle from "@/components/SpeechModeToggle";
 import RescueModal from "@/components/RescueModal";
 import { ListenPanel } from "@/components/ListenPanel";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type SpeechRecognitionEvent = any;
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
 /* ── Context chips (no Auto -- auto is implicit default) ── */
@@ -156,35 +160,27 @@ export default function Page() {
       {/* ════════════════════════════════════════════════════════════════
          LISTENING OVERLAY
          ════════════════════════════════════════════════════════════════ */}
+      {/* ── LISTENING OVERLAY -- dim backdrop, centered waveform, same page ── */}
       {showListen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#FAF9F7]">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#FAF9F7]/95 backdrop-blur-sm">
+          {/* Overlay header */}
           <div className="flex items-center justify-between px-5 pt-[env(safe-area-inset-top,12px)] pb-2">
             <button
               onClick={() => { setShowListen(false); setAutoStartListen(false); }}
               className="flex items-center justify-center rounded-full p-2 text-stone-400 transition hover:text-stone-700 active:scale-95"
-              aria-label="Close listening"
+              aria-label="Stop and close"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
                 <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
               </svg>
             </button>
             {activeContextData && (
-              <div className="flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1">
-                <span className="text-[11px] font-semibold text-stone-500">{activeContextData.label}</span>
-                <button onClick={() => setActiveContext(null)} className="ml-0.5 text-stone-300 hover:text-stone-500" aria-label="Clear context">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                    <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                  </svg>
-                </button>
+              <div className="flex items-center gap-1.5 rounded-full bg-stone-200/60 px-3 py-1">
+                <span className="text-[11px] font-semibold text-stone-600">{activeContextData.label}</span>
               </div>
             )}
             <div className="w-9" />
           </div>
-          {!activeContext && (
-            <p className="px-5 text-center text-[12px] font-medium text-stone-300">
-              Pick a context below for smarter results.
-            </p>
-          )}
           <div className="flex-1 overflow-y-auto px-5 pb-8">
             <ListenPanel
               mode={mode}
@@ -193,6 +189,7 @@ export default function Page() {
               autoStart={autoStartListen}
               onDidAutoStart={() => setAutoStartListen(false)}
               context={activeContextData?.label}
+              onClose={() => { setShowListen(false); setAutoStartListen(false); }}
             />
           </div>
         </div>
@@ -236,7 +233,7 @@ export default function Page() {
               <h2 className="text-[36px] font-extrabold leading-[1.08] tracking-tight text-stone-900">
                 {"Land. Go."}
               </h2>
-              <p className="mt-2 text-[16px] text-stone-400">
+              <p className="mt-2 text-[16px] text-stone-500">
                 {"We\u2019ll handle the Spanish."}
               </p>
             </section>
@@ -282,17 +279,33 @@ export default function Page() {
                     value={sayInput}
                     onChange={(e) => handleSayInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSaySubmit()}
-                    placeholder="Type what you want to say in English..."
+                    placeholder="Type what you want to say..."
                     className="flex-1 bg-transparent text-[15px] text-stone-800 placeholder:text-stone-300 outline-none"
                     autoFocus
                   />
                   <button
-                    onClick={handleSaySubmit}
-                    className="shrink-0 rounded-lg p-1.5 text-stone-300 transition hover:text-stone-500 active:scale-90"
-                    aria-label="Translate"
+                    onClick={() => {
+                      // English speech-to-text capture
+                      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                      if (!SR) return;
+                      const recognition = new SR();
+                      recognition.lang = "en-US";
+                      recognition.continuous = false;
+                      recognition.interimResults = false;
+                      recognition.onresult = (e: SpeechRecognitionEvent) => {
+                        const transcript = e.results[0]?.[0]?.transcript;
+                        if (transcript) {
+                          setSayInput(transcript);
+                          doTranslate(transcript);
+                        }
+                      };
+                      recognition.start();
+                    }}
+                    className="shrink-0 rounded-full p-1.5 text-stone-300 transition hover:text-[#D94F2A] active:scale-90"
+                    aria-label="Speak in English"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                      <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.154.75.75 0 0 0 0-1.115A28.897 28.897 0 0 0 3.105 2.289Z" />
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                     </svg>
                   </button>
                 </div>
@@ -305,7 +318,7 @@ export default function Page() {
                   </div>
                 )}
                 {sayResult && !sayLoading && (
-                  <div className="mt-4 rounded-2xl border border-stone-200/60 bg-white p-5">
+                  <div className="mt-4 rounded-xl border border-stone-200/60 bg-white p-5 shadow-sm">
                     <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-widest text-stone-300">Say this</p>
                     <p className="text-[22px] font-extrabold leading-tight text-stone-900">{sayResult.spanish}</p>
                     <p className="mt-1.5 text-[14px] text-stone-500">{sayResult.english}</p>
@@ -336,7 +349,7 @@ export default function Page() {
 
             {/* Context chips */}
             <section>
-              <p className="mb-3 text-[12px] font-semibold text-stone-300">
+              <p className="mb-3 text-[12px] font-semibold text-stone-500">
                 Choose context for smarter results.
               </p>
               <div className="flex flex-wrap gap-2">
