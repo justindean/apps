@@ -373,6 +373,8 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
   const [micStatus, setMicStatus] = useState<MicStatus>(_micStatus);
+  const [showMicPreFrame, setShowMicPreFrame] = useState(false);
+  const [micJustGranted, setMicJustGranted] = useState(false);
 
   // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
@@ -906,18 +908,47 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
 
-  /* ── Auto-start ── */
+  /* ── Auto-start (shows pre-frame if mic not yet granted) ── */
   const autoStartFiredRef = useRef(false);
   useEffect(() => {
     if (autoStart && !autoStartFiredRef.current && state === "idle") {
       autoStartFiredRef.current = true;
-      const timer = setTimeout(() => {
-        startListening();
+      if (_micStatus !== "granted") {
+        setShowMicPreFrame(true);
         onDidAutoStart?.();
-      }, 200);
-      return () => clearTimeout(timer);
+      } else {
+        const timer = setTimeout(() => {
+          startListening();
+          onDidAutoStart?.();
+        }, 200);
+        return () => clearTimeout(timer);
+      }
     }
   }, [autoStart, state, startListening, onDidAutoStart]);
+
+  /* ── Handle mic pre-frame "Enable Mic" tap ── */
+  const handleEnableMic = useCallback(async () => {
+    setShowMicPreFrame(false);
+    try {
+      await ensureMicStream({
+        audio: { channelCount: 1, sampleRate: { ideal: 48000 }, noiseSuppression: true, echoCancellation: true },
+      });
+      setMicStatus("granted");
+      setMicJustGranted(true);
+      // Brief success confirmation, then start listening
+      setTimeout(() => {
+        setMicJustGranted(false);
+        startListening();
+      }, 800);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("NotAllowedError") || msg.includes("Permission") || msg.includes("denied")) {
+        _micStatus = "denied";
+        setMicStatus("denied");
+      }
+      setError("Mic access is required to listen. Enable in browser settings.");
+    }
+  }, [startListening]);
 
   /* ── Cleanup (recognition only -- mic stream stays alive for session) ── */
   useEffect(() => {
@@ -957,9 +988,55 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       </div>
 
       {/* ════════════════════════════════════════════════════════════════
-         ACTIVE LISTENING — full-focus screen
+         MIC PERMISSION PRE-FRAME
          ════════════════════════════════════════════════════════════════ */}
-      {(state === "listening" || state === "recording") && (
+      {showMicPreFrame && (
+        <div className="flex flex-col items-center gap-5 py-8 animate-fade-in">
+          {/* Mic icon in soft circle */}
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#C7402A]/10">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-10 w-10 text-[#C7402A]">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+            </svg>
+          </div>
+          <div className="flex flex-col items-center gap-1.5">
+            <p className="text-[18px] font-extrabold text-black">TapHabla needs your mic</p>
+            <p className="text-center text-[14px] font-medium leading-snug text-black/45">
+              {"We\u2019ll listen to Spanish around you and translate it instantly. Nothing is stored."}
+            </p>
+          </div>
+          <button
+            onClick={handleEnableMic}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#C7402A] py-3.5 text-[15px] font-extrabold text-white shadow-md shadow-[#C7402A]/20 transition-all duration-100 active:scale-[0.97] active:shadow-sm"
+          >
+            Enable Mic
+          </button>
+          <button
+            onClick={onClose}
+            className="text-[13px] font-semibold text-black/35 transition hover:text-black/55"
+          >
+            Not now
+          </button>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+         MIC JUST GRANTED -- brief success confirmation
+         ════════════════════════════════════════════════════════════════ */}
+      {micJustGranted && (
+        <div className="flex flex-col items-center gap-3 py-10 animate-fade-in">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-7 w-7 text-emerald-500">
+              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <p className="text-[15px] font-extrabold text-black">{"You\u2019re all set."}</p>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+         ACTIVE LISTENING -- full-focus screen
+         ════════════════════════════════════════════════════════════════ */}
+      {!showMicPreFrame && !micJustGranted && (state === "listening" || state === "recording") && (
         <div className="flex flex-col items-center gap-4 py-4">
           {/* Large pulsing mic */}
           <button
@@ -987,11 +1064,11 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
           </div>
 
           <div className="flex flex-col items-center gap-0.5">
-            <p className="text-[15px] font-extrabold text-black">
+            <p className="text-[14px] font-extrabold text-black">
               {"Listening\u2026"}
             </p>
-            <p className="text-[12px] font-medium text-black/35">
-              Hold it toward them.
+            <p className="text-[12px] font-medium text-black/30">
+              Tap to stop
             </p>
           </div>
 
@@ -1017,7 +1094,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       {/* ════════════════════════════════════════════════════════════════
          IDLE / PROCESSING — mic button + helper text
          ════════════════════════════════════════════════════════════════ */}
-      {state !== "listening" && state !== "recording" && (
+      {!showMicPreFrame && !micJustGranted && state !== "listening" && state !== "recording" && (
         <>
           <div className="flex flex-col items-center gap-2">
             <button
@@ -1034,14 +1111,17 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
             </button>
 
             {state === "processing" ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="h-1 w-20 rounded-full animate-shimmer bg-black/5" />
-                <p className="text-[12px] font-semibold text-black/30">Processing\u2026</p>
+              <div className="flex flex-col items-center gap-2.5 pt-1">
+                <div className="flex gap-1">
+                  <div className="h-1.5 w-12 rounded-full animate-shimmer" />
+                  <div className="h-1.5 w-8 rounded-full animate-shimmer" style={{ animationDelay: "0.15s" }} />
+                </div>
+                <p className="text-[12px] font-semibold text-black/25">Translating\u2026</p>
               </div>
             ) : (
               <p className="text-center text-[13px] font-semibold leading-snug text-black/35">
-                {!displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
-                {!displayText && micStatus !== "denied" && "Tap to start"}
+                {!displayText && micStatus === "denied" && "Mic blocked in settings."}
+                {!displayText && micStatus !== "denied" && "Tap mic to listen"}
                 {displayText && "Tap to listen again"}
               </p>
             )}
@@ -1147,10 +1227,10 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
             {/* Large Speak button */}
             <button
               onClick={() => handleReply(match.bestReply)}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#C7402A] py-3 text-white shadow-md shadow-[#C7402A]/20 transition-all duration-100 active:scale-[0.97] active:shadow-sm"
+              className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#C7402A] py-3.5 text-white shadow-md shadow-[#C7402A]/20 transition-all duration-100 active:scale-[0.97] active:shadow-sm"
             >
               <WaveformIcon size={16} />
-              <span className="text-[15px] font-extrabold">Speak</span>
+              <span className="text-[15px] font-extrabold">Say it</span>
             </button>
           </div>
 
