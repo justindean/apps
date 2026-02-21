@@ -964,11 +964,11 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
           {/* Large pulsing mic */}
           <button
             onClick={stopListening}
-            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#D94F2A] text-white shadow-[0_8px_40px_-8px_rgba(217,79,42,0.5)] transition-transform active:scale-95"
+            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#C7402A] text-white shadow-[0_10px_50px_-10px_rgba(199,64,42,0.55)] transition-transform active:scale-95"
             aria-label="Stop listening"
           >
-            <span className="absolute inset-0 animate-ping rounded-full bg-[#D94F2A]/15" />
-            <span className="absolute inset-[-10px] animate-pulse rounded-full border-2 border-[#D94F2A]/15" />
+            <span className="absolute inset-0 animate-ping rounded-full bg-[#C7402A]/15" />
+            <span className="absolute inset-[-10px] animate-pulse rounded-full border-2 border-[#C7402A]/15" />
             <MicIcon size={36} />
           </button>
 
@@ -1013,7 +1013,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-150 ${
                 state === "processing"
                   ? "bg-black/10 text-black/30"
-                  : "bg-[#D94F2A] text-white shadow-[0_6px_24px_-6px_rgba(217,79,42,0.45)] active:scale-95"
+                  : "bg-[#C7402A] text-white shadow-[0_8px_30px_-6px_rgba(199,64,42,0.5)] active:scale-95"
               }`}
               disabled={state === "processing"}
               aria-label="Start listening"
@@ -1116,7 +1116,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
 
           <button
             onClick={() => handleReply(match.bestReply)}
-            className="group relative flex w-full flex-col overflow-hidden rounded-lg border-2 border-[#D94F2A]/20 bg-white px-5 py-4 text-left shadow-sm transition-all duration-150 active:translate-y-px active:shadow-none dark:border-[#E8734F]/20 dark:bg-stone-800/90"
+            className="group relative flex w-full flex-col overflow-hidden rounded-lg border-2 border-[#C7402A]/20 bg-white px-5 py-4 text-left shadow-sm transition-all duration-150 active:translate-y-px active:shadow-none dark:border-[#E8734F]/20 dark:bg-stone-800/90"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
@@ -1132,7 +1132,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#D94F2A] px-4 py-2 text-white shadow-sm shadow-[#D94F2A]/15 transition-transform active:scale-95 dark:bg-[#E8734F]">
+              <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#C7402A] px-4 py-2 text-white shadow-sm shadow-[#C7402A]/15 transition-transform active:scale-95 dark:bg-[#E8734F]">
                 <WaveformIcon size={15} />
                 <span className="text-[14px] font-extrabold">Speak</span>
               </div>

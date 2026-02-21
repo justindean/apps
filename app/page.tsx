@@ -258,7 +258,7 @@ export default function Page() {
                 />
                 <button
                   onClick={startEnglishCapture}
-                  className="shrink-0 rounded-full p-2 text-black/25 transition hover:text-[#D94F2A] active:scale-90"
+                  className="shrink-0 rounded-full p-2 text-black/25 transition hover:text-[#C7402A] active:scale-90"
                   aria-label="Speak in English"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
@@ -270,7 +270,7 @@ export default function Page() {
               {/* Translation result */}
               {sayLoading && (
                 <div className="mt-5 flex items-center gap-2 px-1">
-                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D94F2A]/50" />
+                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C7402A]/50" />
                   <span className="text-[13px] font-semibold text-black/30">Translating...</span>
                 </div>
               )}
@@ -286,7 +286,7 @@ export default function Page() {
                     <div className="mt-4 flex items-center gap-2">
                       <button
                         onClick={() => speakText(sayResult.spanish)}
-                        className="flex items-center gap-1.5 rounded-lg bg-[#D94F2A] px-4 py-2 text-[13px] font-bold text-white transition active:scale-95"
+                        className="flex items-center gap-1.5 rounded-lg bg-[#C7402A] px-4 py-2 text-[13px] font-bold text-white transition active:scale-95"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="h-4 w-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2 12h2M6 8v8M10 4v16M14 6v12M18 8v8M22 12h2" />
@@ -311,7 +311,7 @@ export default function Page() {
       {/* ══════════════════════════════════════════════════════════════
          HEADER
          ══════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-transparent">
         <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-2.5">
           {scenario ? (
             <button onClick={handleBack} className="flex items-center gap-1.5 text-sm font-semibold text-black/40 transition hover:text-black" aria-label="Go back">
@@ -321,7 +321,7 @@ export default function Page() {
               <span>{scenario.name}</span>
             </button>
           ) : (
-            <h1 className="text-[15px] font-extrabold tracking-tight text-black">TapHabla</h1>
+            <h1 className="text-[14px] font-extrabold tracking-tight text-[#111]">TapHabla</h1>
           )}
           <SpeechModeToggle current={mode} onChange={setMode} />
         </div>
@@ -338,39 +338,39 @@ export default function Page() {
       {/* ══════════════════════════════════════════════════════════════
          MAIN
          ══════════════════════════════════════════════════════════════ */}
-      <main className="mx-auto max-w-lg px-5 pb-20">
+      <main className="mx-auto max-w-lg px-5 pb-16">
         {isHome ? (
-          <div className="flex flex-col items-center pt-12">
+          <div className="flex flex-col items-center pt-10">
             {/* Hero command */}
-            <h2 className="text-[48px] font-black uppercase leading-[0.9] -tracking-[0.04em] text-black">
+            <h2 className="text-[48px] font-black uppercase leading-[0.9] -tracking-[0.05em] text-[#111]">
               {"Land. Go."}
             </h2>
 
             {/* THE WEAPON -- massive circular mic button */}
             <button
               onClick={openListen}
-              className="group relative mt-12 flex h-40 w-40 items-center justify-center rounded-full bg-[#D94F2A] shadow-[0_8px_40px_-8px_rgba(217,79,42,0.5)] transition-all duration-150 active:scale-[0.95] active:shadow-[0_4px_20px_-4px_rgba(217,79,42,0.4)]"
+              className="group relative mt-10 flex h-40 w-40 items-center justify-center rounded-full bg-[#C7402A] shadow-[0_10px_50px_-10px_rgba(199,64,42,0.55)] transition-all duration-150 active:scale-[0.95] active:shadow-[0_4px_24px_-4px_rgba(199,64,42,0.4)]"
               aria-label="Listen"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-14 w-14 text-white">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
               </svg>
             </button>
-            <p className="mt-4 text-[16px] font-extrabold uppercase tracking-[0.15em] text-black">
+            <p className="mt-3 text-[15px] font-extrabold uppercase tracking-[0.08em] text-[#111]">
               Listen
             </p>
 
             {/* Secondary: Say */}
             <button
               onClick={openSay}
-              className="mt-10 text-[13px] font-semibold text-black/35 transition-colors hover:text-black/60"
+              className="mt-8 text-[13px] font-semibold text-black/45 transition-colors hover:text-black/70"
             >
-              Need to say something?
+              Or speak instead
             </button>
 
             {/* Context chips */}
-            <section className="mt-10 w-full">
-              <p className="mb-2 text-[12px] font-bold uppercase tracking-[0.1em] text-black/40">Where are you?</p>
+            <section className="mt-8 w-full">
+              <p className="mb-2 text-[12px] font-medium text-black/40">Where are you?</p>
               <div className="flex flex-wrap gap-1.5">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
@@ -380,8 +380,8 @@ export default function Page() {
                       onClick={() => toggleContext(ctx.id)}
                       className={`rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-all duration-100 active:scale-[0.97] ${
                         isActive
-                          ? "border-black bg-black text-white"
-                          : "border-black/12 text-black/60 hover:border-black/25"
+                          ? "border-[#111] bg-[#111] text-white"
+                          : "border-black/15 text-black/55 hover:border-black/30"
                       }`}
                     >
                       {ctx.label}
