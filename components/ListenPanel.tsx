@@ -261,6 +261,10 @@ interface ListenPanelProps {
   mode: SpeechMode;
   onCopy: (text: string) => void;
   onSpeak: (phrase: Phrase) => void;
+  /** If true, start listening immediately on mount (no second tap) */
+  autoStart?: boolean;
+  /** Called after auto-start fires, so parent can reset the flag */
+  onDidAutoStart?: () => void;
 }
 
 /* ── OpenAI Ping Button (requirement F) ── */
@@ -359,7 +363,7 @@ async function probeMicPermission(): Promise<MicStatus> {
 /* -----------------------------------------------------------------------
    ListenPanel
    ----------------------------------------------------------------------- */
-export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
+export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
@@ -404,6 +408,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   useEffect(() => {
     probeMicPermission().then((s) => setMicStatus(s));
   }, []);
+
+
 
   /* ── Process transcript (shared by both modes) ──
    * Architecture: LLM-only. No deterministic classifier.
@@ -901,6 +907,19 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   /* ── Unified start/stop ── */
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
+
+  // Auto-start listening when mounted with autoStart=true (no second tap needed)
+  const autoStartFiredRef = useRef(false);
+  useEffect(() => {
+    if (autoStart && !autoStartFiredRef.current && state === "idle") {
+      autoStartFiredRef.current = true;
+      const timer = setTimeout(() => {
+        startListening();
+        onDidAutoStart?.();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [autoStart, state, startListening, onDidAutoStart]);
   /* ── Cleanup (recognition only -- mic stream stays alive for session) ── */
   useEffect(() => {
     return () => {
