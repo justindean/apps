@@ -160,39 +160,53 @@ export default function Page() {
       {/* ════════════════════════════════════════════════════════════════
          LISTENING OVERLAY
          ════════════════════════════════════════════════════════════════ */}
-      {/* ── LISTENING OVERLAY -- dim backdrop, centered waveform, same page ── */}
+      {/* ── LISTENING OVERLAY -- slides up from bottom, same page ── */}
       {showListen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#FAF9F7]/95 backdrop-blur-sm">
-          {/* Overlay header */}
-          <div className="flex items-center justify-between px-5 pt-[env(safe-area-inset-top,12px)] pb-2">
-            <button
-              onClick={() => { setShowListen(false); setAutoStartListen(false); }}
-              className="flex items-center justify-center rounded-full p-2 text-stone-400 transition hover:text-stone-700 active:scale-95"
-              aria-label="Stop and close"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
-              </svg>
-            </button>
-            {activeContextData && (
-              <div className="flex items-center gap-1.5 rounded-full bg-stone-200/60 px-3 py-1">
-                <span className="text-[11px] font-semibold text-stone-600">{activeContextData.label}</span>
-              </div>
-            )}
-            <div className="w-9" />
+        <>
+          {/* Scrim */}
+          <div
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] animate-[fade-in_0.15s_ease-out]"
+            onClick={() => { setShowListen(false); setAutoStartListen(false); }}
+            aria-hidden="true"
+          />
+          {/* Panel */}
+          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-3xl bg-[#FAF9F7] shadow-2xl animate-slide-up">
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-10 rounded-full bg-stone-300/60" />
+            </div>
+            {/* Overlay header */}
+            <div className="flex items-center justify-between px-5 pb-2">
+              <button
+                onClick={() => { setShowListen(false); setAutoStartListen(false); }}
+                className="flex items-center gap-1 rounded-full px-2 py-1 text-[13px] font-semibold text-stone-400 transition hover:text-stone-700 active:scale-95"
+                aria-label="Close"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
+                </svg>
+                Done
+              </button>
+              {activeContextData && (
+                <div className="flex items-center gap-1.5 rounded-full bg-stone-200/60 px-3 py-1">
+                  <span className="text-[11px] font-semibold text-stone-600">{activeContextData.label}</span>
+                </div>
+              )}
+              <div className="w-14" />
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 pb-8">
+              <ListenPanel
+                mode={mode}
+                onCopy={copyPhrase}
+                onSpeak={() => {}}
+                autoStart={autoStartListen}
+                onDidAutoStart={() => setAutoStartListen(false)}
+                context={activeContextData?.label}
+                onClose={() => { setShowListen(false); setAutoStartListen(false); }}
+              />
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-5 pb-8">
-            <ListenPanel
-              mode={mode}
-              onCopy={copyPhrase}
-              onSpeak={() => {}}
-              autoStart={autoStartListen}
-              onDidAutoStart={() => setAutoStartListen(false)}
-              context={activeContextData?.label}
-              onClose={() => { setShowListen(false); setAutoStartListen(false); }}
-            />
-          </div>
-        </div>
+        </>
       )}
 
       {/* ════════════════════════════════════════════════════════════════
