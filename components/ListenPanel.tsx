@@ -960,7 +960,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
          ACTIVE LISTENING — full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {(state === "listening" || state === "recording") && (
-        <div className="flex flex-col items-center gap-5 py-6">
+        <div className="flex flex-col items-center gap-4 py-4">
           {/* Large pulsing mic */}
           <button
             onClick={stopListening}
@@ -972,33 +972,45 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
             <MicIcon size={36} />
           </button>
 
-          <div className="flex flex-col items-center gap-1">
-            <p className="text-[16px] font-extrabold text-black">
+          {/* Waveform visualization */}
+          <div className="flex items-center justify-center gap-[3px] h-6">
+            {[1,2,3,4,5].map((i) => (
+              <div
+                key={i}
+                className="w-[3px] rounded-full bg-[#C7402A]/60"
+                style={{
+                  animation: `wave-bar-${i} ${0.6 + i * 0.12}s ease-in-out infinite`,
+                  height: '12px',
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="flex flex-col items-center gap-0.5">
+            <p className="text-[15px] font-extrabold text-black">
               {"Listening\u2026"}
             </p>
-            <p className="text-[13px] font-medium text-black/35">
+            <p className="text-[12px] font-medium text-black/35">
               Hold it toward them.
             </p>
           </div>
 
-          {/* Live Card 1 -- real-time words + instant translation while listening */}
+          {/* Live transcript card */}
           {(interimText || finalText) && (
-            <div className="w-full rounded-xl border border-black/8 bg-white p-4">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/35">
-                {finalText ? "They said" : "Hearing..."}
+            <div className="w-full rounded-xl border border-black/8 bg-white p-4 animate-fade-in">
+              <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
+                {finalText ? "They said" : "Hearing\u2026"}
               </p>
-              <p className={`text-[17px] font-extrabold leading-tight text-black ${!finalText ? "opacity-50" : ""}`}>
-                {`\u201C${finalText || interimText}\u201D`}
+              <p className={`text-[18px] font-extrabold leading-snug text-black ${!finalText ? "opacity-50" : ""}`}>
+                {finalText || interimText}
               </p>
               {instantEnglish && (
-                <p className={`mt-1.5 text-[14px] font-medium leading-snug text-black/50 ${!finalText ? "opacity-40" : ""}`}>
+                <p className={`mt-1 text-[13px] font-medium leading-snug text-black/45 ${!finalText ? "opacity-40" : ""}`}>
                   {instantEnglish}
                 </p>
               )}
             </div>
           )}
-
-
         </div>
       )}
 
@@ -1021,38 +1033,50 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               <MicIcon size={28} />
             </button>
 
-            <p className="text-center text-[13px] font-semibold leading-snug text-black/35">
-              {state === "idle" && !displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
-              {state === "idle" && !displayText && micStatus !== "denied" && "Tap to start"}
-              {state === "idle" && displayText && "Tap to listen again"}
-              {state === "processing" && "Processing..."}
-            </p>
+            {state === "processing" ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-1 w-20 rounded-full animate-shimmer bg-black/5" />
+                <p className="text-[12px] font-semibold text-black/30">Processing\u2026</p>
+              </div>
+            ) : (
+              <p className="text-center text-[13px] font-semibold leading-snug text-black/35">
+                {!displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
+                {!displayText && micStatus !== "denied" && "Tap to start"}
+                {displayText && "Tap to listen again"}
+              </p>
+            )}
           </div>
 
-          {/* ── Error ── */}
+          {/* ── Error -- calm, confident ── */}
           {error && (
-            <div className="rounded-xl bg-red-50 px-4 py-3 dark:bg-red-950/30">
-              <p className="text-center text-[12px] font-medium text-red-600 dark:text-red-400">{error}</p>
+            <div className="rounded-xl border border-black/6 bg-black/[0.02] px-4 py-3">
+              <p className="text-center text-[14px] font-semibold text-black/70">
+                {"Didn\u2019t catch that clearly."}
+              </p>
+              <button
+                onClick={state !== "processing" ? startListening : undefined}
+                className="mt-1.5 block w-full text-center text-[13px] font-semibold text-[#C7402A] transition hover:text-[#A83520]"
+              >
+                Tap to listen again
+              </button>
             </div>
           )}
         </>
       )}
 
-      {/* ── CARD 1: WHAT WE HEARD (Spanish + literal English) ── */}
-      {/* Always visible once we have text, persists through LLM loading */}
+      {/* ── CARD 1: THEY SAID (Spanish + literal English) ── */}
       {(correctedText || finalText) && state !== "listening" && state !== "recording" && (
-        <div className="rounded-xl border border-black/8 bg-white p-4">
-          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/40">
+        <div className="rounded-xl border border-black/8 bg-white p-5 animate-result-1">
+          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
             They said
           </p>
-          <p className="text-[18px] font-extrabold leading-tight text-black">
-            {`\u201C${correctedText || finalText}\u201D`}
+          <p className="text-[22px] font-extrabold leading-[1.2] text-black">
+            {correctedText || finalText}
           </p>
-          {/* Literal English -- instant dictionary, upgrades to LLM literalEnglish once available */}
           {(() => {
             const literalText = (match && !llmClassifying && match.literalEnglish) ? match.literalEnglish : instantEnglish;
             return literalText ? (
-              <p className="mt-1.5 text-[14px] font-medium leading-snug text-black/50">
+              <p className="mt-2 text-[15px] font-medium leading-snug text-black/50">
                 {literalText}
               </p>
             ) : null;
@@ -1061,110 +1085,100 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       )}
 
       {/* ── CARD 2: MEANING (LLM interpretation) ── */}
-      {/* Show loading placeholder while LLM is working */}
       {llmClassifying && !isInterim && displayText && state !== "listening" && state !== "recording" && (
-        <div className="mt-2 animate-fade-in rounded-2xl border border-dashed border-stone-300/60 bg-gradient-to-b from-stone-50/50 to-stone-100/30 p-4 dark:border-stone-600/40 dark:from-stone-800/50 dark:to-stone-800/30">
-          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">Meaning</p>
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
-            <p className="animate-pulse text-[14px] font-semibold text-sky-600 dark:text-sky-400">
-              Working out what they meant...
-            </p>
-          </div>
+        <div className="mt-1 rounded-xl border border-black/6 bg-black/[0.015] p-5">
+          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/25">Meaning</p>
+          <div className="h-5 w-3/4 rounded animate-shimmer" />
+          <div className="mt-2 h-4 w-1/2 rounded animate-shimmer" />
         </div>
       )}
-      {/* Show actual interpretation once LLM responds */}
       {match && hasResults && !llmClassifying && (
-        <div className={`mt-2 animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
-          <div className="mb-2 flex items-center gap-2">
-            <p className="text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
-              {match.confidence < 50 ? "Possibly" : "Meaning"}
-            </p>
-            {/* Confidence dot -- minimal, secondary */}
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${
-              match.confidence >= 80
-                ? "bg-emerald-400 dark:bg-emerald-500"
-                : match.confidence >= 50
-                  ? "bg-amber-400 dark:bg-amber-500"
-                  : "bg-red-400 dark:bg-red-500"
-            }`} title={`Confidence: ${match.confidence}%`} />
-          </div>
-          <p className="text-[20px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
-            {`\u201C${match.english}\u201D`}
+        <div className="mt-1 rounded-xl border border-black/8 bg-white p-5 animate-result-2">
+          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
+            {match.confidence < 50 ? "Possibly" : "Meaning"}
+          </p>
+          <p className="text-[20px] font-extrabold leading-[1.2] text-black">
+            {match.english}
           </p>
 
-          {/* Alternate meanings for low/medium confidence */}
+          {/* Alternate meanings */}
           {match.alternateMeanings.length > 0 && (
-            <div className="mt-3 flex flex-col gap-1.5 border-t border-stone-200/40 pt-3 dark:border-stone-700/30">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/40">Or possibly</p>
+            <div className="mt-3 border-t border-black/6 pt-3">
               {match.alternateMeanings.map((alt, i) => (
-                <p key={i} className="text-[13px] leading-snug text-stone-500 dark:text-stone-400">
-                  {`\u2022 \u201C${alt.english}\u201D`}
+                <p key={i} className="text-[13px] leading-snug text-black/45">
+                  {`\u2022 ${alt.english}`}
                 </p>
               ))}
+            </div>
+          )}
+
+          {/* Context confidence indicator */}
+          {context && match.confidence >= 60 && (
+            <div className="mt-3 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 text-emerald-500">
+                <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+              </svg>
+              <span className="text-[11px] font-semibold text-emerald-600/80">{context} context detected</span>
             </div>
           )}
         </div>
       )}
 
-      {/* ── BEST REPLY -- only shown after LLM responds ── */}
+      {/* ── BEST REPLY -- staggered reveal ── */}
       {match && hasResults && !llmClassifying && (
-        <div className="mt-3 animate-fade-in">
-          <p className="mb-3 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+        <div className="mt-2 animate-result-3">
+          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
             Say this
           </p>
 
-          <button
-            onClick={() => handleReply(match.bestReply)}
-            className="group relative flex w-full flex-col overflow-hidden rounded-lg border-2 border-[#C7402A]/20 bg-white px-5 py-4 text-left shadow-sm transition-all duration-150 active:translate-y-px active:shadow-none dark:border-[#E8734F]/20 dark:bg-stone-800/90"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 flex-col">
-                <p className="text-[22px] font-extrabold leading-tight tracking-[0.01em] text-stone-900 dark:text-stone-50">
-                  {match.bestReply.spanish}
-                </p>
-                <p className="mt-1.5 text-[14px] leading-snug text-stone-500 dark:text-stone-400">
-                  {match.bestReply.english || match.english}
-                </p>
-                {match.bestReply.pronunciation && (
-                  <p className="mt-1 font-mono text-[11px] leading-snug tracking-tight text-stone-300 dark:text-stone-600">
-                    {match.bestReply.pronunciation}
-                  </p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#C7402A] px-4 py-2 text-white shadow-sm shadow-[#C7402A]/15 transition-transform active:scale-95 dark:bg-[#E8734F]">
-                <WaveformIcon size={15} />
-                <span className="text-[14px] font-extrabold">Speak</span>
-              </div>
-            </div>
-          </button>
+          <div className="rounded-xl border-2 border-[#C7402A]/15 bg-white p-5">
+            <p className="text-[24px] font-extrabold leading-[1.15] text-black">
+              {match.bestReply.spanish}
+            </p>
+            <p className="mt-2 text-[14px] font-medium leading-snug text-black/45">
+              {match.bestReply.english || match.english}
+            </p>
+            {match.bestReply.pronunciation && (
+              <p className="mt-1 font-mono text-[11px] tracking-tight text-black/20">
+                {match.bestReply.pronunciation}
+              </p>
+            )}
+
+            {/* Large Speak button */}
+            <button
+              onClick={() => handleReply(match.bestReply)}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#C7402A] py-3 text-white shadow-md shadow-[#C7402A]/20 transition-all duration-100 active:scale-[0.97] active:shadow-sm"
+            >
+              <WaveformIcon size={16} />
+              <span className="text-[15px] font-extrabold">Speak</span>
+            </button>
+          </div>
 
           {/* ── Alternates ── */}
           {match.alternates.length > 0 && (
             <div className="mt-3">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-black/25">
                 Or say
               </p>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 {match.alternates.map((reply) => (
                   <button
                     key={reply.spanish}
                     onClick={() => handleReply(reply)}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 px-3.5 py-2.5 text-left shadow-sm card-highlight transition-all duration-150 active:scale-[0.98] active:shadow-none dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-black/8 bg-white px-4 py-2.5 text-left transition-all duration-100 active:scale-[0.98] active:bg-black/[0.02]"
                   >
                     <div className="flex min-w-0 flex-col">
-                      <p className="text-[14px] font-bold leading-tight text-stone-800 dark:text-stone-200">
+                      <p className="text-[14px] font-bold leading-tight text-black">
                         {reply.spanish}
                       </p>
                       {reply.english && (
-                        <p className="mt-0.5 text-[12px] text-stone-400 dark:text-stone-500">
+                        <p className="mt-0.5 text-[12px] text-black/40">
                           {reply.english}
                         </p>
                       )}
                     </div>
-                    <div className="flex shrink-0 items-center gap-1 text-stone-400 dark:text-stone-500">
+                    <div className="flex shrink-0 items-center gap-1 text-black/30">
                       <VolumeIcon size={12} />
-                      <span className="text-[10px] font-semibold">Speak</span>
                     </div>
                   </button>
                 ))}
@@ -1172,23 +1186,23 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
             </div>
           )}
 
-          {/* ── Follow-ups (conversation continuations) ── */}
+          {/* ── Follow-ups ── */}
           {match.followUps && match.followUps.length > 0 && (
-            <div className="mt-4 border-t border-stone-200/40 pt-3 dark:border-stone-700/30">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/60 dark:text-stone-500/50">
-                You could also say next
+            <div className="mt-3 border-t border-black/6 pt-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-black/25">
+                Then say
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {match.followUps.map((fu, i) => (
                   <button
                     key={i}
                     onClick={() => handleReply({ spanish: fu.spanish, english: fu.english, pronunciation: "", isAIGenerated: true })}
-                    className="flex flex-col rounded-xl border border-stone-200/60 bg-white/80 px-3 py-2 text-left transition-all duration-150 active:scale-[0.97] dark:border-stone-700/40 dark:bg-stone-800/60"
+                    className="flex flex-col rounded-lg border border-black/8 bg-white px-3 py-2 text-left transition-all duration-100 active:scale-[0.97]"
                   >
-                    <p className="text-[12px] font-semibold leading-tight text-stone-700 dark:text-stone-300">
+                    <p className="text-[12px] font-semibold leading-tight text-black/70">
                       {fu.spanish}
                     </p>
-                    <p className="mt-0.5 text-[10px] text-stone-400 dark:text-stone-500">
+                    <p className="mt-0.5 text-[10px] text-black/35">
                       {fu.english}
                     </p>
                   </button>

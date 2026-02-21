@@ -187,11 +187,11 @@ export default function Page() {
             onClick={closeDrawer}
             aria-hidden="true"
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-2xl bg-white shadow-2xl animate-slide-up">
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="h-1 w-9 rounded-full bg-black/10" />
+          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[94dvh] flex-col rounded-t-[20px] bg-white shadow-2xl animate-slide-up">
+            <div className="flex justify-center pt-2 pb-0.5">
+              <div className="h-[5px] w-9 rounded-full bg-black/8" />
             </div>
-            <div className="flex items-center justify-between px-5 pb-2">
+            <div className="flex items-center justify-between px-5 pb-1.5">
               <button
                 onClick={closeDrawer}
                 className="text-[13px] font-bold text-black/40 transition hover:text-black active:scale-95"
@@ -230,11 +230,11 @@ export default function Page() {
             onClick={closeDrawer}
             aria-hidden="true"
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-2xl bg-white shadow-2xl animate-slide-up">
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="h-1 w-9 rounded-full bg-black/10" />
+          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[94dvh] flex-col rounded-t-[20px] bg-white shadow-2xl animate-slide-up">
+            <div className="flex justify-center pt-2 pb-0.5">
+              <div className="h-[5px] w-9 rounded-full bg-black/8" />
             </div>
-            <div className="flex items-center justify-between px-5 pb-2">
+            <div className="flex items-center justify-between px-5 pb-1.5">
               <button
                 onClick={closeDrawer}
                 className="text-[13px] font-bold text-black/40 transition hover:text-black active:scale-95"
@@ -312,7 +312,7 @@ export default function Page() {
          HEADER
          ══════════════════════════════════════════════════════════════ */}
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-transparent">
-        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-2.5">
+        <div className="mx-auto flex max-w-md items-center justify-between px-6 py-2">
           {scenario ? (
             <button onClick={handleBack} className="flex items-center gap-1.5 text-sm font-semibold text-black/40 transition hover:text-black" aria-label="Go back">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
@@ -338,47 +338,54 @@ export default function Page() {
       {/* ══════════════════════════════════════════════════════════════
          MAIN
          ══════════════════════════════════════════════════════════════ */}
-      <main className="mx-auto max-w-lg px-5 pb-16">
+      <main className="mx-auto max-w-md px-6 pb-16">
         {isHome ? (
-          <div className="flex flex-col items-center pt-10">
-            {/* Hero command */}
-            <h2 className="text-[48px] font-black uppercase leading-[0.9] -tracking-[0.05em] text-[#111]">
-              {"Land. Go."}
+          <div className="flex flex-col items-center pt-7">
+            {/* Hero command -- staggered entry */}
+            <h2 className="text-[48px] font-black uppercase leading-[0.9] -tracking-[0.06em] text-[#111]">
+              <span className="inline-block animate-hero-1">Land.</span>{" "}
+              <span className="inline-block animate-hero-2">Go.</span>
             </h2>
 
-            {/* THE WEAPON -- massive circular mic button */}
+            {/* THE WEAPON -- breathing mic */}
             <button
               onClick={openListen}
-              className="group relative mt-10 flex h-40 w-40 items-center justify-center rounded-full bg-[#C7402A] shadow-[0_10px_50px_-10px_rgba(199,64,42,0.55)] transition-all duration-150 active:scale-[0.95] active:shadow-[0_4px_24px_-4px_rgba(199,64,42,0.4)]"
+              className="group relative mt-7 flex h-40 w-40 items-center justify-center rounded-full bg-[#C7402A] shadow-[0_12px_60px_-12px_rgba(199,64,42,0.6)] transition-all duration-100 animate-breathe active:scale-[0.96] active:shadow-[0_4px_20px_-4px_rgba(199,64,42,0.35)] active:animate-none"
               aria-label="Listen"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-14 w-14 text-white">
+              {/* Soft halo glow */}
+              <span className="absolute inset-[-14px] rounded-full bg-[#C7402A]/[0.07] animate-halo" />
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="relative h-14 w-14 text-white">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
               </svg>
             </button>
-            <p className="mt-3 text-[15px] font-extrabold uppercase tracking-[0.08em] text-[#111]">
+            <p className="mt-1.5 text-[15px] font-extrabold uppercase tracking-[0.05em] text-[#111]">
               Listen
+            </p>
+            {/* Ambient intelligence copy -- fades in after 1.5s */}
+            <p className="mt-1 text-[12px] font-medium text-black/25 animate-ambient">
+              Ready when they are.
             </p>
 
             {/* Secondary: Say */}
             <button
               onClick={openSay}
-              className="mt-8 text-[13px] font-semibold text-black/45 transition-colors hover:text-black/70"
+              className="mt-5 text-[13px] font-semibold text-black/55 transition-colors hover:text-black/75 active:text-black"
             >
               Or speak instead
             </button>
 
             {/* Context chips */}
-            <section className="mt-8 w-full">
+            <section className="mt-5 w-full">
               <p className="mb-2 text-[12px] font-medium text-black/40">Where are you?</p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
                   return (
                     <button
                       key={ctx.id}
                       onClick={() => toggleContext(ctx.id)}
-                      className={`rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-all duration-100 active:scale-[0.97] ${
+                      className={`rounded-md border-[1.5px] px-3 py-1.5 text-[12px] font-semibold transition-all duration-100 active:scale-[0.97] ${
                         isActive
                           ? "border-[#111] bg-[#111] text-white"
                           : "border-black/15 text-black/55 hover:border-black/30"
