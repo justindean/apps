@@ -945,14 +945,14 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── Debug toggle (top-right, minimal) ── */}
-      <div className="flex items-center justify-end">
+      {/* ── Debug toggle (minimal, right-aligned) ── */}
+      <div className="flex items-center justify-end -mt-1 -mb-2">
         <button
           onClick={() => setShowDebug((p) => !p)}
-          className={`rounded-lg p-1.5 transition ${showDebug ? "bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200" : "text-stone-300 hover:text-stone-500 dark:text-stone-600 dark:hover:text-stone-400"}`}
+          className={`rounded-lg p-1 transition ${showDebug ? "bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-200" : "text-stone-200 hover:text-stone-400 dark:text-stone-700 dark:hover:text-stone-500"}`}
           aria-label="Toggle debug panel"
         >
-          <GearIcon size={16} />
+          <GearIcon size={14} />
         </button>
       </div>
 
@@ -964,26 +964,18 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
           {/* Large pulsing mic */}
           <button
             onClick={stopListening}
-            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-red-500 text-white shadow-xl shadow-red-500/30 transition-transform active:scale-95"
+            className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#D94F2A] text-white shadow-xl shadow-[#D94F2A]/30 transition-transform active:scale-95"
             aria-label="Stop listening"
           >
-            <span className="absolute inset-0 animate-ping rounded-full bg-red-400/25" />
-            <span className="absolute inset-[-8px] animate-pulse rounded-full border-2 border-red-400/30" />
-            <MicIcon size={36} />
+            <span className="absolute inset-0 animate-ping rounded-full bg-[#D94F2A]/20" />
+            <span className="absolute inset-[-8px] animate-pulse rounded-full border-2 border-[#D94F2A]/20" />
+            <MicIcon size={32} />
           </button>
 
-          {/* Headlines */}
-          <div className="flex flex-col items-center gap-2 text-center">
-            <h2 className="text-[28px] font-extrabold tracking-tight text-stone-900 dark:text-stone-50">
-              {"Listening\u2026"}
-            </h2>
-            <p className="text-[16px] font-medium text-stone-500 dark:text-stone-400">
-              Hand them the phone.
-            </p>
-            <p className="mt-1 text-[15px] font-medium italic text-stone-400 dark:text-stone-500">
-              Puede hablar aqu&iacute;.
-            </p>
-          </div>
+          {/* Headline */}
+          <p className="text-[14px] font-bold text-stone-500 dark:text-stone-400">
+            {"Listening\u2026"}
+          </p>
 
           {/* Live Card 1 -- real-time words + instant translation while listening */}
           {(interimText || finalText) && (
@@ -1002,10 +994,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
             </div>
           )}
 
-          {/* Tap to stop hint */}
-          <p className="text-[12px] font-medium text-stone-400/60 dark:text-stone-500/50">
-            Tap the mic to stop
-          </p>
+
         </div>
       )}
 
@@ -1028,10 +1017,10 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               <MicIcon size={28} />
             </button>
 
-            <p className="text-center text-[14px] font-medium leading-snug text-stone-500 dark:text-stone-400">
+            <p className="text-center text-[13px] font-semibold leading-snug text-stone-400 dark:text-stone-500">
               {state === "idle" && !displayText && micStatus === "denied" && "Mic blocked. Enable in browser settings."}
-              {state === "idle" && !displayText && micStatus !== "denied" && "Tap and hand them the phone."}
-              {state === "idle" && displayText && "Tap to listen again."}
+              {state === "idle" && !displayText && micStatus !== "denied" && "Tap to start"}
+              {state === "idle" && displayText && "Tap to listen again"}
               {state === "processing" && "Processing..."}
             </p>
           </div>
