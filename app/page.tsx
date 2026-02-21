@@ -320,7 +320,7 @@ export default function Page() {
       {/* ══════════════════════════════════════════════════════════════
          HEADER
          ══════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-transparent">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-black/[0.04]">
         <div className="mx-auto flex max-w-md items-center justify-between px-6 py-2">
           {scenario ? (
             <button onClick={handleBack} className="flex items-center gap-1.5 text-sm font-semibold text-black/40 transition hover:text-black" aria-label="Go back">
@@ -371,15 +371,15 @@ export default function Page() {
             <p className="mt-1.5 text-[15px] font-extrabold uppercase tracking-[0.05em] text-[#111]">
               Listen
             </p>
-            {/* Ambient intelligence copy -- fades in after 1.5s */}
+            {/* Ambient copy -- fades in after 1.5s */}
             <p className="mt-1 text-[12px] font-medium text-black/25 animate-ambient">
-              Ready when they are.
+              We hear them. You understand.
             </p>
 
             {/* Secondary: Say */}
             <button
               onClick={openSay}
-              className="mt-5 text-[13px] font-semibold text-black/55 transition-colors hover:text-black/75 active:text-black"
+              className="mt-5 text-[13px] font-semibold text-black/50 underline decoration-black/15 underline-offset-2 transition-colors hover:text-black/70 hover:decoration-black/30 active:text-black"
             >
               Or speak instead
             </button>
@@ -406,6 +406,9 @@ export default function Page() {
                 })}
               </div>
             </section>
+
+            {/* Build stamp */}
+            <p className="mt-10 text-[10px] font-medium text-black/15">v0.76</p>
           </div>
         ) : hasFlow && scenario?.flowStages ? (
           <FlowNavigator stages={scenario.flowStages} color={scenario.color} onCopy={copyPhrase} mode={mode} />
