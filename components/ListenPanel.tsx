@@ -261,6 +261,12 @@ interface ListenPanelProps {
   mode: SpeechMode;
   onCopy: (text: string) => void;
   onSpeak: (phrase: Phrase) => void;
+  /** Begin recording immediately on mount -- no second tap */
+  autoStart?: boolean;
+  /** Called after auto-start fires so parent can reset the flag */
+  onDidAutoStart?: () => void;
+  /** Optional context to pass to LLM for better accuracy */
+  context?: string;
 }
 
 /* ── OpenAI Ping Button (requirement F) ── */
@@ -359,7 +365,7 @@ async function probeMicPermission(): Promise<MicStatus> {
 /* -----------------------------------------------------------------------
    ListenPanel
    ----------------------------------------------------------------------- */
-export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
+export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, context }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
@@ -901,6 +907,19 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   /* ── Unified start/stop ── */
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
+
+  /* ── Auto-start: begin recording immediately on mount ── */
+  const autoStartFiredRef = useRef(false);
+  useEffect(() => {
+    if (autoStart && !autoStartFiredRef.current && state === "idle") {
+      autoStartFiredRef.current = true;
+      const timer = setTimeout(() => {
+        startListening();
+        onDidAutoStart?.();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [autoStart, state, startListening, onDidAutoStart]);
   /* ── Cleanup (recognition only -- mic stream stays alive for session) ── */
   useEffect(() => {
     return () => {
