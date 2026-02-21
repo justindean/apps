@@ -261,6 +261,14 @@ interface ListenPanelProps {
   mode: SpeechMode;
   onCopy: (text: string) => void;
   onSpeak: (phrase: Phrase) => void;
+  /** Begin recording immediately on mount */
+  autoStart?: boolean;
+  /** Called after auto-start fires so parent can reset */
+  onDidAutoStart?: () => void;
+  /** Situation context for smarter LLM results */
+  context?: string;
+  /** Called when user wants to dismiss */
+  onClose?: () => void;
 }
 
 /* ── OpenAI Ping Button (requirement F) ── */
@@ -359,7 +367,7 @@ async function probeMicPermission(): Promise<MicStatus> {
 /* -----------------------------------------------------------------------
    ListenPanel
    ----------------------------------------------------------------------- */
-export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
+export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, context, onClose }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
@@ -901,6 +909,20 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
   /* ── Unified start/stop ── */
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
+
+  /* ── Auto-start: begin recording immediately on mount ── */
+  const autoStartFiredRef = useRef(false);
+  useEffect(() => {
+    if (autoStart && !autoStartFiredRef.current && state === "idle") {
+      autoStartFiredRef.current = true;
+      const timer = setTimeout(() => {
+        startListening();
+        onDidAutoStart?.();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [autoStart, state, startListening, onDidAutoStart]);
+
   /* ── Cleanup (recognition only -- mic stream stays alive for session) ── */
   useEffect(() => {
     return () => {
@@ -970,8 +992,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
           {/* Live Card 1 -- real-time words + instant translation while listening */}
           {(interimText || finalText) && (
             <div className="w-full rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-                {finalText ? "They said:" : "Hearing..."}
+              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+                {finalText ? "They said" : "Hearing..."}
               </p>
               <p className={`text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50 ${!finalText ? "opacity-60" : ""}`}>
                 {`\u201C${finalText || interimText}\u201D`}
@@ -1031,8 +1053,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {/* Always visible once we have text, persists through LLM loading */}
       {(correctedText || finalText) && state !== "listening" && state !== "recording" && (
         <div className="rounded-2xl border border-stone-200/60 bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:border-stone-700/40 dark:from-stone-800/90 dark:to-stone-800/70">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            They said:
+          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+            They said
           </p>
           <p className="text-[17px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
             {`\u201C${correctedText || finalText}\u201D`}
@@ -1053,7 +1075,7 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {/* Show loading placeholder while LLM is working */}
       {llmClassifying && !isInterim && displayText && state !== "listening" && state !== "recording" && (
         <div className="mt-2 animate-fade-in rounded-2xl border border-dashed border-stone-300/60 bg-gradient-to-b from-stone-50/50 to-stone-100/30 p-4 dark:border-stone-600/40 dark:from-stone-800/50 dark:to-stone-800/30">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">Meaning:</p>
+          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">Meaning</p>
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
             <p className="animate-pulse text-[14px] font-semibold text-sky-600 dark:text-sky-400">
@@ -1066,8 +1088,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {match && hasResults && !llmClassifying && (
         <div className={`mt-2 animate-fade-in rounded-2xl border bg-gradient-to-b from-white to-warm-50 p-4 shadow-card-elevated card-highlight dark:from-stone-800/90 dark:to-stone-800/70 ${sectionBorderColor[match.section] ?? "border-stone-200/60 dark:border-stone-700/40"}`}>
           <div className="mb-2 flex items-center gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-              {match.confidence < 50 ? "Possibly:" : "Meaning:"}
+            <p className="text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+              {match.confidence < 50 ? "Possibly" : "Meaning"}
             </p>
             {/* Confidence dot -- minimal, secondary */}
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${
@@ -1099,8 +1121,8 @@ export function ListenPanel({ mode, onCopy, onSpeak }: ListenPanelProps) {
       {/* ── BEST REPLY -- only shown after LLM responds ── */}
       {match && hasResults && !llmClassifying && (
         <div className="mt-3 animate-fade-in">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-stone-400/70 dark:text-stone-500/60">
-            Say this:
+          <p className="mb-3 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+            Say this
           </p>
 
           <button
