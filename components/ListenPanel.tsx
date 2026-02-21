@@ -1037,8 +1037,8 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       {/* ── CARD 1: WHAT WE HEARD (Spanish + literal English) ── */}
       {/* Always visible once we have text, persists through LLM loading */}
       {(correctedText || finalText) && state !== "listening" && state !== "recording" && (
-        <div className="rounded-xl border border-stone-200/60 bg-white p-4 shadow-sm dark:border-stone-700/40 dark:bg-stone-800/90">
-          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+        <div className="rounded-lg border border-stone-200/60 bg-white p-4 shadow-sm dark:border-stone-700/40 dark:bg-stone-800/90">
+          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-stone-500 dark:text-stone-400">
             They said
           </p>
           <p className="text-[18px] font-extrabold leading-tight text-stone-900 dark:text-stone-50">
@@ -1112,7 +1112,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
 
           <button
             onClick={() => handleReply(match.bestReply)}
-            className="group relative flex w-full flex-col overflow-hidden rounded-xl border-2 border-[#D94F2A]/25 bg-white px-5 py-5 text-left shadow-sm transition-all duration-150 active:translate-y-px active:shadow-none dark:border-[#E8734F]/20 dark:bg-stone-800/90"
+            className="group relative flex w-full flex-col overflow-hidden rounded-lg border-2 border-[#D94F2A]/20 bg-white px-5 py-4 text-left shadow-sm transition-all duration-150 active:translate-y-px active:shadow-none dark:border-[#E8734F]/20 dark:bg-stone-800/90"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
@@ -1128,7 +1128,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#D94F2A] px-4 py-2.5 text-white shadow-sm shadow-[#D94F2A]/20 transition-transform active:scale-95 dark:bg-[#E8734F]">
+              <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#D94F2A] px-4 py-2 text-white shadow-sm shadow-[#D94F2A]/15 transition-transform active:scale-95 dark:bg-[#E8734F]">
                 <WaveformIcon size={15} />
                 <span className="text-[14px] font-extrabold">Speak</span>
               </div>
