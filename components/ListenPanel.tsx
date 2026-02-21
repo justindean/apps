@@ -373,6 +373,8 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
   const [micStatus, setMicStatus] = useState<MicStatus>(_micStatus);
+  const [showMicPreFrame, setShowMicPreFrame] = useState(false);
+  const [micJustGranted, setMicJustGranted] = useState(false);
 
   // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
@@ -906,18 +908,47 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
   const startListening = captureMode ? startCapture : startRealtime;
   const stopListening = captureMode ? stopCapture : stopRealtime;
 
-  /* ── Auto-start ── */
+  /* ── Auto-start (shows pre-frame if mic not yet granted) ── */
   const autoStartFiredRef = useRef(false);
   useEffect(() => {
     if (autoStart && !autoStartFiredRef.current && state === "idle") {
       autoStartFiredRef.current = true;
-      const timer = setTimeout(() => {
-        startListening();
+      if (_micStatus !== "granted") {
+        setShowMicPreFrame(true);
         onDidAutoStart?.();
-      }, 200);
-      return () => clearTimeout(timer);
+      } else {
+        const timer = setTimeout(() => {
+          startListening();
+          onDidAutoStart?.();
+        }, 200);
+        return () => clearTimeout(timer);
+      }
     }
   }, [autoStart, state, startListening, onDidAutoStart]);
+
+  /* ── Handle mic pre-frame "Enable Mic" tap ── */
+  const handleEnableMic = useCallback(async () => {
+    setShowMicPreFrame(false);
+    try {
+      await ensureMicStream({
+        audio: { channelCount: 1, sampleRate: { ideal: 48000 }, noiseSuppression: true, echoCancellation: true },
+      });
+      setMicStatus("granted");
+      setMicJustGranted(true);
+      // Brief success confirmation, then start listening
+      setTimeout(() => {
+        setMicJustGranted(false);
+        startListening();
+      }, 800);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("NotAllowedError") || msg.includes("Permission") || msg.includes("denied")) {
+        _micStatus = "denied";
+        setMicStatus("denied");
+      }
+      setError("Mic access is required to listen. Enable in browser settings.");
+    }
+  }, [startListening]);
 
   /* ── Cleanup (recognition only -- mic stream stays alive for session) ── */
   useEffect(() => {

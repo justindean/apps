@@ -179,32 +179,38 @@ export default function Page() {
     <div className="min-h-dvh bg-white text-black">
 
       {/* ══════════════════════════════════════════════════════════════
-         BOTTOM DRAWER -- LISTEN
+         BOTTOM SHEET -- LISTEN
          ══════════════════════════════════════════════════════════════ */}
       {activeDrawer === "listen" && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/60"
+            className="fixed inset-0 z-40 bg-black/50 animate-fade-in"
             onClick={closeDrawer}
             aria-hidden="true"
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[94dvh] flex-col rounded-t-[20px] bg-white shadow-2xl animate-slide-up">
-            <div className="flex justify-center pt-2 pb-0.5">
-              <div className="h-[5px] w-9 rounded-full bg-black/8" />
+          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[16px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.12)] animate-slide-up">
+            {/* Drag handle */}
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="h-[4px] w-9 rounded-full bg-black/10" />
             </div>
-            <div className="flex items-center justify-between px-5 pb-1.5">
+            {/* Header row */}
+            <div className="flex items-center justify-between px-4 pb-2">
+              <div className="w-11">
+                {activeContextData && (
+                  <span className="rounded-md bg-black/5 px-2 py-0.5 text-[10px] font-bold text-black/45">
+                    {activeContextData.label}
+                  </span>
+                )}
+              </div>
               <button
                 onClick={closeDrawer}
-                className="text-[13px] font-bold text-black/40 transition hover:text-black active:scale-95"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-black/40 transition hover:bg-black/10 hover:text-black active:scale-90"
+                aria-label="Close"
               >
-                Done
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
               </button>
-              {activeContextData && (
-                <span className="rounded-md bg-black/5 px-2.5 py-0.5 text-[11px] font-bold text-black/50">
-                  {activeContextData.label}
-                </span>
-              )}
-              <div className="w-10" />
             </div>
             <div className="flex-1 overflow-y-auto px-5 pb-10">
               <ListenPanel
@@ -227,23 +233,25 @@ export default function Page() {
       {activeDrawer === "say" && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/60"
+            className="fixed inset-0 z-40 bg-black/50 animate-fade-in"
             onClick={closeDrawer}
             aria-hidden="true"
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[94dvh] flex-col rounded-t-[20px] bg-white shadow-2xl animate-slide-up">
-            <div className="flex justify-center pt-2 pb-0.5">
-              <div className="h-[5px] w-9 rounded-full bg-black/8" />
+          <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[16px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.12)] animate-slide-up">
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="h-[4px] w-9 rounded-full bg-black/10" />
             </div>
-            <div className="flex items-center justify-between px-5 pb-1.5">
+            <div className="flex items-center justify-between px-4 pb-2">
+              <span className="text-[14px] font-extrabold text-black">Say</span>
               <button
                 onClick={closeDrawer}
-                className="text-[13px] font-bold text-black/40 transition hover:text-black active:scale-95"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-black/40 transition hover:bg-black/10 hover:text-black active:scale-90"
+                aria-label="Close"
               >
-                Done
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
               </button>
-              <span className="text-[14px] font-extrabold text-black">Say</span>
-              <div className="w-10" />
             </div>
             <div className="flex-1 overflow-y-auto px-5 pb-10">
               {/* Input */}
