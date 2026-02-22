@@ -243,8 +243,30 @@ const sectionBorderColor: Record<string, string> = {
 
 // INTENT_LABELS removed -- section badge replaced by confidence dot
 
+/* ── Get tone-specific text from a ListenReply (instant, no LLM call) ── */
+const TONE_KEY_MAP: Record<string, "local" | "standard" | "polite"> = {
+  street: "local", neutral: "standard", formal: "polite",
+};
+
+function getReplyForTone(reply: ListenReply, tone: string): { spanish: string; english: string } {
+  const key = TONE_KEY_MAP[tone] ?? "standard";
+  if (reply.tones?.[key]) {
+    return reply.tones[key]!;
+  }
+  // Fallback: try any available tone, then default fields
+  if (reply.tones) {
+    const fallback = reply.tones.standard ?? reply.tones.local ?? reply.tones.polite;
+    if (fallback) return fallback;
+  }
+  return { spanish: reply.spanish, english: reply.english };
+}
+
 /* ── Convert ListenReply to Phrase (for onSpeak/onCopy compatibility) ── */
-function replyToPhrase(r: ListenReply): Phrase {
+function replyToPhrase(r: ListenReply, tone?: string): Phrase {
+  if (tone) {
+    const toned = getReplyForTone(r, tone);
+    return { spanish: toned.spanish, english: toned.english, pronunciation: r.pronunciation };
+  }
   return { spanish: r.spanish, english: r.english, pronunciation: r.pronunciation };
 }
 
@@ -469,7 +491,8 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       const TTL = 30 * 60 * 1000; // 30 min
       const MAX = 50;
       const normed = normalizeTranscript(corrected);
-      const exactKey = CP + "restaurant|" + mode + "|" + normed;
+      // Cache key does NOT include mode -- one LLM call returns all tones
+      const exactKey = CP + "restaurant|all|" + normed;
 
       // Safari-safe storage: try sessionStorage, fall back to localStorage
       function cacheGet(key: string): string | null {
@@ -508,7 +531,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       }
 
       const signature = makeSignature(corrected);
-      const sigKey = SP + "restaurant|" + mode + "|" + signature;
+      const sigKey = SP + "restaurant|all|" + signature;
       const currentTokens = new Set(corrected.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length > 1));
 
       // Tier 1: exact-match cache
@@ -572,8 +595,8 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               transcript: corrected,
-              tone: mode,
-              systemPromptOverride: getLLMSystemPrompt(mode),
+              tone: "all", // All tones returned in one call
+              systemPromptOverride: getLLMSystemPrompt(),
             }),
           });
 
@@ -626,21 +649,9 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
         }
       })();
     },
-    [mode, addLog],
+    [addLog],
   );
-
-  /* ── Re-classify when tone changes while a result is displayed ── */
-  const prevModeRef = useRef(mode);
-  useEffect(() => {
-    if (prevModeRef.current === mode) return;
-    prevModeRef.current = mode;
-
-    // Only re-classify if we have a finalized transcript and a displayed result
-    if (!correctedText || state === "listening" || state === "recording") return;
-
-    addLog("info", `[TONE] switched to ${mode}, re-classifying`);
-    processTranscript(correctedText);
-  }, [mode, correctedText, state, processTranscript, addLog]);
+  // No re-classify effect needed -- all tones are in one LLM response, toggling is instant
 
   /* ═══════════════════════════════════════════════════════════════════���═══
      CAPTURE MODE — fallback: record audio blob -> server Whisper
@@ -1296,51 +1307,56 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
             {"Here\u2019s what to say"}
           </p>
 
-          <div className="rounded-[8px] border-2 border-[#B5332A]/12 bg-white p-5">
-            <p className="text-[24px] font-extrabold leading-[1.15] text-black">
-              {match.bestReply.spanish}
-            </p>
-            <p className="mt-2 text-[14px] font-medium leading-snug text-black/45">
-              {match.bestReply.english || match.english}
-            </p>
-            {match.bestReply.pronunciation && (
-              <p className="mt-1 font-mono text-[11px] tracking-tight text-black/18">
-                {match.bestReply.pronunciation}
-              </p>
-            )}
+          {(() => {
+            const tonedBest = getReplyForTone(match.bestReply, mode);
+            return (
+              <div className="rounded-[8px] border-2 border-[#B5332A]/12 bg-white p-5">
+                <p className="text-[24px] font-extrabold leading-[1.15] text-black">
+                  {tonedBest.spanish}
+                </p>
+                <p className="mt-2 text-[14px] font-medium leading-snug text-black/45">
+                  {tonedBest.english || match.english}
+                </p>
+                {match.bestReply.pronunciation && (
+                  <p className="mt-1 font-mono text-[11px] tracking-tight text-black/18">
+                    {match.bestReply.pronunciation}
+                  </p>
+                )}
 
-            {/* Tone selector inside reply card */}
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-black/25">Tone:</span>
-              <div className="flex items-center gap-px rounded-[4px] border border-black/8 p-px">
-                {(["street", "neutral", "formal"] as const).map((t) => {
-                  const toneLabels = { street: "Local", neutral: "Standard", formal: "Polite" };
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => onModeChange?.(t)}
-                      className={`rounded-[3px] px-2 py-0.5 text-[10px] font-bold transition-all duration-75 ${
-                        mode === t
-                          ? "bg-[#111] text-white"
-                          : "text-black/30 hover:text-black/50"
-                      }`}
-                    >
-                      {toneLabels[t]}
-                    </button>
-                  );
-                })}
+                {/* Tone selector inside reply card -- instant switch, no LLM call */}
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-black/25">Tone:</span>
+                  <div className="flex items-center gap-px rounded-[4px] border border-black/8 p-px">
+                    {(["street", "neutral", "formal"] as const).map((t) => {
+                      const toneLabels = { street: "Local", neutral: "Standard", formal: "Polite" };
+                      return (
+                        <button
+                          key={t}
+                          onClick={() => onModeChange?.(t)}
+                          className={`rounded-[3px] px-2 py-0.5 text-[10px] font-bold transition-all duration-75 ${
+                            mode === t
+                              ? "bg-[#111] text-white"
+                              : "text-black/30 hover:text-black/50"
+                          }`}
+                        >
+                          {toneLabels[t]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Speak button -- speaks the tone-specific text */}
+                <button
+                  onClick={() => { speakPhrase(tonedBest.spanish); onSpeak(replyToPhrase(match.bestReply, mode)); }}
+                  className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-[8px] bg-[#B5332A] py-3.5 text-white shadow-md shadow-[#B5332A]/20 transition-all duration-75 active:scale-[0.97] active:shadow-sm"
+                >
+                  <WaveformIcon size={16} />
+                  <span className="text-[15px] font-extrabold">Say it</span>
+                </button>
               </div>
-            </div>
-
-            {/* Speak button */}
-            <button
-              onClick={() => handleReply(match.bestReply)}
-              className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-[8px] bg-[#B5332A] py-3.5 text-white shadow-md shadow-[#B5332A]/20 transition-all duration-75 active:scale-[0.97] active:shadow-sm"
-            >
-              <WaveformIcon size={16} />
-              <span className="text-[15px] font-extrabold">Say it</span>
-            </button>
-          </div>
+            );
+          })()}
 
           {/* ── Alternates ── */}
           {match.alternates.length > 0 && (
@@ -1349,27 +1365,30 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
                 Or say
               </p>
               <div className="flex flex-col gap-1.5">
-                {match.alternates.map((reply) => (
-                  <button
-                    key={reply.spanish}
-                    onClick={() => handleReply(reply)}
-                    className="flex items-center justify-between gap-3 rounded-[6px] border border-black/8 bg-white px-4 py-2.5 text-left transition-all duration-75 active:scale-[0.98] active:bg-black/[0.02]"
-                  >
-                    <div className="flex min-w-0 flex-col">
-                      <p className="text-[14px] font-bold leading-tight text-black">
-                        {reply.spanish}
-                      </p>
-                      {reply.english && (
-                        <p className="mt-0.5 text-[12px] text-black/40">
-                          {reply.english}
+                {match.alternates.map((reply, idx) => {
+                  const tonedAlt = getReplyForTone(reply, mode);
+                  return (
+                    <button
+                      key={tonedAlt.spanish + idx}
+                      onClick={() => { speakPhrase(tonedAlt.spanish); onSpeak(replyToPhrase(reply, mode)); }}
+                      className="flex items-center justify-between gap-3 rounded-[6px] border border-black/8 bg-white px-4 py-2.5 text-left transition-all duration-75 active:scale-[0.98] active:bg-black/[0.02]"
+                    >
+                      <div className="flex min-w-0 flex-col">
+                        <p className="text-[14px] font-bold leading-tight text-black">
+                          {tonedAlt.spanish}
                         </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1 text-black/30">
-                      <VolumeIcon size={12} />
-                    </div>
-                  </button>
-                ))}
+                        {tonedAlt.english && (
+                          <p className="mt-0.5 text-[12px] text-black/40">
+                            {tonedAlt.english}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1 text-black/30">
+                        <VolumeIcon size={12} />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

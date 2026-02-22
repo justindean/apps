@@ -16,6 +16,12 @@ export interface ListenReply {
   english: string;
   pronunciation: string;
   isAIGenerated?: boolean;
+  /** All 3 tones for this reply (if available from multi-tone LLM call) */
+  tones?: {
+    local?: { spanish: string; english: string };
+    standard?: { spanish: string; english: string };
+    polite?: { spanish: string; english: string };
+  };
 }
 
 export type ListenMatchSource = "deterministic" | "ai" | "none";
@@ -180,17 +186,30 @@ const LLM_BASE_PROMPT = [
   "- unknown  (ONLY if truly unintelligible)",
   "",
   "OUTPUT JSON:",
+  "IMPORTANT: Return ALL THREE TONES for best_reply AND each alternate.",
+  "The 'local' tone = casual/street Mexican Spanish, 'standard' = neutral polite, 'polite' = formal usted.",
   "{",
   '  "intent": "<one intent>",',
   '  "literal_english": "<word-for-word English translation of the raw Spanish heard>",',
   '  "english": "<natural English interpretation of what they MEANT, correcting for garbled speech>",',
   '  "evidence": ["<token from transcript>"],',
   '  "confidence": 0-100,',
-  '  "best_reply": "<contextual Spanish reply>",',
-  '  "best_reply_english": "<English translation of best_reply>",',
-  '  "alternates": [',
-  '    {"spanish": "<reply>", "english": "<translation>"},',
-  '    {"spanish": "<reply>", "english": "<translation>"}',
+  '  "best_reply_tones": {',
+  '    "local": {"spanish": "<casual reply>", "english": "<translation>"},',
+  '    "standard": {"spanish": "<neutral reply>", "english": "<translation>"},',
+  '    "polite": {"spanish": "<formal reply>", "english": "<translation>"}',
+  "  },",
+  '  "alternate_tones": [',
+  '    {',
+  '      "local": {"spanish": "<casual>", "english": "<translation>"},',
+  '      "standard": {"spanish": "<neutral>", "english": "<translation>"},',
+  '      "polite": {"spanish": "<formal>", "english": "<translation>"}',
+  "    },",
+  '    {',
+  '      "local": {"spanish": "<casual>", "english": "<translation>"},',
+  '      "standard": {"spanish": "<neutral>", "english": "<translation>"},',
+  '      "polite": {"spanish": "<formal>", "english": "<translation>"}',
+  "    }",
   "  ],",
   '  "follow_ups": [',
   '    {"spanish": "<what to say next>", "english": "<translation>"},',
@@ -333,15 +352,22 @@ const TONE_EXAMPLES: Record<string, string> = {
   ].join("\n"),
 };
 
-/** Build the full system prompt for a given tone */
-export function getLLMSystemPrompt(tone: "street" | "neutral" | "formal" = "neutral"): string {
-  return LLM_BASE_PROMPT + (TONE_EXAMPLES[tone] ?? TONE_EXAMPLES.neutral);
+/** Build the full system prompt -- includes ALL tone examples since we now get all tones in one call */
+export function getLLMSystemPrompt(_tone?: "street" | "neutral" | "formal"): string {
+  // Include all tone examples so the LLM knows the style for each
+  return LLM_BASE_PROMPT + TONE_EXAMPLES.street + TONE_EXAMPLES.neutral + TONE_EXAMPLES.formal;
 }
 
-// Keep for backward compat -- defaults to neutral
-export const LLM_SYSTEM_PROMPT = getLLMSystemPrompt("neutral");
+// Keep for backward compat
+export const LLM_SYSTEM_PROMPT = getLLMSystemPrompt();
 
 // ── Parse LLM response ─────────────────────────────────────────────────
+
+/** Per-tone reply set returned by the LLM */
+export interface TonedReply {
+  spanish: string;
+  english: string;
+}
 
 export interface LLMListenResponse {
   intent?: string;
@@ -350,9 +376,21 @@ export interface LLMListenResponse {
   evidence?: string[];
   keywords?: string[];
   confidence?: number;
+  // ── Single-tone legacy fields (backward compat) ──
   best_reply?: string;
   best_reply_english?: string;
   alternates?: (string | { spanish: string; english: string })[];
+  // ── Multi-tone fields (new) ──
+  best_reply_tones?: {
+    local?: TonedReply;
+    standard?: TonedReply;
+    polite?: TonedReply;
+  };
+  alternate_tones?: {
+    local?: TonedReply;
+    standard?: TonedReply;
+    polite?: TonedReply;
+  }[];
   follow_ups?: { spanish: string; english: string }[];
   alternate_meanings?: { english: string; intent: string }[];
   error?: string;
@@ -387,24 +425,57 @@ export function validateAndBuildFromLLM(
     }
   }
 
-  // Build best reply from LLM
+  // ── Build best reply with all tones ──
+  const toneMap = { street: "local" as const, neutral: "standard" as const, formal: "polite" as const };
+  const bt = data.best_reply_tones;
+  const hasMultiTone = bt && (bt.local || bt.standard || bt.polite);
+
+  // Pick the "standard" tone as the default display, fall back to legacy fields
+  const defaultBestSpanish = bt?.standard?.spanish ?? bt?.local?.spanish ?? bt?.polite?.spanish ?? data.best_reply ?? "Si, por favor.";
+  const defaultBestEnglish = bt?.standard?.english ?? bt?.local?.english ?? bt?.polite?.english ?? data.best_reply_english ?? english;
+
   const bestReply: ListenReply = {
-    spanish: data.best_reply ?? "Si, por favor.",
-    english: data.best_reply_english || english,
+    spanish: defaultBestSpanish,
+    english: defaultBestEnglish,
     pronunciation: "",
     isAIGenerated: true,
+    tones: hasMultiTone ? {
+      local: bt?.local ? { spanish: bt.local.spanish, english: bt.local.english } : undefined,
+      standard: bt?.standard ? { spanish: bt.standard.spanish, english: bt.standard.english } : undefined,
+      polite: bt?.polite ? { spanish: bt.polite.spanish, english: bt.polite.english } : undefined,
+    } : undefined,
   };
 
-  // Build alternates from LLM
-  const alternates: ListenReply[] = (data.alternates ?? []).map((alt) => {
-    const isObj = typeof alt === "object" && alt !== null;
-    return {
-      spanish: isObj ? (alt as { spanish: string }).spanish : (alt as string),
-      english: isObj ? (alt as { english: string }).english : "",
-      pronunciation: "",
-      isAIGenerated: true,
-    };
-  }).filter((a) => a.spanish !== bestReply.spanish).slice(0, 2);
+  // ── Build alternates with all tones ──
+  const altTones = data.alternate_tones;
+  let alternates: ListenReply[];
+  if (altTones && altTones.length > 0) {
+    alternates = altTones.map((at) => {
+      const std = at.standard ?? at.local ?? at.polite;
+      return {
+        spanish: std?.spanish ?? "",
+        english: std?.english ?? "",
+        pronunciation: "",
+        isAIGenerated: true,
+        tones: {
+          local: at.local ? { spanish: at.local.spanish, english: at.local.english } : undefined,
+          standard: at.standard ? { spanish: at.standard.spanish, english: at.standard.english } : undefined,
+          polite: at.polite ? { spanish: at.polite.spanish, english: at.polite.english } : undefined,
+        },
+      };
+    }).filter((a) => a.spanish !== bestReply.spanish).slice(0, 2);
+  } else {
+    // Legacy fallback
+    alternates = (data.alternates ?? []).map((alt) => {
+      const isObj = typeof alt === "object" && alt !== null;
+      return {
+        spanish: isObj ? (alt as { spanish: string }).spanish : (alt as string),
+        english: isObj ? (alt as { english: string }).english : "",
+        pronunciation: "",
+        isAIGenerated: true,
+      };
+    }).filter((a) => a.spanish !== bestReply.spanish).slice(0, 2);
+  }
 
   // Build follow-ups from LLM
   const followUps: FollowUp[] = (data.follow_ups ?? []).map((f) => ({

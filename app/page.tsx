@@ -37,12 +37,26 @@ interface TranslateResult {
   english: string;
 }
 
+const TONE_KEY = "taphabla_tone";
+function getSavedTone(): SpeechMode {
+  try {
+    const v = localStorage.getItem(TONE_KEY);
+    if (v === "street" || v === "neutral" || v === "formal") return v;
+  } catch { /* SSR / private browsing */ }
+  return "neutral";
+}
+
 export default function Page() {
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [activeIntent, setActiveIntent] = useState<IntentKey>("order");
-  const [mode, setMode] = useState<SpeechMode>("neutral");
+  const [mode, setMode] = useState<SpeechMode>(() => getSavedTone());
   const [showRescue, setShowRescue] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
+
+  // Persist preferred tone to localStorage
+  useEffect(() => {
+    try { localStorage.setItem(TONE_KEY, mode); } catch { /* noop */ }
+  }, [mode]);
 
   // Drawer
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
