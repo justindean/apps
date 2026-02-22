@@ -629,6 +629,19 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
     [mode, addLog],
   );
 
+  /* ── Re-classify when tone changes while a result is displayed ── */
+  const prevModeRef = useRef(mode);
+  useEffect(() => {
+    if (prevModeRef.current === mode) return;
+    prevModeRef.current = mode;
+
+    // Only re-classify if we have a finalized transcript and a displayed result
+    if (!correctedText || state === "listening" || state === "recording") return;
+
+    addLog("info", `[TONE] switched to ${mode}, re-classifying`);
+    processTranscript(correctedText);
+  }, [mode, correctedText, state, processTranscript, addLog]);
+
   /* ═══════════════════════════════════════════════════════════════════���═══
      CAPTURE MODE — fallback: record audio blob -> server Whisper
      ═══════���═══════════════════════════════════════════════════════════════ */
@@ -1098,7 +1111,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
         </div>
       )}
 
-      {/* ═══════════���═════════════════��════════��══════��══════════════════
+      {/* ═══════════����═════════════════��════════��══════��══════════════════
          ACTIVE LISTENING -- full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {!showMicPreFrame && !micJustGranted && (state === "listening" || state === "recording") && (
