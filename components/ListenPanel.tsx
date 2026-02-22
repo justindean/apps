@@ -1057,20 +1057,20 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       {showMicPreFrame && (
         <div className="flex flex-col items-center gap-5 py-8 animate-fade-in">
           {/* Mic icon in soft circle */}
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#C7402A]/10">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-10 w-10 text-[#C7402A]">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#B5332A]/8">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-10 w-10 text-[#B5332A]">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
             </svg>
           </div>
           <div className="flex flex-col items-center gap-1.5">
-            <p className="text-[18px] font-extrabold text-black">TapHabla needs your mic</p>
-            <p className="text-center text-[14px] font-medium leading-snug text-black/45">
-              {"We\u2019ll listen to Spanish around you and translate it instantly. Nothing is stored."}
+            <p className="text-[18px] font-extrabold text-black">Mic access needed.</p>
+            <p className="text-center text-[14px] font-medium leading-snug text-black/40">
+              We listen. We translate. Nothing stored.
             </p>
           </div>
           <button
             onClick={handleEnableMic}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#C7402A] py-3.5 text-[15px] font-extrabold text-white shadow-md shadow-[#C7402A]/20 transition-all duration-100 active:scale-[0.97] active:shadow-sm"
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-[8px] bg-[#B5332A] py-3.5 text-[15px] font-extrabold text-white shadow-md shadow-[#B5332A]/20 transition-all duration-75 active:scale-[0.97] active:shadow-sm"
           >
             Enable Mic
           </button>
@@ -1093,11 +1093,11 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
             </svg>
           </div>
-          <p className="text-[15px] font-extrabold text-black">{"You\u2019re all set."}</p>
+          <p className="text-[15px] font-extrabold text-black">{"You\u2019re set."}</p>
         </div>
       )}
 
-      {/* ══════════════════════════════════════��══════��══════════════════
+      {/* ═══════════���══════════════════════════��══════��══════════════════
          ACTIVE LISTENING -- full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {!showMicPreFrame && !micJustGranted && (state === "listening" || state === "recording") && (
@@ -1105,11 +1105,11 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
           {/* Large pulsing mic */}
           <button
             onClick={stopListening}
-            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#C7402A] text-white shadow-[0_10px_50px_-10px_rgba(199,64,42,0.55)] transition-transform active:scale-95"
+            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#B5332A] text-white shadow-[0_10px_50px_-10px_rgba(181,51,42,0.5)] transition-transform active:scale-95"
             aria-label="Stop listening"
           >
-            <span className="absolute inset-0 animate-ping rounded-full bg-[#C7402A]/15" />
-            <span className="absolute inset-[-10px] animate-pulse rounded-full border-2 border-[#C7402A]/15" />
+            <span className="absolute inset-0 animate-ping rounded-full bg-[#B5332A]/12" />
+            <span className="absolute inset-[-10px] animate-pulse rounded-full border-2 border-[#B5332A]/12" />
             <MicIcon size={36} />
           </button>
 
@@ -1118,7 +1118,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
             {[1,2,3,4,5].map((i) => (
               <div
                 key={i}
-                className="w-[3px] rounded-full bg-[#C7402A]/60"
+                className="w-[3px] rounded-full bg-[#B5332A]/50"
                 style={{
                   animation: `wave-bar-${i} ${0.6 + i * 0.12}s ease-in-out infinite`,
                   height: '12px',
@@ -1129,18 +1129,18 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
 
           <div className="flex flex-col items-center gap-0.5">
             <p className="text-[14px] font-extrabold text-black">
-              {"Listening\u2026"}
+              Listening
             </p>
-            <p className="text-[12px] font-medium text-black/30">
-              Tap to stop
+            <p className="text-[12px] font-medium text-black/25">
+              Hold it toward them.
             </p>
           </div>
 
           {/* Live transcript card -- Spanish ONLY while streaming, English only after final */}
           {(interimText || finalText) && (
-            <div className="w-full rounded-xl border border-black/8 bg-white p-4 animate-fade-in">
-              <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
-                {finalText ? "They said" : "Hearing\u2026"}
+            <div className="w-full rounded-[8px] border border-black/8 bg-white p-4 animate-fade-in">
+              <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/25">
+                {finalText ? "They said" : "Hearing"}
               </p>
               <p className={`text-[18px] font-extrabold leading-snug text-black ${!finalText ? "opacity-50" : ""}`}>
                 {finalText || interimText}
@@ -1153,8 +1153,8 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
                   </p>
                 )
               ) : (
-                <p className="mt-1.5 text-[11px] font-semibold text-black/20">
-                  {"Translating when done\u2026"}
+                <p className="mt-1.5 text-[11px] font-semibold text-black/18">
+                  Working.
                 </p>
               )}
             </div>
@@ -1173,7 +1173,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-150 ${
                 state === "processing"
                   ? "bg-black/10 text-black/30"
-                  : "bg-[#C7402A] text-white shadow-[0_8px_30px_-6px_rgba(199,64,42,0.5)] active:scale-95"
+                  : "bg-[#B5332A] text-white shadow-[0_8px_30px_-6px_rgba(181,51,42,0.45)] active:scale-95"
               }`}
               disabled={state === "processing"}
               aria-label="Start listening"
@@ -1187,28 +1187,28 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
                   <div className="h-1.5 w-12 rounded-full animate-shimmer" />
                   <div className="h-1.5 w-8 rounded-full animate-shimmer" style={{ animationDelay: "0.15s" }} />
                 </div>
-                <p className="text-[12px] font-semibold text-black/25">Translating\u2026</p>
+                <p className="text-[12px] font-semibold text-black/25">Working.</p>
               </div>
             ) : (
-              <p className="text-center text-[13px] font-semibold leading-snug text-black/35">
-                {!displayText && micStatus === "denied" && "Mic blocked in settings."}
-                {!displayText && micStatus !== "denied" && "Tap mic to listen"}
-                {displayText && "Tap to listen again"}
+              <p className="text-center text-[13px] font-semibold leading-snug text-black/30">
+                {!displayText && micStatus === "denied" && "Mic blocked."}
+                {!displayText && micStatus !== "denied" && "Listen. Respond."}
+                {displayText && "Try again."}
               </p>
             )}
           </div>
 
-          {/* ── Error -- calm, confident ── */}
+          {/* Error */}
           {error && (
-            <div className="rounded-xl border border-black/6 bg-black/[0.02] px-4 py-3">
-              <p className="text-center text-[14px] font-semibold text-black/70">
-                {"Didn\u2019t catch that clearly."}
+            <div className="rounded-[6px] border border-black/6 bg-black/[0.02] px-4 py-3">
+              <p className="text-center text-[14px] font-semibold text-black/60">
+                {"Didn\u2019t catch that."}
               </p>
               <button
                 onClick={state !== "processing" ? startListening : undefined}
-                className="mt-1.5 block w-full text-center text-[13px] font-semibold text-[#C7402A] transition hover:text-[#A83520]"
+                className="mt-1.5 block w-full text-center text-[13px] font-semibold text-[#B5332A] transition hover:text-[#8E2820]"
               >
-                Tap to listen again
+                Try again.
               </button>
             </div>
           )}
@@ -1217,7 +1217,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
 
       {/* ── CARD 1: THEY SAID (Spanish + literal English) ── */}
       {(correctedText || finalText) && state !== "listening" && state !== "recording" && (
-        <div className="rounded-xl border border-black/8 bg-white p-5 animate-result-1">
+        <div className="rounded-[8px] border border-black/8 bg-white p-5 animate-result-1">
           <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
             They said
           </p>
@@ -1237,14 +1237,14 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
 
       {/* ── CARD 2: MEANING (LLM interpretation) ── */}
       {llmClassifying && !isInterim && displayText && state !== "listening" && state !== "recording" && (
-        <div className="mt-1 rounded-xl border border-black/6 bg-black/[0.015] p-5">
+        <div className="mt-1 rounded-[8px] border border-black/6 bg-black/[0.015] p-5">
           <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/25">Meaning</p>
           <div className="h-5 w-3/4 rounded animate-shimmer" />
           <div className="mt-2 h-4 w-1/2 rounded animate-shimmer" />
         </div>
       )}
       {match && hasResults && !llmClassifying && (
-        <div className="mt-1 rounded-xl border border-black/8 bg-white p-5 animate-result-2">
+        <div className="mt-1 rounded-[8px] border border-black/8 bg-white p-5 animate-result-2">
           <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
             {match.confidence < 50 ? "Possibly" : "Meaning"}
           </p>
@@ -1278,11 +1278,11 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
       {/* ── BEST REPLY -- staggered reveal ── */}
       {match && hasResults && !llmClassifying && (
         <div className="mt-2 animate-result-3">
-          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/30">
-            Say this
+          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-black/25">
+            {"Here\u2019s what to say"}
           </p>
 
-          <div className="rounded-xl border-2 border-[#C7402A]/15 bg-white p-5">
+          <div className="rounded-[8px] border-2 border-[#B5332A]/12 bg-white p-5">
             <p className="text-[24px] font-extrabold leading-[1.15] text-black">
               {match.bestReply.spanish}
             </p>
@@ -1290,15 +1290,38 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
               {match.bestReply.english || match.english}
             </p>
             {match.bestReply.pronunciation && (
-              <p className="mt-1 font-mono text-[11px] tracking-tight text-black/20">
+              <p className="mt-1 font-mono text-[11px] tracking-tight text-black/18">
                 {match.bestReply.pronunciation}
               </p>
             )}
 
-            {/* Large Speak button */}
+            {/* Tone selector inside reply card */}
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-black/25">Tone:</span>
+              <div className="flex items-center gap-px rounded-[4px] border border-black/8 p-px">
+                {(["street", "neutral", "formal"] as const).map((t) => {
+                  const toneLabels = { street: "Local", neutral: "Standard", formal: "Polite" };
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => {/* tone switching to be wired */}}
+                      className={`rounded-[3px] px-2 py-0.5 text-[10px] font-bold transition-all duration-75 ${
+                        mode === t
+                          ? "bg-[#111] text-white"
+                          : "text-black/30 hover:text-black/50"
+                      }`}
+                    >
+                      {toneLabels[t]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Speak button */}
             <button
               onClick={() => handleReply(match.bestReply)}
-              className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#C7402A] py-3.5 text-white shadow-md shadow-[#C7402A]/20 transition-all duration-100 active:scale-[0.97] active:shadow-sm"
+              className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-[8px] bg-[#B5332A] py-3.5 text-white shadow-md shadow-[#B5332A]/20 transition-all duration-75 active:scale-[0.97] active:shadow-sm"
             >
               <WaveformIcon size={16} />
               <span className="text-[15px] font-extrabold">Say it</span>
@@ -1316,7 +1339,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
                   <button
                     key={reply.spanish}
                     onClick={() => handleReply(reply)}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-black/8 bg-white px-4 py-2.5 text-left transition-all duration-100 active:scale-[0.98] active:bg-black/[0.02]"
+                    className="flex items-center justify-between gap-3 rounded-[6px] border border-black/8 bg-white px-4 py-2.5 text-left transition-all duration-75 active:scale-[0.98] active:bg-black/[0.02]"
                   >
                     <div className="flex min-w-0 flex-col">
                       <p className="text-[14px] font-bold leading-tight text-black">
@@ -1348,7 +1371,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
                   <button
                     key={i}
                     onClick={() => handleReply({ spanish: fu.spanish, english: fu.english, pronunciation: "", isAIGenerated: true })}
-                    className="flex flex-col rounded-lg border border-black/8 bg-white px-3 py-2 text-left transition-all duration-100 active:scale-[0.97]"
+                    className="flex flex-col rounded-[6px] border border-black/8 bg-white px-3 py-2 text-left transition-all duration-75 active:scale-[0.97]"
                   >
                     <p className="text-[12px] font-semibold leading-tight text-black/70">
                       {fu.spanish}
