@@ -259,6 +259,7 @@ interface DebugLog {
 
 interface ListenPanelProps {
   mode: SpeechMode;
+  onModeChange?: (mode: SpeechMode) => void;
   onCopy: (text: string) => void;
   onSpeak: (phrase: Phrase) => void;
   autoStart?: boolean;
@@ -397,7 +398,7 @@ async function probeMicPermission(): Promise<MicStatus> {
 /* -----------------------------------------------------------------------
    ListenPanel
    ----------------------------------------------------------------------- */
-export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, context, onClose, micStream: externalMicStream }: ListenPanelProps) {
+export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, onDidAutoStart, context, onClose, micStream: externalMicStream }: ListenPanelProps) {
   const [state, setState] = useState<ListenState>("idle");
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
@@ -1097,7 +1098,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
         </div>
       )}
 
-      {/* ═══════════���══════════════════════════��══════��══════════════════
+      {/* ═══════════���═════════════════��════════��══════��══════════════════
          ACTIVE LISTENING -- full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {!showMicPreFrame && !micJustGranted && (state === "listening" || state === "recording") && (
@@ -1304,7 +1305,7 @@ export function ListenPanel({ mode, onCopy, onSpeak, autoStart, onDidAutoStart, 
                   return (
                     <button
                       key={t}
-                      onClick={() => {/* tone switching to be wired */}}
+                      onClick={() => onModeChange?.(t)}
                       className={`rounded-[3px] px-2 py-0.5 text-[10px] font-bold transition-all duration-75 ${
                         mode === t
                           ? "bg-[#111] text-white"

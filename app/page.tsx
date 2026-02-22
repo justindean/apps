@@ -285,6 +285,7 @@ export default function Page() {
             <div className="flex-1 overflow-y-auto px-5 pb-10">
               <ListenPanel
                 mode={mode}
+                onModeChange={setMode}
                 onCopy={copyPhrase}
                 onSpeak={() => {}}
                 autoStart={autoStartListen}
