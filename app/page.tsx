@@ -22,11 +22,11 @@ const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
 /* ── Context chips ── */
 const contexts = [
-  { id: "food", label: "Food", scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"] },
-  { id: "getting-around", label: "Taxi", scenarioKeys: ["taxi", "transport"] },
-  { id: "medical", label: "Doctor", scenarioKeys: ["emergency"] },
+  { id: "food", label: "Ordering food", scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"] },
+  { id: "getting-around", label: "Getting around", scenarioKeys: ["taxi", "transport"] },
   { id: "shopping", label: "Shopping", scenarioKeys: ["shopping"] },
-  { id: "personal-care", label: "Haircut", scenarioKeys: ["barber", "salon", "spa"] },
+  { id: "medical", label: "Medical", scenarioKeys: ["emergency"] },
+  { id: "personal-care", label: "Personal care", scenarioKeys: ["barber", "salon", "spa"] },
 ] as const;
 
 type ActiveDrawer = null | "listen" | "say";
@@ -472,47 +472,60 @@ export default function Page() {
          ══════════════════════════════════════════════════════════════ */}
       <main className="mx-auto max-w-md px-6 pb-16">
         {isHome ? (
-          <div className="flex flex-col items-center pt-4">
-            {/* Headline -- all caps, tight */}
-            <h2 className="text-[34px] leading-[1] -tracking-[0.04em] text-[#111] uppercase">
-              <span className="font-medium">Spanish.</span>{" "}
-              <span className="font-bold">Now.</span>
+          <div className="flex flex-col items-center pt-8">
+            {/* Hero command */}
+            <h2 className="text-[52px] font-black uppercase leading-[0.88] -tracking-[0.06em] text-[#111]">
+              <span className="inline-block animate-hero-1">Land.</span>{" "}
+              <span className="inline-block animate-hero-2">Go.</span>
             </h2>
 
-            {/* Mic button -- the only primary action */}
+            {/* THE WEAPON -- breathing mic (deeper red) */}
             <button
               onClick={openListen}
-              className="relative mt-6 flex h-28 w-28 items-center justify-center rounded-full bg-[#B5332A] shadow-[0_4px_20px_-4px_rgba(181,51,42,0.3)] transition-all duration-100 active:scale-[0.96]"
-              aria-label="Say it"
+              className="group relative mt-8 flex h-40 w-40 items-center justify-center rounded-full bg-[#B5332A] shadow-[0_12px_60px_-12px_rgba(181,51,42,0.55)] transition-all duration-100 animate-breathe active:scale-[0.96] active:shadow-[0_4px_20px_-4px_rgba(181,51,42,0.3)] active:animate-none"
+              aria-label="Listen"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-10 w-10 text-white">
+              <span className="absolute inset-[-14px] rounded-full bg-[#B5332A]/[0.06] animate-halo" />
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="relative h-14 w-14 text-white">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+              </svg>
+            </button>
+            <p className="mt-2 text-[14px] font-extrabold uppercase tracking-[0.08em] text-[#111]">
+              Listen. Respond.
+            </p>
+
+            {/* Secondary: Type or speak CTA */}
+            <button
+              onClick={openSay}
+              className="mt-5 flex items-center gap-2 rounded-[6px] border border-[#B5332A]/18 bg-[#B5332A]/[0.03] px-4 py-2.5 text-[13px] font-semibold text-black/55 transition-all hover:border-[#B5332A]/28 hover:bg-[#B5332A]/[0.06] hover:text-black/70 active:scale-[0.97]"
+            >
+              {/* Pencil icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4 text-[#B5332A]/45">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+              </svg>
+              <span>Type or speak</span>
+              {/* Mic icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4 text-[#B5332A]/45">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
               </svg>
             </button>
 
-            {/* Instructional label */}
-            <p className="mt-3 text-[14px] font-medium tracking-[0.02em] text-[#111]">
-              SAY IT
+            {/* Context intro + chips */}
+            <p className="mt-8 text-[13px] font-medium text-black/35">
+              {"What are you up to? We\u2019ll give you better responses."}
             </p>
-
-            {/* Supporting line */}
-            <p className="mt-1 text-[11px] font-medium text-black/25">
-              Hear it. Say it.
-            </p>
-
-            {/* Context chips -- minimal, evenly spaced */}
-            <section className="mt-6 w-full">
-              <div className="flex flex-wrap justify-center gap-2">
+            <section className="mt-2 w-full">
+              <div className="flex flex-wrap gap-1.5">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
                   return (
                     <button
                       key={ctx.id}
                       onClick={() => toggleContext(ctx.id)}
-                      className={`rounded-[4px] border px-3 py-1 text-[11px] font-medium transition-all duration-75 active:scale-[0.97] ${
+                      className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-all duration-75 active:scale-[0.97] ${
                         isActive
                           ? "border-[#111] bg-[#111] text-white"
-                          : "border-black/10 text-black/35 hover:border-black/18 hover:text-black/50"
+                          : "border-black/12 text-black/50 hover:border-black/25 hover:text-black/70"
                       }`}
                     >
                       {ctx.label}
@@ -523,7 +536,7 @@ export default function Page() {
             </section>
 
             {/* Build stamp */}
-            <p className="mt-8 text-[10px] font-medium text-black/10 tracking-wide">v0.82</p>
+            <p className="mt-12 text-[10px] font-medium text-black/12 tracking-wide">v0.80</p>
           </div>
         ) : hasFlow && scenario?.flowStages ? (
           <FlowNavigator stages={scenario.flowStages} color={scenario.color} onCopy={copyPhrase} mode={mode} />
