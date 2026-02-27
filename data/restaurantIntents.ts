@@ -65,6 +65,7 @@ export interface ListenMatch {
 // ── Section mapping for UI colors ───────────────────────────────────────
 
 const INTENT_TO_SECTION: Record<string, string> = {
+  // Food & Drink
   menu_offer: "Menu",
   table_preference: "Arrival",
   party_size: "Arrival",
@@ -82,9 +83,37 @@ const INTENT_TO_SECTION: Record<string, string> = {
   tip_service: "Tip",
   receipt: "Tip",
   not_available: "Food",
+  // Getting Around
+  destination_request: "Transport",
+  fare_question: "Transport",
+  stop_request: "Transport",
+  direction_question: "Transport",
+  eta_question: "Transport",
+  // Shopping
+  price_inquiry: "Shopping",
+  size_request: "Shopping",
+  availability_check: "Shopping",
+  fitting_room: "Shopping",
+  bargaining: "Shopping",
+  // Medical
+  medication_request: "Medical",
+  symptom_description: "Medical",
+  dosage_question: "Medical",
+  pharmacy_availability: "Medical",
+  emergency: "Medical",
+  // Personal Care
+  haircut_request: "PersonalCare",
+  styling_preference: "PersonalCare",
+  beard_trim: "PersonalCare",
+  nail_service: "PersonalCare",
+  spa_service: "PersonalCare",
+  // General
   clarification: "Clarify",
   ai_understood: "AI",
   unknown: "Clarify",
+  general_request: "AI",
+  translation_request: "AI",
+  // Smalltalk
   smalltalk_origin: "Smalltalk",
   smalltalk_live_here: "Smalltalk",
   smalltalk_first_time: "Smalltalk",

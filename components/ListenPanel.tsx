@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "@/data/phrases";
-import { getLLMSystemPrompt, validateAndBuildFromLLM, normalizeTranscript } from "@/data/restaurantIntents";
+import { validateAndBuildFromLLM, normalizeTranscript } from "@/data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaurantIntents";
+import { getContextSystemPrompt, labelToContextKey } from "@/data/contextPrompts";
 
 /* ── TTS helper ── */
 function speakPhrase(text: string) {
@@ -228,12 +229,22 @@ const RESTAURANT_HINTS = [
 
 /* ── Section colors ── */
 const sectionBorderColor: Record<string, string> = {
+  // Food & Drink
   Arrival: "border-sky-300/60 dark:border-sky-600/40",
   Drinks: "border-amber-300/60 dark:border-amber-600/40",
   Menu: "border-teal-300/60 dark:border-teal-600/40",
   Food: "border-orange-300/60 dark:border-orange-500/40",
   Bill: "border-emerald-300/60 dark:border-emerald-600/40",
   Tip: "border-violet-300/60 dark:border-violet-600/40",
+  // Getting Around
+  Transport: "border-blue-300/60 dark:border-blue-600/40",
+  // Shopping
+  Shopping: "border-pink-300/60 dark:border-pink-600/40",
+  // Medical
+  Medical: "border-red-300/60 dark:border-red-600/40",
+  // Personal Care
+  PersonalCare: "border-purple-300/60 dark:border-purple-600/40",
+  // General
   Clarify: "border-stone-300/60 dark:border-stone-600/40",
   Smalltalk: "border-indigo-300/60 dark:border-indigo-600/40",
   AI: "border-sky-300/60 dark:border-sky-600/40",
@@ -491,8 +502,9 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       const TTL = 30 * 60 * 1000; // 30 min
       const MAX = 50;
       const normed = normalizeTranscript(corrected);
-      // Cache key does NOT include mode -- one LLM call returns all tones
-      const exactKey = CP + "restaurant|all|" + normed;
+      // Cache key includes context so different contexts get different responses
+      const contextKey = labelToContextKey(context) ?? "general";
+      const exactKey = CP + contextKey + "|" + normed;
 
       // Safari-safe storage: try sessionStorage, fall back to localStorage
       function cacheGet(key: string): string | null {
@@ -531,7 +543,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       }
 
       const signature = makeSignature(corrected);
-      const sigKey = SP + "restaurant|all|" + signature;
+      const sigKey = SP + contextKey + "|" + signature;
       const currentTokens = new Set(corrected.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((t) => t.length > 1));
 
       // Tier 1: exact-match cache
@@ -596,7 +608,8 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
             body: JSON.stringify({
               transcript: corrected,
               tone: "all", // All tones returned in one call
-              systemPromptOverride: getLLMSystemPrompt(),
+              context: contextKey, // Pass context for logging
+              systemPromptOverride: getContextSystemPrompt(labelToContextKey(context)),
             }),
           });
 
@@ -649,7 +662,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
         }
       })();
     },
-    [addLog],
+    [addLog, context],
   );
   // No re-classify effect needed -- all tones are in one LLM response, toggling is instant
 
@@ -1108,7 +1121,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════════
+      {/* ═════════════════════════════════════════════════════���══════════
          MIC JUST GRANTED -- brief success confirmation
          ════════════════════════════════════════════════════════════════ */}
       {micJustGranted && (
