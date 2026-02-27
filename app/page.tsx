@@ -472,48 +472,50 @@ export default function Page() {
          ══════════════════════════════════════════════════════════════ */}
       <main className="mx-auto max-w-md px-6 pb-16">
         {isHome ? (
-          <div className="flex flex-col items-center pt-8">
-            {/* Hero headline */}
-            <h2 className="text-[48px] leading-[1] -tracking-[0.03em] text-[#111]">
-              <span className="font-bold">Spanish.</span>{" "}
-              <span className="font-black">Now.</span>
+          <div className="flex flex-col items-center pt-6">
+            {/* Headline -- single line, calm weight contrast */}
+            <h2 className="text-[38px] leading-[1] -tracking-[0.02em] text-[#111]">
+              <span className="font-medium">Spanish.</span>{" "}
+              <span className="font-bold">Now.</span>
             </h2>
 
-            {/* Primary mic button -- matte, strong */}
+            {/* Mic button -- dominant, matte red */}
             <button
               onClick={openListen}
-              className="group relative mt-10 flex h-36 w-36 items-center justify-center rounded-full bg-[#B5332A] shadow-[0_8px_32px_-8px_rgba(181,51,42,0.4)] transition-all duration-100 active:scale-[0.96] active:shadow-[0_4px_16px_-4px_rgba(181,51,42,0.25)]"
-              aria-label="Tap to listen"
+              className="group relative mt-8 flex h-32 w-32 items-center justify-center rounded-full bg-[#B5332A] shadow-[0_6px_24px_-6px_rgba(181,51,42,0.35)] transition-all duration-100 active:scale-[0.96]"
+              aria-label="Say it"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-12 w-12 text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-11 w-11 text-white">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
               </svg>
             </button>
-            <p className="mt-3 text-[13px] font-medium tracking-[0.04em] text-black/40">
+
+            {/* Primary CTA button */}
+            <button
+              onClick={openListen}
+              className="mt-5 rounded-[6px] bg-[#B5332A] px-8 py-3 text-[14px] font-bold uppercase tracking-[0.08em] text-white shadow-sm transition-all active:scale-[0.97]"
+            >
+              Say It
+            </button>
+
+            {/* Supporting line */}
+            <p className="mt-4 text-[12px] font-medium text-black/30">
               Hear it. Say it.
             </p>
 
-            {/* Secondary: Type or speak */}
-            <button
-              onClick={openSay}
-              className="mt-6 text-[12px] font-medium text-black/35 transition-colors hover:text-black/50 active:scale-[0.98]"
-            >
-              Tap to listen or speak
-            </button>
-
-            {/* Context chips -- minimal */}
-            <section className="mt-10 w-full">
-              <div className="flex flex-wrap justify-center gap-2">
+            {/* Context chips -- tight, minimal */}
+            <section className="mt-8 w-full">
+              <div className="flex flex-wrap justify-center gap-1.5">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
                   return (
                     <button
                       key={ctx.id}
                       onClick={() => toggleContext(ctx.id)}
-                      className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-medium transition-all duration-75 active:scale-[0.97] ${
+                      className={`rounded-[4px] border px-2.5 py-1 text-[11px] font-medium transition-all duration-75 active:scale-[0.97] ${
                         isActive
                           ? "border-[#111] bg-[#111] text-white"
-                          : "border-black/10 text-black/45 hover:border-black/20 hover:text-black/60"
+                          : "border-black/8 text-black/40 hover:border-black/15 hover:text-black/55"
                       }`}
                     >
                       {ctx.label}
@@ -524,7 +526,7 @@ export default function Page() {
             </section>
 
             {/* Build stamp */}
-            <p className="mt-12 text-[10px] font-medium text-black/12 tracking-wide">v0.80</p>
+            <p className="mt-10 text-[10px] font-medium text-black/10 tracking-wide">v0.81</p>
           </div>
         ) : hasFlow && scenario?.flowStages ? (
           <FlowNavigator stages={scenario.flowStages} color={scenario.color} onCopy={copyPhrase} mode={mode} />
