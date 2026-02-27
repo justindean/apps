@@ -70,7 +70,6 @@ export default function Page() {
   const [sayInput, setSayInput] = useState("");
   const [sayResult, setSayResult] = useState<TranslateResult | null>(null);
   const [sayLoading, setSayLoading] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Drag-to-dismiss state
   const [sheetDragY, setSheetDragY] = useState(0);
@@ -145,6 +144,10 @@ export default function Page() {
   const closeDrawer = () => {
     setActiveDrawer(null);
     setAutoStartListen(false);
+    // Reset SAY state on close so reopening is fresh
+    setSayInput("");
+    setSayResult(null);
+    setSayLoading(false);
     // Don't null the stream on close -- keep it cached for re-open
   };
 
@@ -199,15 +202,15 @@ export default function Page() {
     setSayLoading(false);
   }, [mode, activeContextData]);
 
-  const handleSayInput = (value: string) => {
-    setSayInput(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doTranslate(value), 600);
+  // Explicit submit only -- no debounce, no auto-translate on typing
+  const handleSaySubmit = () => {
+    doTranslate(sayInput);
   };
 
-  const handleSaySubmit = () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    doTranslate(sayInput);
+  // Clear input and reset results
+  const clearSayInput = () => {
+    setSayInput("");
+    setSayResult(null);
   };
 
   // Speak TTS
@@ -351,25 +354,48 @@ export default function Page() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 pb-10">
-              {/* Input */}
-              <div className="flex items-center gap-2 rounded-[8px] border border-black/10 bg-black/[0.02] px-4 py-3 transition-all focus-within:border-black/20 focus-within:bg-white focus-within:shadow-sm">
-                <input
-                  type="text"
-                  value={sayInput}
-                  onChange={(e) => handleSayInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSaySubmit()}
-                  placeholder="What do you want to say?"
-                  className="flex-1 bg-transparent text-[15px] text-black placeholder:text-black/30 outline-none"
-                  autoFocus
-                />
+              {/* Input row */}
+              <div className="flex items-center gap-2">
+                <div className="flex flex-1 items-center gap-2 rounded-[8px] border border-black/10 bg-black/[0.02] px-4 py-3 transition-all focus-within:border-black/20 focus-within:bg-white focus-within:shadow-sm">
+                  <input
+                    type="text"
+                    value={sayInput}
+                    onChange={(e) => setSayInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSaySubmit()}
+                    placeholder="What do you want to say?"
+                    className="flex-1 bg-transparent text-[15px] text-black placeholder:text-black/30 outline-none"
+                    autoFocus
+                  />
+                  {/* Clear button -- only visible when input has text */}
+                  {sayInput && (
+                    <button
+                      onClick={clearSayInput}
+                      className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-black/10 text-black/40 transition hover:bg-black/15 active:scale-90"
+                      aria-label="Clear input"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                        <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                      </svg>
+                    </button>
+                  )}
+                  {/* Mic button for voice input */}
+                  <button
+                    onClick={startEnglishCapture}
+                    className="shrink-0 rounded-full p-1.5 text-black/25 transition hover:text-[#B5332A] active:scale-90"
+                    aria-label="Speak in English"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                    </svg>
+                  </button>
+                </div>
+                {/* Translate button -- explicit submit */}
                 <button
-                  onClick={startEnglishCapture}
-                  className="shrink-0 rounded-full p-2 text-black/25 transition hover:text-[#B5332A] active:scale-90"
-                  aria-label="Speak in English"
+                  onClick={handleSaySubmit}
+                  disabled={!sayInput.trim() || sayLoading}
+                  className="shrink-0 rounded-[8px] bg-[#B5332A] px-4 py-3 text-[14px] font-bold text-white transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                  </svg>
+                  {sayLoading ? "..." : "Go"}
                 </button>
               </div>
 
@@ -470,12 +496,15 @@ export default function Page() {
               {"What\u2019s happening."}
             </p>
 
-            {/* Secondary: Say */}
+            {/* Secondary: Type or speak CTA */}
             <button
               onClick={openSay}
-              className="mt-6 text-[13px] font-semibold text-black/45 underline decoration-black/12 underline-offset-2 transition-colors hover:text-black/65 active:text-black"
+              className="mt-6 flex items-center gap-2 rounded-[6px] border border-black/12 px-4 py-2 text-[13px] font-semibold text-black/50 transition-all hover:border-black/20 hover:text-black/70 active:scale-[0.97]"
             >
-              Or speak instead
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+              </svg>
+              Type or speak
             </button>
 
             {/* Context chips -- tactile, not soft pills */}
