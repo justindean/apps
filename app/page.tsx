@@ -474,9 +474,9 @@ export default function Page() {
         {isHome ? (
           <div className="flex flex-col items-center pt-8">
             {/* Hero command */}
-            <h2 className="text-[52px] font-black uppercase leading-[0.88] -tracking-[0.06em] text-[#111]">
-              <span className="inline-block animate-hero-1">Land.</span>{" "}
-              <span className="inline-block animate-hero-2">Go.</span>
+            <h2 className="text-[36px] font-black uppercase leading-[0.88] -tracking-[0.04em] text-[#111]">
+              <span className="inline-block animate-hero-1">Spanish.</span>{" "}
+              <span className="inline-block animate-hero-2">Now.</span>
             </h2>
 
             {/* THE WEAPON -- breathing mic (deeper red) */}
@@ -491,7 +491,7 @@ export default function Page() {
               </svg>
             </button>
             <p className="mt-2 text-[14px] font-extrabold uppercase tracking-[0.08em] text-[#111]">
-              Listen. Respond.
+              Hear It.
             </p>
 
             {/* Secondary: Type or speak CTA */}
@@ -503,7 +503,7 @@ export default function Page() {
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4 text-[#B5332A]/45">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
               </svg>
-              <span>Type or speak</span>
+              <span className="uppercase text-black/70">SAY. IT.</span>
               {/* Mic icon */}
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4 text-[#B5332A]/45">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
