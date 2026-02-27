@@ -145,7 +145,7 @@ function wordMatch(token: string, normed: string): boolean {
 
 function buildUnknown(debug?: ListenMatch["debug"], partialData?: Partial<LLMListenResponse>): ListenMatch {
   // Even for "unknown", preserve any translation the LLM provided
-  const hasTranslation = partialData?.english && partialData.english !== "Not sure what they said.";
+  const hasTranslation = !!(partialData?.english && partialData.english !== "Not sure what they said.");
   
   const fallbackReply: ListenReply = hasTranslation 
     ? { spanish: "Okay, gracias.", english: "Okay, thank you.", pronunciation: "oh-KAY, GRAH-see-ahs", isAIGenerated: true }
