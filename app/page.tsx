@@ -474,7 +474,7 @@ export default function Page() {
         {isHome ? (
           <div className="flex flex-col items-center pt-8">
             {/* Hero command */}
-            <h2 className="text-[52px] font-black uppercase leading-[0.88] -tracking-[0.06em] text-[#111]">
+            <h2 className="text-[36px] font-black uppercase leading-[0.88] -tracking-[0.04em] text-[#111]">
               <span className="inline-block animate-hero-1">Spanish.</span>{" "}
               <span className="inline-block animate-hero-2">Now.</span>
             </h2>
