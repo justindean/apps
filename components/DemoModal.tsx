@@ -22,11 +22,34 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const [showTranslation, setShowTranslation] = useState(false);
   const [isPlayingResponse, setIsPlayingResponse] = useState(false);
   const [waveformBars, setWaveformBars] = useState<number[]>([]);
+  const [voicesReady, setVoicesReady] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const responseAudioRef = useRef<HTMLAudioElement | null>(null);
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Load voices on mount
+  useEffect(() => {
+    if ('speechSynthesis' in window) {
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          setVoicesReady(true);
+        }
+      };
+      
+      // Try loading immediately
+      loadVoices();
+      
+      // Also listen for voiceschanged event (required for some browsers)
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+      
+      return () => {
+        window.speechSynthesis.onvoiceschanged = null;
+      };
+    }
+  }, []);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -72,27 +95,56 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     }
   }, []);
 
+  // Helper to speak text with proper voice selection
+  const speakSpanish = useCallback((text: string, onEnd?: () => void) => {
+    if (!('speechSynthesis' in window)) {
+      onEnd?.();
+      return;
+    }
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'es-MX';
+    utterance.rate = 0.85;
+    utterance.volume = 1;
+    
+    // Find a Spanish voice
+    const voices = window.speechSynthesis.getVoices();
+    console.log("[v0] Available voices:", voices.length);
+    const spanishVoice = voices.find(v => v.lang.startsWith('es')) || voices[0];
+    if (spanishVoice) {
+      utterance.voice = spanishVoice;
+      console.log("[v0] Using voice:", spanishVoice.name, spanishVoice.lang);
+    }
+    
+    let hasEnded = false;
+    const finish = () => {
+      if (!hasEnded) {
+        hasEnded = true;
+        onEnd?.();
+      }
+    };
+    
+    utterance.onend = finish;
+    utterance.onerror = (e) => {
+      console.log("[v0] TTS error:", e);
+      finish();
+    };
+    
+    window.speechSynthesis.speak(utterance);
+    console.log("[v0] Speaking:", text.slice(0, 30) + "...");
+    
+    // Fallback timeout
+    setTimeout(finish, text.length * 80 + 2000);
+  }, []);
+
   const startListeningPhase = useCallback(() => {
     let charIndex = 0;
     
     // Play the Spanish phrase using TTS
-    if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech
-      window.speechSynthesis.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance(SPANISH_TEXT);
-      utterance.lang = 'es-MX';
-      utterance.rate = 0.85; // Slightly slower for clarity
-      
-      // Try to find a Spanish voice
-      const voices = window.speechSynthesis.getVoices();
-      const spanishVoice = voices.find(v => v.lang.startsWith('es'));
-      if (spanishVoice) {
-        utterance.voice = spanishVoice;
-      }
-      
-      window.speechSynthesis.speak(utterance);
-    }
+    speakSpanish(SPANISH_TEXT);
     
     // Animate waveform
     waveformIntervalRef.current = setInterval(() => {
@@ -124,7 +176,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
         }, 400);
       }
     }, CHAR_DELAY);
-  }, []);
+  }, [speakSpanish]);
 
   const playResponse = useCallback(() => {
     setIsPlayingResponse(true);
@@ -144,47 +196,9 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setPhase("done");
     };
     
-    // Use Web Speech API for TTS
-    if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech first
-      window.speechSynthesis.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance(RESPONSE_SPANISH);
-      utterance.lang = 'es-MX';
-      utterance.rate = 0.9;
-      
-      // Track if finished to avoid double-firing
-      let hasFinished = false;
-      
-      utterance.onend = () => {
-        if (!hasFinished) {
-          hasFinished = true;
-          finishPlayback();
-        }
-      };
-      
-      utterance.onerror = () => {
-        if (!hasFinished) {
-          hasFinished = true;
-          finishPlayback();
-        }
-      };
-      
-      window.speechSynthesis.speak(utterance);
-      
-      // Fallback timeout in case onend doesn't fire (common on iOS Safari)
-      setTimeout(() => {
-        if (!hasFinished) {
-          hasFinished = true;
-          window.speechSynthesis.cancel();
-          finishPlayback();
-        }
-      }, 5000);
-    } else {
-      // Fallback: simulate playback
-      setTimeout(finishPlayback, 2000);
-    }
-  }, []);
+    // Use the speak helper
+    speakSpanish(RESPONSE_SPANISH, finishPlayback);
+  }, [speakSpanish]);
 
   const handleClose = useCallback(() => {
     cleanup();
