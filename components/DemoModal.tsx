@@ -126,7 +126,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     }, CHAR_DELAY);
   }, []);
 
-  const playResponse = useCallback(async () => {
+  const playResponse = useCallback(() => {
     setIsPlayingResponse(true);
     
     // Animate waveform for response
@@ -134,41 +134,55 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.7 + 0.3));
     }, 100);
     
+    const finishPlayback = () => {
+      setIsPlayingResponse(false);
+      if (waveformIntervalRef.current) {
+        clearInterval(waveformIntervalRef.current);
+        waveformIntervalRef.current = null;
+      }
+      setWaveformBars(Array(12).fill(0).map(() => 0.1));
+      setPhase("done");
+    };
+    
     // Use Web Speech API for TTS
     if ('speechSynthesis' in window) {
+      // Cancel any ongoing speech first
+      window.speechSynthesis.cancel();
+      
       const utterance = new SpeechSynthesisUtterance(RESPONSE_SPANISH);
       utterance.lang = 'es-MX';
       utterance.rate = 0.9;
       
+      // Track if finished to avoid double-firing
+      let hasFinished = false;
+      
       utterance.onend = () => {
-        setIsPlayingResponse(false);
-        if (waveformIntervalRef.current) {
-          clearInterval(waveformIntervalRef.current);
+        if (!hasFinished) {
+          hasFinished = true;
+          finishPlayback();
         }
-        setWaveformBars(Array(12).fill(0).map(() => 0.1));
-        setPhase("done");
       };
       
       utterance.onerror = () => {
-        setIsPlayingResponse(false);
-        if (waveformIntervalRef.current) {
-          clearInterval(waveformIntervalRef.current);
+        if (!hasFinished) {
+          hasFinished = true;
+          finishPlayback();
         }
-        setWaveformBars(Array(12).fill(0).map(() => 0.1));
-        setPhase("done");
       };
       
       window.speechSynthesis.speak(utterance);
+      
+      // Fallback timeout in case onend doesn't fire (common on iOS Safari)
+      setTimeout(() => {
+        if (!hasFinished) {
+          hasFinished = true;
+          window.speechSynthesis.cancel();
+          finishPlayback();
+        }
+      }, 5000);
     } else {
       // Fallback: simulate playback
-      setTimeout(() => {
-        setIsPlayingResponse(false);
-        if (waveformIntervalRef.current) {
-          clearInterval(waveformIntervalRef.current);
-        }
-        setWaveformBars(Array(12).fill(0).map(() => 0.1));
-        setPhase("done");
-      }, 2000);
+      setTimeout(finishPlayback, 2000);
     }
   }, []);
 
