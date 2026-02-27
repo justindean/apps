@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.2,
-        max_tokens: 300,
+        max_tokens: 800, // Increased for multi-tone JSON output
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },

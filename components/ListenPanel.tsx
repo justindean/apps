@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import type { Phrase, SpeechMode } from "@/data/phrases";
 import { validateAndBuildFromLLM, normalizeTranscript } from "@/data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaurantIntents";
-import { getContextSystemPrompt, labelToContextKey } from "@/data/contextPrompts";
+import { getContextSystemPrompt, labelToContextKey, type ContextKey } from "@/data/contextPrompts";
 
 /* ── TTS helper ── */
 function speakPhrase(text: string) {
@@ -599,9 +599,11 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
 
       // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
+      console.log("[v0] LLM call starting, contextKey:", contextKey, "context prop:", context);
 
       (async () => {
         try {
+          console.log("[v0] Fetching /api/classify with transcript:", corrected.slice(0, 50));
           const resp = await fetch("/api/classify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -609,17 +611,35 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
               transcript: corrected,
               tone: "all", // All tones returned in one call
               context: contextKey, // Pass context for logging
-              systemPromptOverride: getContextSystemPrompt(labelToContextKey(context)),
+              systemPromptOverride: getContextSystemPrompt(contextKey === "general" ? null : contextKey as ContextKey),
             }),
           });
 
           if (!resp.ok) {
             const errText = await resp.text();
             addLog("error", `LLM ${resp.status}: ${errText.slice(0, 100)}`);
+            // Even on API error, show a fallback result with the instant translation
+            setMatch({
+              intent: "api_error",
+              english: instantEnglish || "Translation unavailable",
+              literalEnglish: "",
+              confidence: 0,
+              source: "none",
+              routerPath: "fallback-unknown",
+              evidence: [],
+              keywords: [],
+              bestReply: { spanish: "Puede repetir, por favor?", english: "Can you repeat, please?", pronunciation: "", isAIGenerated: false },
+              alternates: [],
+              followUps: [],
+              alternateMeanings: [],
+              section: "Clarify",
+              debug: { rejectedReason: `API error: ${resp.status}` },
+            });
             return;
           }
 
           const data: LLMListenResponse = await resp.json();
+          console.log("[v0] LLM response received:", JSON.stringify(data).slice(0, 200));
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
 
           // Store in cache under both exact key and signature key
@@ -657,6 +677,23 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
           addLog("error", `LLM: ${msg}`);
+          // Show fallback on exception
+          setMatch({
+            intent: "exception",
+            english: instantEnglish || "Translation unavailable",
+            literalEnglish: "",
+            confidence: 0,
+            source: "none",
+            routerPath: "fallback-unknown",
+            evidence: [],
+            keywords: [],
+            bestReply: { spanish: "Puede repetir, por favor?", english: "Can you repeat, please?", pronunciation: "", isAIGenerated: false },
+            alternates: [],
+            followUps: [],
+            alternateMeanings: [],
+            section: "Clarify",
+            debug: { rejectedReason: `Exception: ${msg}` },
+          });
         } finally {
           setLlmClassifying(false);
         }
