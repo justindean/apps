@@ -472,50 +472,47 @@ export default function Page() {
          ══════════════════════════════════════════════════════════════ */}
       <main className="mx-auto max-w-md px-6 pb-16">
         {isHome ? (
-          <div className="flex flex-col items-center pt-6">
-            {/* Headline -- single line, calm weight contrast */}
-            <h2 className="text-[38px] leading-[1] -tracking-[0.02em] text-[#111]">
+          <div className="flex flex-col items-center pt-4">
+            {/* Headline -- all caps, tight */}
+            <h2 className="text-[34px] leading-[1] -tracking-[0.04em] text-[#111] uppercase">
               <span className="font-medium">Spanish.</span>{" "}
               <span className="font-bold">Now.</span>
             </h2>
 
-            {/* Mic button -- dominant, matte red */}
+            {/* Mic button -- the only primary action */}
             <button
               onClick={openListen}
-              className="group relative mt-8 flex h-32 w-32 items-center justify-center rounded-full bg-[#B5332A] shadow-[0_6px_24px_-6px_rgba(181,51,42,0.35)] transition-all duration-100 active:scale-[0.96]"
+              className="relative mt-6 flex h-28 w-28 items-center justify-center rounded-full bg-[#B5332A] shadow-[0_4px_20px_-4px_rgba(181,51,42,0.3)] transition-all duration-100 active:scale-[0.96]"
               aria-label="Say it"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-11 w-11 text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-10 w-10 text-white">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
               </svg>
             </button>
 
-            {/* Primary CTA button */}
-            <button
-              onClick={openListen}
-              className="mt-5 rounded-[6px] bg-[#B5332A] px-8 py-3 text-[14px] font-bold uppercase tracking-[0.08em] text-white shadow-sm transition-all active:scale-[0.97]"
-            >
-              Say It
-            </button>
+            {/* Instructional label */}
+            <p className="mt-3 text-[14px] font-medium tracking-[0.02em] text-[#111]">
+              SAY IT
+            </p>
 
             {/* Supporting line */}
-            <p className="mt-4 text-[12px] font-medium text-black/30">
+            <p className="mt-1 text-[11px] font-medium text-black/25">
               Hear it. Say it.
             </p>
 
-            {/* Context chips -- tight, minimal */}
-            <section className="mt-8 w-full">
-              <div className="flex flex-wrap justify-center gap-1.5">
+            {/* Context chips -- minimal, evenly spaced */}
+            <section className="mt-6 w-full">
+              <div className="flex flex-wrap justify-center gap-2">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
                   return (
                     <button
                       key={ctx.id}
                       onClick={() => toggleContext(ctx.id)}
-                      className={`rounded-[4px] border px-2.5 py-1 text-[11px] font-medium transition-all duration-75 active:scale-[0.97] ${
+                      className={`rounded-[4px] border px-3 py-1 text-[11px] font-medium transition-all duration-75 active:scale-[0.97] ${
                         isActive
                           ? "border-[#111] bg-[#111] text-white"
-                          : "border-black/8 text-black/40 hover:border-black/15 hover:text-black/55"
+                          : "border-black/10 text-black/35 hover:border-black/18 hover:text-black/50"
                       }`}
                     >
                       {ctx.label}
@@ -526,7 +523,7 @@ export default function Page() {
             </section>
 
             {/* Build stamp */}
-            <p className="mt-10 text-[10px] font-medium text-black/10 tracking-wide">v0.81</p>
+            <p className="mt-8 text-[10px] font-medium text-black/10 tracking-wide">v0.82</p>
           </div>
         ) : hasFlow && scenario?.flowStages ? (
           <FlowNavigator stages={scenario.flowStages} color={scenario.color} onCopy={copyPhrase} mode={mode} />
