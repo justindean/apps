@@ -65,6 +65,7 @@ export interface ListenMatch {
 // ── Section mapping for UI colors ───────────────────────────────────────
 
 const INTENT_TO_SECTION: Record<string, string> = {
+  // Food & Drink
   menu_offer: "Menu",
   table_preference: "Arrival",
   party_size: "Arrival",
@@ -82,9 +83,39 @@ const INTENT_TO_SECTION: Record<string, string> = {
   tip_service: "Tip",
   receipt: "Tip",
   not_available: "Food",
+  // Getting Around
+  destination_request: "Transport",
+  fare_question: "Transport",
+  stop_request: "Transport",
+  direction_question: "Transport",
+  eta_question: "Transport",
+  // Shopping
+  price_inquiry: "Shopping",
+  size_request: "Shopping",
+  availability_check: "Shopping",
+  fitting_room: "Shopping",
+  bargaining: "Shopping",
+  // Medical
+  medication_request: "Medical",
+  symptom_description: "Medical",
+  dosage_question: "Medical",
+  pharmacy_availability: "Medical",
+  emergency: "Medical",
+  // Personal Care
+  haircut_request: "PersonalCare",
+  styling_preference: "PersonalCare",
+  beard_trim: "PersonalCare",
+  nail_service: "PersonalCare",
+  spa_service: "PersonalCare",
+  // General
   clarification: "Clarify",
   ai_understood: "AI",
+  understood: "AI", // Generic "I understood" for informational contexts
   unknown: "Clarify",
+  general_request: "AI",
+  translation_request: "AI",
+  dosage_instruction: "Medical", // Medical dosage instructions
+  // Smalltalk
   smalltalk_origin: "Smalltalk",
   smalltalk_live_here: "Smalltalk",
   smalltalk_first_time: "Smalltalk",
@@ -112,25 +143,32 @@ function wordMatch(token: string, normed: string): boolean {
   return pattern.test(normed);
 }
 
-function buildUnknown(debug?: ListenMatch["debug"]): ListenMatch {
-  const fallbackReply: ListenReply = { spanish: "Puede repetir, por favor?", english: "Can you repeat, please?", pronunciation: "PWEH-deh reh-peh-TEER, por fah-VOR", isAIGenerated: false };
+function buildUnknown(debug?: ListenMatch["debug"], partialData?: Partial<LLMListenResponse>): ListenMatch {
+  // Even for "unknown", preserve any translation the LLM provided
+  const hasTranslation = !!(partialData?.english && partialData.english !== "Not sure what they said.");
+  
+  const fallbackReply: ListenReply = hasTranslation 
+    ? { spanish: "Okay, gracias.", english: "Okay, thank you.", pronunciation: "oh-KAY, GRAH-see-ahs", isAIGenerated: true }
+    : { spanish: "Puede repetir, por favor?", english: "Can you repeat, please?", pronunciation: "PWEH-deh reh-peh-TEER, por fah-VOR", isAIGenerated: false };
+  
   return {
-    intent: "unknown",
-    english: "Not sure what they said.",
-    literalEnglish: "",
-    confidence: 0,
-    source: "none",
-    routerPath: "fallback-unknown",
+    intent: hasTranslation ? "understood" : "unknown",
+    english: partialData?.english ?? "Not sure what they said.",
+    literalEnglish: partialData?.literal_english ?? "",
+    confidence: hasTranslation ? 50 : 0,
+    source: hasTranslation ? "ai" : "none",
+    routerPath: hasTranslation ? "ai" : "fallback-unknown",
     evidence: [],
     keywords: [],
     bestReply: fallbackReply,
     alternates: [
-      { spanish: "Mas despacio, por favor.", english: "Slower, please.", pronunciation: "mahs dehs-PAH-see-oh, por fah-VOR", isAIGenerated: false },
+      { spanish: "Entiendo, gracias.", english: "I understand, thank you.", pronunciation: "ehn-tee-EHN-doh, GRAH-see-ahs", isAIGenerated: true },
+      { spanish: "Perfecto.", english: "Perfect.", pronunciation: "pehr-FEHK-toh", isAIGenerated: true },
     ],
     followUps: [],
     alternateMeanings: [],
-    section: "Clarify",
-    debug: { ...debug, constraintsPassed: false },
+    section: hasTranslation ? "AI" : "Clarify",
+    debug: { ...debug, constraintsPassed: hasTranslation },
   };
 }
 
@@ -410,11 +448,9 @@ export function validateAndBuildFromLLM(
   const rawConfidence = Math.max(0, Math.min(100, data.confidence ?? 15));
   const aiEvidence = data.evidence ?? data.keywords ?? [];
 
-  // Sanity check: is intent in our allowed list?
-  const section = INTENT_TO_SECTION[intent];
-  if (!section) {
-    return buildUnknown({ rejectedReason: "AI returned unknown intent: " + intent });
-  }
+  // Map intent to section for UI color -- accept any intent, default to "AI" section
+  // This allows the LLM to be flexible with intents while still providing results
+  const section = INTENT_TO_SECTION[intent] ?? "AI";
 
   // Validate evidence tokens appear in transcript
   const validEvidence: string[] = [];

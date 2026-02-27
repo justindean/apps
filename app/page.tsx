@@ -26,6 +26,7 @@ const contexts = [
   { id: "getting-around", label: "Getting around", scenarioKeys: ["taxi", "transport"] },
   { id: "shopping", label: "Shopping", scenarioKeys: ["shopping"] },
   { id: "medical", label: "Medical", scenarioKeys: ["emergency"] },
+  { id: "personal-care", label: "Personal care", scenarioKeys: ["barber", "salon", "spa"] },
 ] as const;
 
 type ActiveDrawer = null | "listen" | "say";
