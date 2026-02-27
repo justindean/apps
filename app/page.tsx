@@ -14,7 +14,7 @@ import {
 import { SubContextBar } from "@/components/SubContextBar";
 import { PhraseList } from "@/components/PhraseList";
 import { FlowNavigator } from "@/components/FlowNavigator";
-import SpeechModeToggle from "@/components/SpeechModeToggle";
+// Tone toggle removed from header -- tone now lives inside reply cards
 import RescueModal from "@/components/RescueModal";
 import { ListenPanel } from "@/components/ListenPanel";
 
@@ -22,8 +22,8 @@ const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
 /* ── Context chips ── */
 const contexts = [
-  { id: "food-drink", label: "Food & Drink", scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"] },
-  { id: "getting-around", label: "Getting Around", scenarioKeys: ["taxi", "transport"] },
+  { id: "food", label: "Ordering food", scenarioKeys: ["restaurant", "bar", "coffee", "juices", "drinks", "food", "arrival", "during", "bill", "exit"] },
+  { id: "getting-around", label: "Getting around", scenarioKeys: ["taxi", "transport"] },
   { id: "shopping", label: "Shopping", scenarioKeys: ["shopping"] },
   { id: "medical", label: "Medical", scenarioKeys: ["emergency"] },
 ] as const;
@@ -37,12 +37,26 @@ interface TranslateResult {
   english: string;
 }
 
+const TONE_KEY = "taphabla_tone";
+function getSavedTone(): SpeechMode {
+  try {
+    const v = localStorage.getItem(TONE_KEY);
+    if (v === "street" || v === "neutral" || v === "formal") return v;
+  } catch { /* SSR / private browsing */ }
+  return "neutral";
+}
+
 export default function Page() {
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [activeIntent, setActiveIntent] = useState<IntentKey>("order");
-  const [mode, setMode] = useState<SpeechMode>("neutral");
+  const [mode, setMode] = useState<SpeechMode>(() => getSavedTone());
   const [showRescue, setShowRescue] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
+
+  // Persist preferred tone to localStorage
+  useEffect(() => {
+    try { localStorage.setItem(TONE_KEY, mode); } catch { /* noop */ }
+  }, [mode]);
 
   // Drawer
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
@@ -56,7 +70,6 @@ export default function Page() {
   const [sayInput, setSayInput] = useState("");
   const [sayResult, setSayResult] = useState<TranslateResult | null>(null);
   const [sayLoading, setSayLoading] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Drag-to-dismiss state
   const [sheetDragY, setSheetDragY] = useState(0);
@@ -131,6 +144,10 @@ export default function Page() {
   const closeDrawer = () => {
     setActiveDrawer(null);
     setAutoStartListen(false);
+    // Reset SAY state on close so reopening is fresh
+    setSayInput("");
+    setSayResult(null);
+    setSayLoading(false);
     // Don't null the stream on close -- keep it cached for re-open
   };
 
@@ -185,15 +202,15 @@ export default function Page() {
     setSayLoading(false);
   }, [mode, activeContextData]);
 
-  const handleSayInput = (value: string) => {
-    setSayInput(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doTranslate(value), 600);
+  // Explicit submit only -- no debounce, no auto-translate on typing
+  const handleSaySubmit = () => {
+    doTranslate(sayInput);
   };
 
-  const handleSaySubmit = () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    doTranslate(sayInput);
+  // Clear input and reset results
+  const clearSayInput = () => {
+    setSayInput("");
+    setSayResult(null);
   };
 
   // Speak TTS
@@ -248,26 +265,26 @@ export default function Page() {
           />
           <div
             ref={sheetRef}
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[16px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.12)] animate-slide-up"
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[12px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.10)] animate-slide-up"
             style={{
               transform: sheetDragY > 0 ? `translateY(${sheetDragY}px)` : undefined,
               transition: isDragging ? "none" : "transform 0.25s ease-out",
             }}
           >
-            {/* Drag handle -- touch target for swipe-to-dismiss */}
+            {/* Drag handle */}
             <div
-              className="flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing"
+              className="flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing"
               onTouchStart={handleDragStart}
               onTouchMove={handleDragMove}
               onTouchEnd={handleDragEnd}
             >
-              <div className="h-[4px] w-9 rounded-full bg-black/10" />
+              <div className="h-[4px] w-8 rounded-full bg-black/8" />
             </div>
             {/* Header row */}
             <div className="flex items-center justify-between px-4 pb-2">
               <div className="w-11">
                 {activeContextData && (
-                  <span className="rounded-md bg-black/5 px-2 py-0.5 text-[10px] font-bold text-black/45">
+                  <span className="rounded-[3px] bg-black/5 px-2 py-0.5 text-[10px] font-bold text-black/40">
                     {activeContextData.label}
                   </span>
                 )}
@@ -285,6 +302,7 @@ export default function Page() {
             <div className="flex-1 overflow-y-auto px-5 pb-10">
               <ListenPanel
                 mode={mode}
+                onModeChange={setMode}
                 onCopy={copyPhrase}
                 onSpeak={() => {}}
                 autoStart={autoStartListen}
@@ -309,19 +327,19 @@ export default function Page() {
             aria-hidden="true"
           />
           <div
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[16px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.12)] animate-slide-up"
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[95dvh] flex-col rounded-t-[12px] bg-white shadow-[0_-4px_40px_rgba(0,0,0,0.10)] animate-slide-up"
             style={{
               transform: sheetDragY > 0 ? `translateY(${sheetDragY}px)` : undefined,
               transition: isDragging ? "none" : "transform 0.25s ease-out",
             }}
           >
             <div
-              className="flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing"
+              className="flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing"
               onTouchStart={handleDragStart}
               onTouchMove={handleDragMove}
               onTouchEnd={handleDragEnd}
             >
-              <div className="h-[4px] w-9 rounded-full bg-black/10" />
+              <div className="h-[4px] w-8 rounded-full bg-black/8" />
             </div>
             <div className="flex items-center justify-between px-4 pb-2">
               <span className="text-[14px] font-extrabold text-black">Say</span>
@@ -336,25 +354,48 @@ export default function Page() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 pb-10">
-              {/* Input */}
-              <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-black/[0.02] px-4 py-3 transition-all focus-within:border-black/20 focus-within:bg-white focus-within:shadow-sm">
-                <input
-                  type="text"
-                  value={sayInput}
-                  onChange={(e) => handleSayInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSaySubmit()}
-                  placeholder="What do you want to say?"
-                  className="flex-1 bg-transparent text-[15px] text-black placeholder:text-black/30 outline-none"
-                  autoFocus
-                />
+              {/* Input row */}
+              <div className="flex items-center gap-2">
+                <div className="flex flex-1 items-center gap-2 rounded-[8px] border border-black/10 bg-black/[0.02] px-4 py-3 transition-all focus-within:border-black/20 focus-within:bg-white focus-within:shadow-sm">
+                  <input
+                    type="text"
+                    value={sayInput}
+                    onChange={(e) => setSayInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSaySubmit()}
+                    placeholder="What do you want to say?"
+                    className="flex-1 bg-transparent text-[15px] text-black placeholder:text-black/30 outline-none"
+                    autoFocus
+                  />
+                  {/* Clear button -- only visible when input has text */}
+                  {sayInput && (
+                    <button
+                      onClick={clearSayInput}
+                      className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-black/10 text-black/40 transition hover:bg-black/15 active:scale-90"
+                      aria-label="Clear input"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                        <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                      </svg>
+                    </button>
+                  )}
+                  {/* Mic button for voice input */}
+                  <button
+                    onClick={startEnglishCapture}
+                    className="shrink-0 rounded-full p-1.5 text-black/25 transition hover:text-[#B5332A] active:scale-90"
+                    aria-label="Speak in English"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                    </svg>
+                  </button>
+                </div>
+                {/* Translate button -- explicit submit */}
                 <button
-                  onClick={startEnglishCapture}
-                  className="shrink-0 rounded-full p-2 text-black/25 transition hover:text-[#C7402A] active:scale-90"
-                  aria-label="Speak in English"
+                  onClick={handleSaySubmit}
+                  disabled={!sayInput.trim() || sayLoading}
+                  className="shrink-0 rounded-[8px] bg-[#B5332A] px-4 py-3 text-[14px] font-bold text-white transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                  </svg>
+                  {sayLoading ? "..." : "Go"}
                 </button>
               </div>
 
@@ -367,8 +408,8 @@ export default function Page() {
               )}
               {sayResult && !sayLoading && (
                 <div className="mt-5 animate-fade-in">
-                  <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/40">Say this</p>
-                  <div className="rounded-xl border border-black/8 bg-white p-5">
+                  <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-black/30">{"Here\u2019s what to say"}</p>
+                  <div className="rounded-[8px] border border-black/8 bg-white p-5">
                     <p className="text-[22px] font-extrabold leading-tight text-black">{sayResult.spanish}</p>
                     <p className="mt-1.5 text-[14px] text-black/50">{sayResult.english}</p>
                     {sayResult.pronunciation && (
@@ -377,7 +418,7 @@ export default function Page() {
                     <div className="mt-4 flex items-center gap-2">
                       <button
                         onClick={() => speakText(sayResult.spanish)}
-                        className="flex items-center gap-1.5 rounded-lg bg-[#C7402A] px-4 py-2 text-[13px] font-bold text-white transition active:scale-95"
+                        className="flex items-center gap-1.5 rounded-[6px] bg-[#B5332A] px-4 py-2 text-[13px] font-bold text-white transition active:scale-95"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="h-4 w-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2 12h2M6 8v8M10 4v16M14 6v12M18 8v8M22 12h2" />
@@ -386,7 +427,7 @@ export default function Page() {
                       </button>
                       <button
                         onClick={() => copyPhrase(sayResult.spanish)}
-                        className="rounded-lg border border-black/10 px-3.5 py-2 text-[13px] font-semibold text-black/50 transition hover:border-black/20 active:scale-95"
+                        className="rounded-[6px] border border-black/10 px-3.5 py-2 text-[13px] font-semibold text-black/50 transition hover:border-black/20 active:scale-95"
                       >
                         Copy
                       </button>
@@ -403,7 +444,7 @@ export default function Page() {
          HEADER
          ══════════════════════════════════════════════════════════════ */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-black/[0.04]">
-        <div className="mx-auto flex max-w-md items-center justify-between px-6 py-2">
+        <div className="mx-auto flex max-w-md items-center justify-between px-6 py-2.5">
           {scenario ? (
             <button onClick={handleBack} className="flex items-center gap-1.5 text-sm font-semibold text-black/40 transition hover:text-black" aria-label="Go back">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
@@ -412,9 +453,8 @@ export default function Page() {
               <span>{scenario.name}</span>
             </button>
           ) : (
-            <h1 className="text-[14px] font-extrabold tracking-tight text-[#111]">TapHabla</h1>
+            <h1 className="text-[15px] font-extrabold tracking-tight text-[#111]">TapHabla</h1>
           )}
-          <SpeechModeToggle current={mode} onChange={setMode} />
         </div>
         {scenario && !hasFlow && (
           <SubContextBar
@@ -431,55 +471,60 @@ export default function Page() {
          ══════════════════════════════════════════════════════════════ */}
       <main className="mx-auto max-w-md px-6 pb-16">
         {isHome ? (
-          <div className="flex flex-col items-center pt-7">
-            {/* Hero command -- staggered entry */}
-            <h2 className="text-[48px] font-black uppercase leading-[0.9] -tracking-[0.06em] text-[#111]">
+          <div className="flex flex-col items-center pt-8">
+            {/* Hero command */}
+            <h2 className="text-[52px] font-black uppercase leading-[0.88] -tracking-[0.06em] text-[#111]">
               <span className="inline-block animate-hero-1">Land.</span>{" "}
               <span className="inline-block animate-hero-2">Go.</span>
             </h2>
 
-            {/* THE WEAPON -- breathing mic */}
+            {/* THE WEAPON -- breathing mic (deeper red) */}
             <button
               onClick={openListen}
-              className="group relative mt-7 flex h-40 w-40 items-center justify-center rounded-full bg-[#C7402A] shadow-[0_12px_60px_-12px_rgba(199,64,42,0.6)] transition-all duration-100 animate-breathe active:scale-[0.96] active:shadow-[0_4px_20px_-4px_rgba(199,64,42,0.35)] active:animate-none"
+              className="group relative mt-8 flex h-40 w-40 items-center justify-center rounded-full bg-[#B5332A] shadow-[0_12px_60px_-12px_rgba(181,51,42,0.55)] transition-all duration-100 animate-breathe active:scale-[0.96] active:shadow-[0_4px_20px_-4px_rgba(181,51,42,0.3)] active:animate-none"
               aria-label="Listen"
             >
-              {/* Soft halo glow */}
-              <span className="absolute inset-[-14px] rounded-full bg-[#C7402A]/[0.07] animate-halo" />
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="relative h-14 w-14 text-white">
+              <span className="absolute inset-[-14px] rounded-full bg-[#B5332A]/[0.06] animate-halo" />
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="relative h-14 w-14 text-white">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
               </svg>
             </button>
-            <p className="mt-1.5 text-[15px] font-extrabold uppercase tracking-[0.05em] text-[#111]">
-              Listen
-            </p>
-            {/* Ambient copy -- fades in after 1.5s */}
-            <p className="mt-1 text-[12px] font-medium text-black/25 animate-ambient">
-              We hear them. You understand.
+            <p className="mt-2 text-[14px] font-extrabold uppercase tracking-[0.08em] text-[#111]">
+              Listen. Respond.
             </p>
 
-            {/* Secondary: Say */}
+            {/* Secondary: Type or speak CTA */}
             <button
               onClick={openSay}
-              className="mt-5 text-[13px] font-semibold text-black/50 underline decoration-black/15 underline-offset-2 transition-colors hover:text-black/70 hover:decoration-black/30 active:text-black"
+              className="mt-5 flex items-center gap-2 rounded-[6px] border border-[#B5332A]/18 bg-[#B5332A]/[0.03] px-4 py-2.5 text-[13px] font-semibold text-black/55 transition-all hover:border-[#B5332A]/28 hover:bg-[#B5332A]/[0.06] hover:text-black/70 active:scale-[0.97]"
             >
-              Or speak instead
+              {/* Pencil icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4 text-[#B5332A]/45">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+              </svg>
+              <span>Type or speak</span>
+              {/* Mic icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4 text-[#B5332A]/45">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+              </svg>
             </button>
 
-            {/* Context chips */}
-            <section className="mt-5 w-full">
-              <p className="mb-2 text-[12px] font-medium text-black/40">Where are you?</p>
-              <div className="flex flex-wrap gap-1">
+            {/* Context intro + chips */}
+            <p className="mt-8 text-[13px] font-medium text-black/35">
+              {"What are you up to? We\u2019ll give you better responses."}
+            </p>
+            <section className="mt-2 w-full">
+              <div className="flex flex-wrap gap-1.5">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
                   return (
                     <button
                       key={ctx.id}
                       onClick={() => toggleContext(ctx.id)}
-                      className={`rounded-md border-[1.5px] px-3 py-1.5 text-[12px] font-semibold transition-all duration-100 active:scale-[0.97] ${
+                      className={`rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold transition-all duration-75 active:scale-[0.97] ${
                         isActive
                           ? "border-[#111] bg-[#111] text-white"
-                          : "border-black/15 text-black/55 hover:border-black/30"
+                          : "border-black/12 text-black/50 hover:border-black/25 hover:text-black/70"
                       }`}
                     >
                       {ctx.label}
@@ -490,7 +535,7 @@ export default function Page() {
             </section>
 
             {/* Build stamp */}
-            <p className="mt-10 text-[10px] font-medium text-black/15">v0.77</p>
+            <p className="mt-12 text-[10px] font-medium text-black/12 tracking-wide">v0.80</p>
           </div>
         ) : hasFlow && scenario?.flowStages ? (
           <FlowNavigator stages={scenario.flowStages} color={scenario.color} onCopy={copyPhrase} mode={mode} />
