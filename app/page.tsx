@@ -475,8 +475,8 @@ export default function Page() {
           <div className="flex flex-col items-center pt-8">
             {/* Hero command */}
             <h2 className="text-[52px] font-black uppercase leading-[0.88] -tracking-[0.06em] text-[#111]">
-              <span className="inline-block animate-hero-1">Land.</span>{" "}
-              <span className="inline-block animate-hero-2">Go.</span>
+              <span className="inline-block animate-hero-1">Spanish.</span>{" "}
+              <span className="inline-block animate-hero-2">Now.</span>
             </h2>
 
             {/* THE WEAPON -- breathing mic (deeper red) */}
@@ -491,7 +491,7 @@ export default function Page() {
               </svg>
             </button>
             <p className="mt-2 text-[14px] font-extrabold uppercase tracking-[0.08em] text-[#111]">
-              Listen. Respond.
+              Hear. Say.
             </p>
 
             {/* Secondary: Type or speak CTA */}
