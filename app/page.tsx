@@ -492,14 +492,11 @@ export default function Page() {
             <p className="mt-2 text-[14px] font-extrabold uppercase tracking-[0.08em] text-[#111]">
               Listen. Respond.
             </p>
-            <p className="mt-1 text-[12px] font-medium text-black/25 animate-ambient">
-              {"What\u2019s happening."}
-            </p>
 
             {/* Secondary: Type or speak CTA */}
             <button
               onClick={openSay}
-              className="mt-6 flex items-center gap-2 rounded-[6px] border border-black/12 px-4 py-2 text-[13px] font-semibold text-black/50 transition-all hover:border-black/20 hover:text-black/70 active:scale-[0.97]"
+              className="mt-5 flex items-center gap-2 rounded-[6px] border border-black/12 px-4 py-2 text-[13px] font-semibold text-black/50 transition-all hover:border-black/20 hover:text-black/70 active:scale-[0.97]"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
@@ -507,8 +504,11 @@ export default function Page() {
               Type or speak
             </button>
 
-            {/* Context chips -- tactile, not soft pills */}
-            <section className="mt-7 w-full">
+            {/* Context intro + chips */}
+            <p className="mt-7 text-[12px] font-medium text-black/25">
+              {"What\u2019s happening?"}
+            </p>
+            <section className="mt-2 w-full">
               <div className="flex flex-wrap gap-1.5">
                 {contexts.map((ctx) => {
                   const isActive = activeContext === ctx.id;
