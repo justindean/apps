@@ -66,10 +66,33 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       responseAudioRef.current.pause();
       responseAudioRef.current = null;
     }
+    // Cancel any ongoing speech synthesis
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
   }, []);
 
   const startListeningPhase = useCallback(() => {
     let charIndex = 0;
+    
+    // Play the Spanish phrase using TTS
+    if ('speechSynthesis' in window) {
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+      
+      const utterance = new SpeechSynthesisUtterance(SPANISH_TEXT);
+      utterance.lang = 'es-MX';
+      utterance.rate = 0.85; // Slightly slower for clarity
+      
+      // Try to find a Spanish voice
+      const voices = window.speechSynthesis.getVoices();
+      const spanishVoice = voices.find(v => v.lang.startsWith('es'));
+      if (spanishVoice) {
+        utterance.voice = spanishVoice;
+      }
+      
+      window.speechSynthesis.speak(utterance);
+    }
     
     // Animate waveform
     waveformIntervalRef.current = setInterval(() => {
