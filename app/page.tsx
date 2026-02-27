@@ -17,6 +17,7 @@ import { FlowNavigator } from "@/components/FlowNavigator";
 // Tone toggle removed from header -- tone now lives inside reply cards
 import RescueModal from "@/components/RescueModal";
 import { ListenPanel } from "@/components/ListenPanel";
+import { DemoModal } from "@/components/DemoModal";
 
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
@@ -52,6 +53,7 @@ export default function Page() {
   const [activeIntent, setActiveIntent] = useState<IntentKey>("order");
   const [mode, setMode] = useState<SpeechMode>(() => getSavedTone());
   const [showRescue, setShowRescue] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
 
   // Persist preferred tone to localStorage
@@ -494,6 +496,14 @@ export default function Page() {
               Hear It.
             </p>
 
+            {/* Try Demo button */}
+            <button
+              onClick={() => setShowDemo(true)}
+              className="mt-3 text-[12px] font-semibold text-[#B5332A]/70 transition-colors hover:text-[#B5332A] active:scale-[0.98]"
+            >
+              Try Demo
+            </button>
+
             {/* Secondary: Type or speak CTA */}
             <button
               onClick={openSay}
@@ -559,6 +569,9 @@ export default function Page() {
       {showRescue && (
         <RescueModal phrases={rescuePhrases} onCopy={copyPhrase} onClose={() => setShowRescue(false)} />
       )}
+
+      {/* Demo Modal */}
+      <DemoModal open={showDemo} onClose={() => setShowDemo(false)} />
     </div>
   );
 }
