@@ -496,10 +496,10 @@ export default function Page() {
               Hear It.
             </p>
 
-            {/* Try Demo link */}
+            {/* Try Demo button */}
             <button
               onClick={() => setShowDemo(true)}
-              className="mt-3 text-[12px] font-semibold text-[#B5332A]/70 underline underline-offset-2 transition-colors hover:text-[#B5332A] active:scale-[0.98]"
+              className="mt-3 text-[12px] font-semibold text-[#B5332A]/70 transition-colors hover:text-[#B5332A] active:scale-[0.98]"
             >
               Try Demo
             </button>
