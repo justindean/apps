@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface DemoModalProps {
   open: boolean;
@@ -13,83 +13,58 @@ const ENGLISH_TEXT = "Good afternoon, what will you have? We have a special toda
 const RESPONSE_SPANISH = "Quiero una cerveza y la pasta con camarones.";
 const RESPONSE_ENGLISH = "I want a beer and the pasta with shrimp.";
 
-// Timing for transcription animation (ms per character, roughly synced to ~4s audio)
 const CHAR_DELAY = 45;
 
 export function DemoModal({ open, onClose }: DemoModalProps) {
-  const [phase, setPhase] = useState<"listening" | "response" | "done">("listening");
+  // Phase: "start" requires user tap to begin (for iOS audio permission)
+  const [phase, setPhase] = useState<"start" | "listening" | "response" | "done">("start");
   const [transcribedText, setTranscribedText] = useState("");
   const [showTranslation, setShowTranslation] = useState(false);
   const [isPlayingResponse, setIsPlayingResponse] = useState(false);
-  const [waveformBars, setWaveformBars] = useState<number[]>([]);
+  const [waveformBars, setWaveformBars] = useState<number[]>(Array(12).fill(0.15));
   
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const responseAudioRef = useRef<HTMLAudioElement | null>(null);
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Reset state when modal opens
+  // Reset when modal opens/closes
   useEffect(() => {
     if (open) {
-      setPhase("listening");
+      setPhase("start");
       setTranscribedText("");
       setShowTranslation(false);
       setIsPlayingResponse(false);
-      setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.3 + 0.1));
-      
-      // Start demo sequence after brief delay
-      const startTimer = setTimeout(() => {
-        startListeningPhase();
-      }, 300);
-      
-      return () => clearTimeout(startTimer);
+      setWaveformBars(Array(12).fill(0.15));
     } else {
-      // Cleanup on close
-      cleanup();
+      // Cleanup
+      if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
+      if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     }
   }, [open]);
 
-  const cleanup = useCallback(() => {
-    if (transcriptionIntervalRef.current) {
-      clearInterval(transcriptionIntervalRef.current);
-      transcriptionIntervalRef.current = null;
-    }
-    if (waveformIntervalRef.current) {
-      clearInterval(waveformIntervalRef.current);
-      waveformIntervalRef.current = null;
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    if (responseAudioRef.current) {
-      responseAudioRef.current.pause();
-      responseAudioRef.current = null;
-    }
-    // Cancel any ongoing speech synthesis
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
+      if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    };
   }, []);
 
-  const startListeningPhase = useCallback(() => {
-    let charIndex = 0;
+  // MUST be called directly from onClick - iOS requires user gesture for audio
+  const startDemo = () => {
+    setPhase("listening");
     
-    // Play the Spanish phrase using TTS
+    // Speak Spanish - DIRECTLY in click handler for iOS
     if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech
       window.speechSynthesis.cancel();
-      
       const utterance = new SpeechSynthesisUtterance(SPANISH_TEXT);
       utterance.lang = 'es-MX';
-      utterance.rate = 0.85; // Slightly slower for clarity
+      utterance.rate = 0.85;
       
-      // Try to find a Spanish voice
       const voices = window.speechSynthesis.getVoices();
       const spanishVoice = voices.find(v => v.lang.startsWith('es'));
-      if (spanishVoice) {
-        utterance.voice = spanishVoice;
-      }
+      if (spanishVoice) utterance.voice = spanishVoice;
       
       window.speechSynthesis.speak(utterance);
     }
@@ -100,82 +75,75 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     }, 100);
     
     // Animate transcription
+    let charIndex = 0;
     transcriptionIntervalRef.current = setInterval(() => {
       if (charIndex < SPANISH_TEXT.length) {
         setTranscribedText(SPANISH_TEXT.slice(0, charIndex + 1));
         charIndex++;
       } else {
-        // Transcription complete
-        if (transcriptionIntervalRef.current) {
-          clearInterval(transcriptionIntervalRef.current);
-        }
-        if (waveformIntervalRef.current) {
-          clearInterval(waveformIntervalRef.current);
-        }
-        setWaveformBars(Array(12).fill(0).map(() => 0.1));
+        if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
+        if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+        setWaveformBars(Array(12).fill(0.1));
         
-        // Show translation after brief pause
         setTimeout(() => {
           setShowTranslation(true);
-          // Move to response phase
-          setTimeout(() => {
-            setPhase("response");
-          }, 800);
+          setTimeout(() => setPhase("response"), 800);
         }, 400);
       }
     }, CHAR_DELAY);
-  }, []);
+  };
 
-  const playResponse = useCallback(async () => {
+  // MUST be called directly from onClick - iOS requires user gesture for audio
+  const playResponse = () => {
     setIsPlayingResponse(true);
     
-    // Animate waveform for response
     waveformIntervalRef.current = setInterval(() => {
       setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.7 + 0.3));
     }, 100);
     
-    // Use Web Speech API for TTS
     if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(RESPONSE_SPANISH);
       utterance.lang = 'es-MX';
       utterance.rate = 0.9;
       
-      utterance.onend = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const spanishVoice = voices.find(v => v.lang.startsWith('es'));
+      if (spanishVoice) utterance.voice = spanishVoice;
+      
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
         setIsPlayingResponse(false);
-        if (waveformIntervalRef.current) {
-          clearInterval(waveformIntervalRef.current);
-        }
-        setWaveformBars(Array(12).fill(0).map(() => 0.1));
+        if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+        setWaveformBars(Array(12).fill(0.1));
         setPhase("done");
       };
       
-      utterance.onerror = () => {
-        setIsPlayingResponse(false);
-        if (waveformIntervalRef.current) {
-          clearInterval(waveformIntervalRef.current);
-        }
-        setWaveformBars(Array(12).fill(0).map(() => 0.1));
-        setPhase("done");
-      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
       
       window.speechSynthesis.speak(utterance);
+      
+      // Fallback timeout for iOS (onend sometimes doesn't fire)
+      setTimeout(finish, 5000);
     } else {
-      // Fallback: simulate playback
       setTimeout(() => {
         setIsPlayingResponse(false);
-        if (waveformIntervalRef.current) {
-          clearInterval(waveformIntervalRef.current);
-        }
-        setWaveformBars(Array(12).fill(0).map(() => 0.1));
+        if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+        setWaveformBars(Array(12).fill(0.1));
         setPhase("done");
       }, 2000);
     }
-  }, []);
+  };
 
-  const handleClose = useCallback(() => {
-    cleanup();
+  const handleClose = () => {
+    if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
+    if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     onClose();
-  }, [cleanup, onClose]);
+  };
 
   if (!open) return null;
 
@@ -197,34 +165,64 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto px-5 pb-32">
-        {/* Waveform visualization */}
-        <div className="flex h-16 items-center justify-center gap-1">
-          {waveformBars.map((height, i) => (
-            <div
-              key={i}
-              className="w-1 rounded-full bg-[#B5332A] transition-all duration-100"
-              style={{ height: `${height * 48}px` }}
-            />
-          ))}
-        </div>
+        {/* Start screen - user must tap to enable audio on iOS */}
+        {phase === "start" && (
+          <div className="flex flex-col items-center justify-center pt-12">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#B5332A]/10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-9 w-9 text-[#B5332A]">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+              </svg>
+            </div>
+            <p className="mt-5 text-center text-[17px] font-bold text-[#111]">
+              Experience TapHabla
+            </p>
+            <p className="mt-2 text-center text-[14px] text-black/50 max-w-[280px]">
+              Hear a waiter ask you a question in Spanish, then learn how to respond.
+            </p>
+            <button
+              onClick={startDemo}
+              className="mt-6 flex items-center gap-2 rounded-[10px] bg-[#B5332A] px-7 py-3.5 text-[15px] font-bold text-white transition-all active:scale-[0.97]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+              </svg>
+              Start Demo
+            </button>
+          </div>
+        )}
+
+        {/* Waveform - only show during listening/response phases */}
+        {phase !== "start" && (
+          <div className="flex h-16 items-center justify-center gap-1">
+            {waveformBars.map((height, i) => (
+              <div
+                key={i}
+                className="w-1 rounded-full bg-[#B5332A] transition-all duration-100"
+                style={{ height: `${height * 48}px` }}
+              />
+            ))}
+          </div>
+        )}
 
         {/* They Said card */}
-        <div className="mt-4 rounded-[12px] border border-black/8 bg-white p-5 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-black/35">They Said</p>
-          <p className="mt-2 text-[20px] font-bold leading-[1.3] text-[#111]">
-            {transcribedText}
-            {phase === "listening" && transcribedText.length < SPANISH_TEXT.length && (
-              <span className="inline-block w-[2px] h-5 bg-[#B5332A] ml-0.5 animate-pulse" />
-            )}
-          </p>
-          {showTranslation && (
-            <p className="mt-3 text-[15px] leading-[1.5] text-black/50">
-              {ENGLISH_TEXT}
+        {phase !== "start" && (
+          <div className="mt-4 rounded-[12px] border border-black/8 bg-white p-5 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-black/35">They Said</p>
+            <p className="mt-2 text-[20px] font-bold leading-[1.3] text-[#111]">
+              {transcribedText}
+              {phase === "listening" && transcribedText.length < SPANISH_TEXT.length && (
+                <span className="inline-block w-[2px] h-5 bg-[#B5332A] ml-0.5 animate-pulse" />
+              )}
             </p>
-          )}
-        </div>
+            {showTranslation && (
+              <p className="mt-3 text-[15px] leading-[1.5] text-black/50">
+                {ENGLISH_TEXT}
+              </p>
+            )}
+          </div>
+        )}
 
-        {/* Response card - appears after listening */}
+        {/* Response card */}
         {(phase === "response" || phase === "done") && (
           <div className="mt-4 rounded-[12px] border border-[#B5332A]/20 bg-[#B5332A]/[0.03] p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#B5332A]/60">Say This</p>
@@ -235,7 +233,6 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
               {RESPONSE_ENGLISH}
             </p>
             
-            {/* Play response button */}
             <button
               onClick={playResponse}
               disabled={isPlayingResponse}
