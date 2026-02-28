@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 
 interface DemoModalProps {
   open: boolean;
@@ -13,7 +13,6 @@ const ENGLISH_TEXT = "Good afternoon, what will you have? We have a special toda
 const RESPONSE_SPANISH = "Quiero una cerveza y la pasta con camarones.";
 const RESPONSE_ENGLISH = "I want a beer and the pasta with shrimp.";
 
-// Timing for text animation (ms per character)
 const CHAR_DELAY = 45;
 
 export function DemoModal({ open, onClose }: DemoModalProps) {
@@ -26,7 +25,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Reset state when modal opens/closes
+  // Reset on open/close
   useEffect(() => {
     if (open) {
       setPhase("start");
@@ -35,16 +34,9 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setIsPlayingResponse(false);
       setWaveformBars(Array(12).fill(0.15));
     } else {
-      // Cleanup when closing
-      if (transcriptionIntervalRef.current) {
-        clearInterval(transcriptionIntervalRef.current);
-        transcriptionIntervalRef.current = null;
-      }
-      if (waveformIntervalRef.current) {
-        clearInterval(waveformIntervalRef.current);
-        waveformIntervalRef.current = null;
-      }
-      if ('speechSynthesis' in window) {
+      if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
+      if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
     }
@@ -53,21 +45,17 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (transcriptionIntervalRef.current) {
-        clearInterval(transcriptionIntervalRef.current);
-      }
-      if (waveformIntervalRef.current) {
-        clearInterval(waveformIntervalRef.current);
-      }
-      if ('speechSynthesis' in window) {
+      if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
+      if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
     };
   }, []);
 
-  // Helper to speak Spanish - called DIRECTLY from click handlers (required for iOS)
+  // Speak Spanish text - call directly from click handler for iOS
   const speakSpanish = (text: string, onEnd?: () => void) => {
-    if (!('speechSynthesis' in window)) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       onEnd?.();
       return;
     }
@@ -79,17 +67,14 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     utterance.rate = 0.9;
     utterance.volume = 1;
     
-    // Find a Spanish voice if available
     const voices = window.speechSynthesis.getVoices();
     const spanishVoice = voices.find(v => v.lang.startsWith('es'));
-    if (spanishVoice) {
-      utterance.voice = spanishVoice;
-    }
+    if (spanishVoice) utterance.voice = spanishVoice;
     
-    let hasEnded = false;
+    let ended = false;
     const finish = () => {
-      if (!hasEnded) {
-        hasEnded = true;
+      if (!ended) {
+        ended = true;
         onEnd?.();
       }
     };
@@ -99,41 +84,33 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     
     window.speechSynthesis.speak(utterance);
     
-    // Fallback timeout for browsers where onend doesn't fire
+    // Fallback timeout
     setTimeout(finish, text.length * 70 + 3000);
   };
 
-  // Start demo - MUST call speechSynthesis.speak() directly from this click handler for iOS
+  // Start demo
   const startDemo = () => {
     setPhase("listening");
     
-    // Speak the Spanish phrase IMMEDIATELY - no setTimeout (required for iOS)
+    // Speak IMMEDIATELY from click handler (iOS requirement)
     speakSpanish(SPANISH_TEXT);
     
-    // Start waveform animation
+    // Animate waveform
     waveformIntervalRef.current = setInterval(() => {
       setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.8 + 0.2));
     }, 100);
     
-    // Animate transcription character by character
+    // Animate transcription
     let charIndex = 0;
     transcriptionIntervalRef.current = setInterval(() => {
       if (charIndex < SPANISH_TEXT.length) {
         setTranscribedText(SPANISH_TEXT.slice(0, charIndex + 1));
         charIndex++;
       } else {
-        // Done transcribing
-        if (transcriptionIntervalRef.current) {
-          clearInterval(transcriptionIntervalRef.current);
-          transcriptionIntervalRef.current = null;
-        }
-        if (waveformIntervalRef.current) {
-          clearInterval(waveformIntervalRef.current);
-          waveformIntervalRef.current = null;
-        }
+        if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
+        if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
         setWaveformBars(Array(12).fill(0.1));
         
-        // Show translation then move to response
         setTimeout(() => {
           setShowTranslation(true);
           setTimeout(() => setPhase("response"), 600);
@@ -142,22 +119,18 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     }, CHAR_DELAY);
   };
 
-  // Play response - MUST call speechSynthesis.speak() directly from click handler for iOS
+  // Play response
   const playResponse = () => {
     setIsPlayingResponse(true);
     
-    // Animate waveform
     waveformIntervalRef.current = setInterval(() => {
       setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.7 + 0.3));
     }, 100);
     
-    // Speak IMMEDIATELY - no setTimeout (required for iOS)
+    // Speak IMMEDIATELY from click handler (iOS requirement)
     speakSpanish(RESPONSE_SPANISH, () => {
       setIsPlayingResponse(false);
-      if (waveformIntervalRef.current) {
-        clearInterval(waveformIntervalRef.current);
-        waveformIntervalRef.current = null;
-      }
+      if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
       setWaveformBars(Array(12).fill(0.1));
       setPhase("done");
     });
@@ -172,7 +145,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
         <h1 className="text-[17px] font-bold text-[#111]">Demo</h1>
         <button
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 transition-colors hover:bg-black/10"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 hover:bg-black/10"
           aria-label="Close"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4 text-black/60">
@@ -181,7 +154,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
         </button>
       </header>
 
-      {/* Main content */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto px-5 pb-32">
         {/* Start screen */}
         {phase === "start" && (
@@ -197,7 +170,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
             </p>
             <button
               onClick={startDemo}
-              className="mt-6 flex items-center gap-2 rounded-[10px] bg-[#B5332A] px-7 py-3.5 text-[15px] font-bold text-white transition-all active:scale-[0.97]"
+              className="mt-6 flex items-center gap-2 rounded-[10px] bg-[#B5332A] px-7 py-3.5 text-[15px] font-bold text-white active:scale-[0.97]"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
@@ -207,7 +180,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
           </div>
         )}
 
-        {/* Listening/Response/Done phases */}
+        {/* Listening/Response/Done */}
         {phase !== "start" && (
           <>
             {/* Waveform */}
@@ -221,41 +194,29 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
               ))}
             </div>
 
-            {/* They Said card */}
+            {/* They Said */}
             <div className="mt-4 rounded-[12px] border border-black/8 bg-white p-5 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-black/35">
-                They Said
-              </p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-black/35">They Said</p>
               <p className="mt-2 text-[18px] font-bold leading-[1.35] text-[#111]">
                 {transcribedText || "..."}
               </p>
               {showTranslation && (
-                <p className="mt-3 text-[15px] leading-[1.5] text-black/50">
-                  {ENGLISH_TEXT}
-                </p>
+                <p className="mt-3 text-[15px] leading-[1.5] text-black/50">{ENGLISH_TEXT}</p>
               )}
             </div>
 
-            {/* Response card */}
+            {/* Response */}
             {(phase === "response" || phase === "done") && (
               <div className="mt-4 rounded-[12px] border-2 border-[#B5332A]/20 bg-[#B5332A]/[0.03] p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#B5332A]">
-                  Say This
-                </p>
-                <p className="mt-2 text-[18px] font-bold leading-[1.35] text-[#111]">
-                  {RESPONSE_SPANISH}
-                </p>
-                <p className="mt-2 text-[14px] text-black/50">
-                  {RESPONSE_ENGLISH}
-                </p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#B5332A]">Say This</p>
+                <p className="mt-2 text-[18px] font-bold leading-[1.35] text-[#111]">{RESPONSE_SPANISH}</p>
+                <p className="mt-2 text-[14px] text-black/50">{RESPONSE_ENGLISH}</p>
                 
                 <button
                   onClick={playResponse}
                   disabled={isPlayingResponse}
-                  className={`mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] py-3.5 text-[15px] font-bold transition-all ${
-                    isPlayingResponse
-                      ? "bg-[#B5332A]/60 text-white"
-                      : "bg-[#B5332A] text-white active:scale-[0.98]"
+                  className={`mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] py-3.5 text-[15px] font-bold ${
+                    isPlayingResponse ? "bg-[#B5332A]/60 text-white" : "bg-[#B5332A] text-white active:scale-[0.98]"
                   }`}
                 >
                   {isPlayingResponse ? (
@@ -282,7 +243,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
 
       {/* Bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-black/8 bg-[#F5F5F4] px-5 py-4">
-        <button className="w-full rounded-[10px] bg-[#111] py-4 text-[15px] font-bold text-white transition-all active:scale-[0.98]">
+        <button className="w-full rounded-[10px] bg-[#111] py-4 text-[15px] font-bold text-white active:scale-[0.98]">
           Unlock Trip Pass – $19 • 7 Days
         </button>
       </div>
