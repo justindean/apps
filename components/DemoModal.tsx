@@ -26,21 +26,6 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Cleanup function
-  const cleanup = useCallback(() => {
-    if (transcriptionIntervalRef.current) {
-      clearInterval(transcriptionIntervalRef.current);
-      transcriptionIntervalRef.current = null;
-    }
-    if (waveformIntervalRef.current) {
-      clearInterval(waveformIntervalRef.current);
-      waveformIntervalRef.current = null;
-    }
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-  }, []);
-
   // Reset state when modal opens/closes
   useEffect(() => {
     if (open) {
@@ -50,14 +35,35 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setIsPlayingResponse(false);
       setWaveformBars(Array(12).fill(0.15));
     } else {
-      cleanup();
+      // Cleanup when closing
+      if (transcriptionIntervalRef.current) {
+        clearInterval(transcriptionIntervalRef.current);
+        transcriptionIntervalRef.current = null;
+      }
+      if (waveformIntervalRef.current) {
+        clearInterval(waveformIntervalRef.current);
+        waveformIntervalRef.current = null;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
     }
-  }, [open, cleanup]);
+  }, [open]);
 
   // Cleanup on unmount
   useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+    return () => {
+      if (transcriptionIntervalRef.current) {
+        clearInterval(transcriptionIntervalRef.current);
+      }
+      if (waveformIntervalRef.current) {
+        clearInterval(waveformIntervalRef.current);
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   // Helper to speak Spanish - called DIRECTLY from click handlers (required for iOS)
   const speakSpanish = (text: string, onEnd?: () => void) => {
