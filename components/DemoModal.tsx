@@ -17,7 +17,7 @@ const RESPONSE_ENGLISH = "I want a beer and the pasta with shrimp.";
 const CHAR_DELAY = 45;
 
 export function DemoModal({ open, onClose }: DemoModalProps) {
-  const [phase, setPhase] = useState<"listening" | "response" | "done">("listening");
+  const [phase, setPhase] = useState<"start" | "listening" | "response" | "done">("start");
   const [transcribedText, setTranscribedText] = useState("");
   const [showTranslation, setShowTranslation] = useState(false);
   const [isPlayingResponse, setIsPlayingResponse] = useState(false);
@@ -54,23 +54,16 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   // Reset state when modal opens
   useEffect(() => {
     if (open) {
-      setPhase("listening");
+      setPhase("start"); // Start at the "start" screen, waiting for user tap
       setTranscribedText("");
       setShowTranslation(false);
       setIsPlayingResponse(false);
-      setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.3 + 0.1));
-      
-      // Start demo sequence after brief delay
-      const startTimer = setTimeout(() => {
-        startListeningPhase();
-      }, 300);
-      
-      return () => clearTimeout(startTimer);
+      setWaveformBars(Array(12).fill(0).map(() => 0.15));
     } else {
       // Cleanup on close
       cleanup();
     }
-  }, [open]);
+  }, [open, cleanup]);
 
   const cleanup = useCallback(() => {
     if (transcriptionIntervalRef.current) {
@@ -140,10 +133,15 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     setTimeout(finish, text.length * 80 + 2000);
   }, []);
 
-  const startListeningPhase = useCallback(() => {
+  // Called when user taps "Start Demo" - MUST call speakSpanish directly here (not via setTimeout)
+  // because iOS requires TTS to be initiated from direct user gesture
+  const startDemo = useCallback(() => {
+    setPhase("listening");
+    setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.3 + 0.1));
+    
     let charIndex = 0;
     
-    // Play the Spanish phrase using TTS
+    // Play the Spanish phrase using TTS - DIRECTLY from user tap (required for iOS)
     speakSpanish(SPANISH_TEXT);
     
     // Animate waveform
@@ -225,18 +223,47 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto px-5 pb-32">
-        {/* Waveform visualization */}
-        <div className="flex h-16 items-center justify-center gap-1">
-          {waveformBars.map((height, i) => (
-            <div
-              key={i}
-              className="w-1 rounded-full bg-[#B5332A] transition-all duration-100"
-              style={{ height: `${height * 48}px` }}
-            />
-          ))}
-        </div>
+        {/* Start screen - requires user tap to enable audio on iOS */}
+        {phase === "start" && (
+          <div className="flex flex-col items-center justify-center pt-16">
+            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[#B5332A]/10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-10 w-10 text-[#B5332A]">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+              </svg>
+            </div>
+            <p className="mt-6 text-center text-[18px] font-bold text-[#111]">
+              Experience TapHabla
+            </p>
+            <p className="mt-2 text-center text-[14px] text-black/50 max-w-[260px]">
+              {"Hear a waiter's question in Spanish and see how to respond."}
+            </p>
+            <button
+              onClick={startDemo}
+              className="mt-8 flex items-center gap-2 rounded-[10px] bg-[#B5332A] px-8 py-4 text-[15px] font-bold text-white transition-all active:scale-[0.97]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+              </svg>
+              Start Demo
+            </button>
+          </div>
+        )}
 
-        {/* They Said card */}
+        {/* Waveform visualization - only show during listening/response phases */}
+        {phase !== "start" && (
+          <div className="flex h-16 items-center justify-center gap-1">
+            {waveformBars.map((height, i) => (
+              <div
+                key={i}
+                className="w-1 rounded-full bg-[#B5332A] transition-all duration-100"
+                style={{ height: `${height * 48}px` }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* They Said card - only show after start */}
+        {phase !== "start" && (
         <div className="mt-4 rounded-[12px] border border-black/8 bg-white p-5 shadow-sm">
           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-black/35">They Said</p>
           <p className="mt-2 text-[20px] font-bold leading-[1.3] text-[#111]">
@@ -251,6 +278,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
             </p>
           )}
         </div>
+        )}
 
         {/* Response card - appears after listening */}
         {(phase === "response" || phase === "done") && (
