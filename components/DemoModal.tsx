@@ -10,21 +10,22 @@ interface DemoModalProps {
 // Demo content
 const SPANISH_TEXT = "Buenas tardes, ¿qué van a tomar? Tenemos especial hoy, pasta con camarones o pollo asado. ¿Les traigo algo de beber?";
 const ENGLISH_TEXT = "Good afternoon, what will you have? We have a special today, pasta with shrimp or roasted chicken. Can I bring you something to drink?";
-const RESPONSE_SPANISH = "Quiero una cerveza y la pasta con camarones.";
-const RESPONSE_ENGLISH = "I want a beer and the pasta with shrimp.";
+const RESPONSE_SPANISH = "Quiero una cerveza y la pasta con camarones, por favor.";
+const RESPONSE_ENGLISH = "I want a beer and the pasta with shrimp, please.";
 
-const CHAR_DELAY = 45;
+const CHAR_DELAY = 45; // ms per character
 
 export function DemoModal({ open, onClose }: DemoModalProps) {
-  // Phase: "start" requires user tap to begin (for iOS audio permission)
   const [phase, setPhase] = useState<"start" | "listening" | "response" | "done">("start");
   const [transcribedText, setTranscribedText] = useState("");
   const [showTranslation, setShowTranslation] = useState(false);
+  const [isPlayingListen, setIsPlayingListen] = useState(false);
   const [isPlayingResponse, setIsPlayingResponse] = useState(false);
   const [waveformBars, setWaveformBars] = useState<number[]>(Array(12).fill(0.15));
   
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Reset when modal opens/closes
   useEffect(() => {
@@ -32,13 +33,17 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setPhase("start");
       setTranscribedText("");
       setShowTranslation(false);
+      setIsPlayingListen(false);
       setIsPlayingResponse(false);
       setWaveformBars(Array(12).fill(0.15));
     } else {
-      // Cleanup
+      // Cleanup on close
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
     }
   }, [open]);
 
@@ -47,101 +52,147 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     return () => {
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
     };
   }, []);
 
-  // MUST be called directly from onClick - iOS requires user gesture for audio
-  const startDemo = () => {
-    setPhase("listening");
-    
-    // Speak Spanish - DIRECTLY in click handler for iOS
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(SPANISH_TEXT);
-      utterance.lang = 'es-MX';
-      utterance.rate = 0.85;
+  // Fetch TTS audio from our API
+  const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+      });
       
-      const voices = window.speechSynthesis.getVoices();
-      const spanishVoice = voices.find(v => v.lang.startsWith('es'));
-      if (spanishVoice) utterance.voice = spanishVoice;
+      if (!response.ok) {
+        console.error("[DemoModal] TTS API error:", response.status);
+        return null;
+      }
       
-      window.speechSynthesis.speak(utterance);
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch (error) {
+      console.error("[DemoModal] TTS fetch error:", error);
+      return null;
     }
-    
-    // Animate waveform
+  };
+
+  // Play audio and return a promise that resolves when done
+  const playAudio = (blobUrl: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
+      
+      audio.onended = () => {
+        URL.revokeObjectURL(blobUrl);
+        resolve();
+      };
+      
+      audio.onerror = () => {
+        console.error("[DemoModal] Audio playback error");
+        URL.revokeObjectURL(blobUrl);
+        resolve();
+      };
+      
+      audio.play().catch((err) => {
+        console.error("[DemoModal] Audio play() error:", err);
+        resolve();
+      });
+    });
+  };
+
+  // Start waveform animation
+  const startWaveform = () => {
     waveformIntervalRef.current = setInterval(() => {
       setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.8 + 0.2));
     }, 100);
+  };
+
+  // Stop waveform animation
+  const stopWaveform = () => {
+    if (waveformIntervalRef.current) {
+      clearInterval(waveformIntervalRef.current);
+      waveformIntervalRef.current = null;
+    }
+    setWaveformBars(Array(12).fill(0.1));
+  };
+
+  // MUST be called directly from onClick for iOS audio permission
+  const startDemo = async () => {
+    setPhase("listening");
+    setIsPlayingListen(true);
+    startWaveform();
     
-    // Animate transcription
+    // Start transcription animation
     let charIndex = 0;
     transcriptionIntervalRef.current = setInterval(() => {
       if (charIndex < SPANISH_TEXT.length) {
         setTranscribedText(SPANISH_TEXT.slice(0, charIndex + 1));
         charIndex++;
       } else {
-        if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
-        if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-        setWaveformBars(Array(12).fill(0.1));
-        
-        setTimeout(() => {
-          setShowTranslation(true);
-          setTimeout(() => setPhase("response"), 800);
-        }, 400);
+        if (transcriptionIntervalRef.current) {
+          clearInterval(transcriptionIntervalRef.current);
+          transcriptionIntervalRef.current = null;
+        }
       }
     }, CHAR_DELAY);
+
+    // Fetch and play "They said" audio (Mila voice)
+    const listenBlobUrl = await fetchTTS(SPANISH_TEXT, "mila");
+    
+    if (listenBlobUrl) {
+      await playAudio(listenBlobUrl);
+    }
+    
+    // Ensure transcription is complete
+    if (transcriptionIntervalRef.current) {
+      clearInterval(transcriptionIntervalRef.current);
+      transcriptionIntervalRef.current = null;
+    }
+    setTranscribedText(SPANISH_TEXT);
+    
+    setIsPlayingListen(false);
+    stopWaveform();
+    
+    // Show translation and transition to response phase
+    setTimeout(() => {
+      setShowTranslation(true);
+      setTimeout(() => setPhase("response"), 800);
+    }, 400);
   };
 
-  // MUST be called directly from onClick - iOS requires user gesture for audio
-  const playResponse = () => {
+  // MUST be called directly from onClick for iOS audio permission
+  const playResponse = async () => {
     setIsPlayingResponse(true);
+    startWaveform();
     
-    waveformIntervalRef.current = setInterval(() => {
-      setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.7 + 0.3));
-    }, 100);
+    // Fetch and play "Say this" audio (Daniel voice)
+    const responseBlobUrl = await fetchTTS(RESPONSE_SPANISH, "daniel");
     
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(RESPONSE_SPANISH);
-      utterance.lang = 'es-MX';
-      utterance.rate = 0.9;
-      
-      const voices = window.speechSynthesis.getVoices();
-      const spanishVoice = voices.find(v => v.lang.startsWith('es'));
-      if (spanishVoice) utterance.voice = spanishVoice;
-      
-      let finished = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        setIsPlayingResponse(false);
-        if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-        setWaveformBars(Array(12).fill(0.1));
-        setPhase("done");
-      };
-      
-      utterance.onend = finish;
-      utterance.onerror = finish;
-      
-      window.speechSynthesis.speak(utterance);
-      
-      // Fallback timeout for iOS (onend sometimes doesn't fire)
-      setTimeout(finish, 5000);
-    } else {
-      setTimeout(() => {
-        setIsPlayingResponse(false);
-        if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-        setWaveformBars(Array(12).fill(0.1));
-        setPhase("done");
-      }, 2000);
+    if (responseBlobUrl) {
+      await playAudio(responseBlobUrl);
     }
+    
+    setIsPlayingResponse(false);
+    stopWaveform();
+    setPhase("done");
   };
 
   const handleClose = () => {
     if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
     if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     onClose();
   };
 
@@ -165,7 +216,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto px-5 pb-32">
-        {/* Start screen - user must tap to enable audio on iOS */}
+        {/* Start screen */}
         {phase === "start" && (
           <div className="flex flex-col items-center justify-center pt-12">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#B5332A]/10">
@@ -191,7 +242,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
           </div>
         )}
 
-        {/* Waveform - only show during listening/response phases */}
+        {/* Waveform */}
         {phase !== "start" && (
           <div className="flex h-16 items-center justify-center gap-1">
             {waveformBars.map((height, i) => (
@@ -210,7 +261,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-black/35">They Said</p>
             <p className="mt-2 text-[20px] font-bold leading-[1.3] text-[#111]">
               {transcribedText}
-              {phase === "listening" && transcribedText.length < SPANISH_TEXT.length && (
+              {isPlayingListen && transcribedText.length < SPANISH_TEXT.length && (
                 <span className="inline-block w-[2px] h-5 bg-[#B5332A] ml-0.5 animate-pulse" />
               )}
             </p>
