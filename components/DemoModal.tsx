@@ -26,6 +26,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prefetchedResponseRef = useRef<string | null>(null); // Prefetched response audio blob URL
 
   // Reset when modal opens/closes
   useEffect(() => {
@@ -43,6 +44,11 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
+      }
+      // Revoke prefetched blob URL
+      if (prefetchedResponseRef.current) {
+        URL.revokeObjectURL(prefetchedResponseRef.current);
+        prefetchedResponseRef.current = null;
       }
     }
   }, [open]);
@@ -145,8 +151,14 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       }
     }, CHAR_DELAY);
 
-    // Fetch and play "They said" audio (Mila voice)
-    const listenBlobUrl = await fetchTTS(SPANISH_TEXT, "mila");
+    // Fetch "They said" audio (Mila voice) AND prefetch response audio in parallel
+    const [listenBlobUrl] = await Promise.all([
+      fetchTTS(SPANISH_TEXT, "mila"),
+      // Prefetch response audio while listening
+      fetchTTS(RESPONSE_SPANISH, "daniel").then((url) => {
+        if (url) prefetchedResponseRef.current = url;
+      }),
+    ]);
     
     if (listenBlobUrl) {
       await playAudio(listenBlobUrl);
@@ -174,8 +186,14 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     setIsPlayingResponse(true);
     startWaveform();
     
-    // Fetch and play "Say this" audio (Daniel voice)
-    const responseBlobUrl = await fetchTTS(RESPONSE_SPANISH, "daniel");
+    // Use prefetched audio if available, otherwise fetch
+    let responseBlobUrl = prefetchedResponseRef.current;
+    if (!responseBlobUrl) {
+      responseBlobUrl = await fetchTTS(RESPONSE_SPANISH, "daniel");
+    } else {
+      // Clear ref since we're about to use it
+      prefetchedResponseRef.current = null;
+    }
     
     if (responseBlobUrl) {
       await playAudio(responseBlobUrl);
