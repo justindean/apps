@@ -13,7 +13,7 @@ const ENGLISH_TEXT = "Good afternoon, what will you have? We have a special toda
 const RESPONSE_SPANISH = "Quiero una cerveza y la pasta con camarones, por favor.";
 const RESPONSE_ENGLISH = "I want a beer and the pasta with shrimp, please.";
 
-const CHAR_DELAY = 45; // ms per character
+const CHAR_DELAY = 45; // ms per character for typing animation
 
 export function DemoModal({ open, onClose }: DemoModalProps) {
   const [phase, setPhase] = useState<"start" | "listening" | "response" | "done">("start");
@@ -25,10 +25,9 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const waiterAudioRef = useRef<HTMLAudioElement | null>(null); // Preloaded waiter audio
-  const responseAudioRef = useRef<HTMLAudioElement | null>(null); // Preloaded response audio
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Reset and preload audio when modal opens/closes
+  // Reset when modal opens/closes
   useEffect(() => {
     if (open) {
       setPhase("start");
@@ -37,29 +36,13 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setIsPlayingListen(false);
       setIsPlayingResponse(false);
       setWaveformBars(Array(12).fill(0.15));
-      
-      // Preload waiter audio
-      const waiterAudio = new Audio("/demo/waiter-es.mp3");
-      waiterAudio.preload = "auto";
-      waiterAudio.load();
-      waiterAudioRef.current = waiterAudio;
-      
-      // Preload response audio
-      const responseAudio = new Audio("/demo/response-es.mp3");
-      responseAudio.preload = "auto";
-      responseAudio.load();
-      responseAudioRef.current = responseAudio;
     } else {
       // Cleanup on close
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      if (waiterAudioRef.current) {
-        waiterAudioRef.current.pause();
-        waiterAudioRef.current = null;
-      }
-      if (responseAudioRef.current) {
-        responseAudioRef.current.pause();
-        responseAudioRef.current = null;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
       }
     }
   }, [open]);
@@ -69,27 +52,19 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     return () => {
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      if (waiterAudioRef.current) {
-        waiterAudioRef.current.pause();
-        waiterAudioRef.current = null;
-      }
-      if (responseAudioRef.current) {
-        responseAudioRef.current.pause();
-        responseAudioRef.current = null;
+      if (audioRef.current) {
+        audioRef.current.pause();
       }
     };
   }, []);
 
-
-
-  // Start waveform animation
+  // Waveform animation
   const startWaveform = () => {
     waveformIntervalRef.current = setInterval(() => {
       setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.8 + 0.2));
     }, 100);
   };
 
-  // Stop waveform animation
   const stopWaveform = () => {
     if (waveformIntervalRef.current) {
       clearInterval(waveformIntervalRef.current);
@@ -98,7 +73,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     setWaveformBars(Array(12).fill(0.1));
   };
 
-  // Start typing animation - syncs with audio playback
+  // Typing animation
   const startTyping = () => {
     let charIndex = 0;
     transcriptionIntervalRef.current = setInterval(() => {
@@ -114,87 +89,107 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     }, CHAR_DELAY);
   };
 
-  // MUST be called directly from onClick for iOS audio permission
-  // No awaits before play() - preloaded audio plays instantly
-  const startDemo = () => {
-    const waiterAudio = waiterAudioRef.current;
-    if (!waiterAudio) return;
-    
+  // Fetch TTS from API
+  const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  };
+
+  // Start demo - called from button click
+  const startDemo = async () => {
     setPhase("listening");
     setIsPlayingListen(true);
     startWaveform();
+    startTyping();
+
+    // Fetch and play waiter audio
+    const blobUrl = await fetchTTS(SPANISH_TEXT, "mila");
     
-    waiterAudio.onended = () => {
-      // Ensure transcription is complete
-      if (transcriptionIntervalRef.current) {
-        clearInterval(transcriptionIntervalRef.current);
-        transcriptionIntervalRef.current = null;
-      }
-      setTranscribedText(SPANISH_TEXT);
+    if (blobUrl) {
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
       
-      setIsPlayingListen(false);
-      stopWaveform();
+      audio.onended = () => {
+        URL.revokeObjectURL(blobUrl);
+        finishListening();
+      };
       
-      // Show translation and transition to response phase
-      setTimeout(() => {
-        setShowTranslation(true);
-        setTimeout(() => setPhase("response"), 800);
-      }, 400);
-    };
-    
-    waiterAudio.onerror = () => {
-      setIsPlayingListen(false);
-      stopWaveform();
-      setPhase("response");
-    };
-    
-    // Play immediately - no awaits, preloaded
-    waiterAudio.currentTime = 0;
-    waiterAudio.play();
-    
-    // Start typing after small delay to sync with iOS audio latency
-    // iOS has ~200-300ms delay between play() and audible sound
-    setTimeout(() => {
-      startTyping();
-    }, 250);
+      audio.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        finishListening();
+      };
+      
+      audio.play().catch(() => finishListening());
+    } else {
+      // If TTS fails, just wait for typing to finish
+      setTimeout(finishListening, SPANISH_TEXT.length * CHAR_DELAY + 500);
+    }
   };
 
-  // MUST be called directly from onClick for iOS audio permission
-  // No awaits before play() - preloaded audio plays instantly
-  const playResponse = () => {
-    const responseAudio = responseAudioRef.current;
-    if (!responseAudio) return;
+  const finishListening = () => {
+    if (transcriptionIntervalRef.current) {
+      clearInterval(transcriptionIntervalRef.current);
+      transcriptionIntervalRef.current = null;
+    }
+    setTranscribedText(SPANISH_TEXT);
+    setIsPlayingListen(false);
+    stopWaveform();
     
+    setTimeout(() => {
+      setShowTranslation(true);
+      setTimeout(() => setPhase("response"), 800);
+    }, 400);
+  };
+
+  // Play response - called from button click
+  const playResponse = async () => {
     setIsPlayingResponse(true);
     startWaveform();
+
+    const blobUrl = await fetchTTS(RESPONSE_SPANISH, "daniel");
     
-    responseAudio.onended = () => {
-      setIsPlayingResponse(false);
-      stopWaveform();
-      setPhase("done");
-    };
-    
-    responseAudio.onerror = () => {
-      setIsPlayingResponse(false);
-      stopWaveform();
-      setPhase("done");
-    };
-    
-    // Play immediately - no awaits, preloaded
-    responseAudio.currentTime = 0;
-    responseAudio.play();
+    if (blobUrl) {
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
+      
+      audio.onended = () => {
+        URL.revokeObjectURL(blobUrl);
+        finishResponse();
+      };
+      
+      audio.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        finishResponse();
+      };
+      
+      audio.play().catch(() => finishResponse());
+    } else {
+      setTimeout(finishResponse, 2000);
+    }
+  };
+
+  const finishResponse = () => {
+    setIsPlayingResponse(false);
+    stopWaveform();
+    setPhase("done");
   };
 
   const handleClose = () => {
     if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
     if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-    if (waiterAudioRef.current) {
-      waiterAudioRef.current.pause();
-      waiterAudioRef.current = null;
-    }
-    if (responseAudioRef.current) {
-      responseAudioRef.current.pause();
-      responseAudioRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
     }
     onClose();
   };

@@ -571,7 +571,10 @@ export default function Page() {
       )}
 
       {/* Demo Modal */}
-      <DemoModal open={showDemo} onClose={() => setShowDemo(false)} />
+      <DemoModal 
+        open={showDemo} 
+        onClose={() => setShowDemo(false)}
+      />
     </div>
   );
 }
