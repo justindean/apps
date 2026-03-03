@@ -187,9 +187,13 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const handleClose = () => {
     if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
     if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
+    if (waiterAudioRef.current) {
+      waiterAudioRef.current.pause();
+      waiterAudioRef.current = null;
+    }
+    if (responseAudioRef.current) {
+      responseAudioRef.current.pause();
+      responseAudioRef.current = null;
     }
     onClose();
   };
