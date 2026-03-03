@@ -13,7 +13,7 @@ const ENGLISH_TEXT = "Good afternoon, what will you have? We have a special toda
 const RESPONSE_SPANISH = "Quiero una cerveza y la pasta con camarones, por favor.";
 const RESPONSE_ENGLISH = "I want a beer and the pasta with shrimp, please.";
 
-const CHAR_DELAY = 45; // ms per character
+const CHAR_DELAY = 45; // ms per character for typing animation
 
 export function DemoModal({ open, onClose }: DemoModalProps) {
   const [phase, setPhase] = useState<"start" | "listening" | "response" | "done">("start");
