@@ -5,8 +5,6 @@ import { useState, useEffect, useRef } from "react";
 interface DemoModalProps {
   open: boolean;
   onClose: () => void;
-  waiterAudio: HTMLAudioElement | null;
-  responseAudio: HTMLAudioElement | null;
 }
 
 // Demo content
@@ -17,19 +15,19 @@ const RESPONSE_ENGLISH = "I want a beer and the pasta with shrimp, please.";
 
 const CHAR_DELAY = 45; // ms per character
 
-export function DemoModal({ open, onClose, waiterAudio, responseAudio }: DemoModalProps) {
+export function DemoModal({ open, onClose }: DemoModalProps) {
   const [phase, setPhase] = useState<"start" | "listening" | "response" | "done">("start");
   const [transcribedText, setTranscribedText] = useState("");
   const [showTranslation, setShowTranslation] = useState(false);
   const [isPlayingListen, setIsPlayingListen] = useState(false);
   const [isPlayingResponse, setIsPlayingResponse] = useState(false);
   const [waveformBars, setWaveformBars] = useState<number[]>(Array(12).fill(0.15));
-  const [audioReady, setAudioReady] = useState(false);
   
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Check if audio is ready when modal opens
+  // Reset when modal opens/closes
   useEffect(() => {
     if (open) {
       setPhase("start");
@@ -38,42 +36,35 @@ export function DemoModal({ open, onClose, waiterAudio, responseAudio }: DemoMod
       setIsPlayingListen(false);
       setIsPlayingResponse(false);
       setWaveformBars(Array(12).fill(0.15));
-      
-      // Check if waiter audio is ready (readyState 4 = HAVE_ENOUGH_DATA)
-      if (waiterAudio && waiterAudio.readyState >= 4) {
-        setAudioReady(true);
-      } else if (waiterAudio) {
-        setAudioReady(false);
-        const handleCanPlay = () => setAudioReady(true);
-        waiterAudio.addEventListener("canplaythrough", handleCanPlay);
-        return () => waiterAudio.removeEventListener("canplaythrough", handleCanPlay);
-      }
     } else {
       // Cleanup on close
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      setAudioReady(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
     }
-  }, [open, waiterAudio]);
+  }, [open]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
     };
   }, []);
 
-
-
-  // Start waveform animation
+  // Waveform animation
   const startWaveform = () => {
     waveformIntervalRef.current = setInterval(() => {
       setWaveformBars(Array(12).fill(0).map(() => Math.random() * 0.8 + 0.2));
     }, 100);
   };
 
-  // Stop waveform animation
   const stopWaveform = () => {
     if (waveformIntervalRef.current) {
       clearInterval(waveformIntervalRef.current);
@@ -82,7 +73,7 @@ export function DemoModal({ open, onClose, waiterAudio, responseAudio }: DemoMod
     setWaveformBars(Array(12).fill(0.1));
   };
 
-  // Start typing animation - syncs with audio playback
+  // Typing animation
   const startTyping = () => {
     let charIndex = 0;
     transcriptionIntervalRef.current = setInterval(() => {
@@ -98,80 +89,108 @@ export function DemoModal({ open, onClose, waiterAudio, responseAudio }: DemoMod
     }, CHAR_DELAY);
   };
 
-  // MUST be called directly from onClick for iOS audio permission
-  // No awaits before play() - preloaded audio plays instantly
-  const startDemo = () => {
-    if (!waiterAudio) return;
-    
+  // Fetch TTS from API
+  const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  };
+
+  // Start demo - called from button click
+  const startDemo = async () => {
     setPhase("listening");
     setIsPlayingListen(true);
     startWaveform();
+    startTyping();
+
+    // Fetch and play waiter audio
+    const blobUrl = await fetchTTS(SPANISH_TEXT, "mila");
     
-    waiterAudio.onended = () => {
-      // Ensure transcription is complete
-      if (transcriptionIntervalRef.current) {
-        clearInterval(transcriptionIntervalRef.current);
-        transcriptionIntervalRef.current = null;
-      }
-      setTranscribedText(SPANISH_TEXT);
+    if (blobUrl) {
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
       
-      setIsPlayingListen(false);
-      stopWaveform();
+      audio.onended = () => {
+        URL.revokeObjectURL(blobUrl);
+        finishListening();
+      };
       
-      // Show translation and transition to response phase
-      setTimeout(() => {
-        setShowTranslation(true);
-        setTimeout(() => setPhase("response"), 800);
-      }, 400);
-    };
-    
-    waiterAudio.onerror = () => {
-      setIsPlayingListen(false);
-      stopWaveform();
-      setPhase("response");
-    };
-    
-    // Play immediately - no awaits, preloaded
-    waiterAudio.currentTime = 0;
-    waiterAudio.play();
-    
-    // Start typing after small delay to sync with iOS audio latency
-    // iOS has ~200-300ms delay between play() and audible sound
-    setTimeout(() => {
-      startTyping();
-    }, 250);
+      audio.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        finishListening();
+      };
+      
+      audio.play().catch(() => finishListening());
+    } else {
+      // If TTS fails, just wait for typing to finish
+      setTimeout(finishListening, SPANISH_TEXT.length * CHAR_DELAY + 500);
+    }
   };
 
-  // MUST be called directly from onClick for iOS audio permission
-  // No awaits before play() - preloaded audio plays instantly
-  const playResponse = () => {
-    if (!responseAudio) return;
+  const finishListening = () => {
+    if (transcriptionIntervalRef.current) {
+      clearInterval(transcriptionIntervalRef.current);
+      transcriptionIntervalRef.current = null;
+    }
+    setTranscribedText(SPANISH_TEXT);
+    setIsPlayingListen(false);
+    stopWaveform();
     
+    setTimeout(() => {
+      setShowTranslation(true);
+      setTimeout(() => setPhase("response"), 800);
+    }, 400);
+  };
+
+  // Play response - called from button click
+  const playResponse = async () => {
     setIsPlayingResponse(true);
     startWaveform();
+
+    const blobUrl = await fetchTTS(RESPONSE_SPANISH, "daniel");
     
-    responseAudio.onended = () => {
-      setIsPlayingResponse(false);
-      stopWaveform();
-      setPhase("done");
-    };
-    
-    responseAudio.onerror = () => {
-      setIsPlayingResponse(false);
-      stopWaveform();
-      setPhase("done");
-    };
-    
-    // Play immediately - no awaits, preloaded
-    responseAudio.currentTime = 0;
-    responseAudio.play();
+    if (blobUrl) {
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
+      
+      audio.onended = () => {
+        URL.revokeObjectURL(blobUrl);
+        finishResponse();
+      };
+      
+      audio.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        finishResponse();
+      };
+      
+      audio.play().catch(() => finishResponse());
+    } else {
+      setTimeout(finishResponse, 2000);
+    }
+  };
+
+  const finishResponse = () => {
+    setIsPlayingResponse(false);
+    stopWaveform();
+    setPhase("done");
   };
 
   const handleClose = () => {
     if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
     if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-    if (waiterAudio) waiterAudio.pause();
-    if (responseAudio) responseAudio.pause();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     onClose();
   };
 
@@ -211,27 +230,12 @@ export function DemoModal({ open, onClose, waiterAudio, responseAudio }: DemoMod
             </p>
             <button
               onClick={startDemo}
-              disabled={!audioReady}
-              className={`mt-6 flex items-center gap-2 rounded-[10px] px-7 py-3.5 text-[15px] font-bold text-white transition-all active:scale-[0.97] ${
-                audioReady ? "bg-[#B5332A]" : "bg-[#B5332A]/50 cursor-not-allowed"
-              }`}
+              className="mt-6 flex items-center gap-2 rounded-[10px] bg-[#B5332A] px-7 py-3.5 text-[15px] font-bold text-white transition-all active:scale-[0.97]"
             >
-              {audioReady ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-                  </svg>
-                  Start Demo
-                </>
-              ) : (
-                <>
-                  <svg className="h-5 w-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Loading...
-                </>
-              )}
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+              </svg>
+              Start Demo
             </button>
           </div>
         )}
