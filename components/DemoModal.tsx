@@ -124,11 +124,6 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     setIsPlayingListen(true);
     startWaveform();
     
-    // Sync typing to actual playback start (not click timestamp)
-    waiterAudio.onplaying = () => {
-      startTyping();
-    };
-    
     waiterAudio.onended = () => {
       // Ensure transcription is complete
       if (transcriptionIntervalRef.current) {
@@ -156,6 +151,12 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     // Play immediately - no awaits, preloaded
     waiterAudio.currentTime = 0;
     waiterAudio.play();
+    
+    // Start typing after small delay to sync with iOS audio latency
+    // iOS has ~200-300ms delay between play() and audible sound
+    setTimeout(() => {
+      startTyping();
+    }, 250);
   };
 
   // MUST be called directly from onClick for iOS audio permission
