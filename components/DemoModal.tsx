@@ -25,10 +25,10 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const prefetchedResponseRef = useRef<string | null>(null); // Prefetched response audio blob URL
+  const waiterAudioRef = useRef<HTMLAudioElement | null>(null); // Preloaded waiter audio
+  const responseAudioRef = useRef<HTMLAudioElement | null>(null); // Preloaded response audio
 
-  // Reset when modal opens/closes
+  // Reset and preload audio when modal opens/closes
   useEffect(() => {
     if (open) {
       setPhase("start");
@@ -37,18 +37,29 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setIsPlayingListen(false);
       setIsPlayingResponse(false);
       setWaveformBars(Array(12).fill(0.15));
+      
+      // Preload waiter audio
+      const waiterAudio = new Audio("/demo/waiter-es.mp3");
+      waiterAudio.preload = "auto";
+      waiterAudio.load();
+      waiterAudioRef.current = waiterAudio;
+      
+      // Preload response audio
+      const responseAudio = new Audio("/demo/response-es.mp3");
+      responseAudio.preload = "auto";
+      responseAudio.load();
+      responseAudioRef.current = responseAudio;
     } else {
       // Cleanup on close
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+      if (waiterAudioRef.current) {
+        waiterAudioRef.current.pause();
+        waiterAudioRef.current = null;
       }
-      // Revoke prefetched blob URL
-      if (prefetchedResponseRef.current) {
-        URL.revokeObjectURL(prefetchedResponseRef.current);
-        prefetchedResponseRef.current = null;
+      if (responseAudioRef.current) {
+        responseAudioRef.current.pause();
+        responseAudioRef.current = null;
       }
     }
   }, [open]);
@@ -58,62 +69,18 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     return () => {
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+      if (waiterAudioRef.current) {
+        waiterAudioRef.current.pause();
+        waiterAudioRef.current = null;
+      }
+      if (responseAudioRef.current) {
+        responseAudioRef.current.pause();
+        responseAudioRef.current = null;
       }
     };
   }, []);
 
-  // Fetch TTS audio from our API
-  const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
-    try {
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice }),
-      });
-      
-      if (!response.ok) {
-        console.error("[DemoModal] TTS API error:", response.status);
-        return null;
-      }
-      
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
-    } catch (error) {
-      console.error("[DemoModal] TTS fetch error:", error);
-      return null;
-    }
-  };
 
-  // Play audio and return a promise that resolves when done
-  const playAudio = (blobUrl: string): Promise<void> => {
-    return new Promise((resolve) => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      
-      const audio = new Audio(blobUrl);
-      audioRef.current = audio;
-      
-      audio.onended = () => {
-        URL.revokeObjectURL(blobUrl);
-        resolve();
-      };
-      
-      audio.onerror = () => {
-        console.error("[DemoModal] Audio playback error");
-        URL.revokeObjectURL(blobUrl);
-        resolve();
-      };
-      
-      audio.play().catch((err) => {
-        console.error("[DemoModal] Audio play() error:", err);
-        resolve();
-      });
-    });
-  };
 
   // Start waveform animation
   const startWaveform = () => {
@@ -131,13 +98,8 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     setWaveformBars(Array(12).fill(0.1));
   };
 
-  // MUST be called directly from onClick for iOS audio permission
-  const startDemo = async () => {
-    setPhase("listening");
-    setIsPlayingListen(true);
-    startWaveform();
-    
-    // Start transcription animation
+  // Start typing animation - syncs with audio playback
+  const startTyping = () => {
     let charIndex = 0;
     transcriptionIntervalRef.current = setInterval(() => {
       if (charIndex < SPANISH_TEXT.length) {
@@ -150,66 +112,89 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
         }
       }
     }, CHAR_DELAY);
-
-    // Fetch "They said" audio (Mila voice) AND prefetch response audio in parallel
-    const [listenBlobUrl] = await Promise.all([
-      fetchTTS(SPANISH_TEXT, "mila"),
-      // Prefetch response audio while listening
-      fetchTTS(RESPONSE_SPANISH, "daniel").then((url) => {
-        if (url) prefetchedResponseRef.current = url;
-      }),
-    ]);
-    
-    if (listenBlobUrl) {
-      await playAudio(listenBlobUrl);
-    }
-    
-    // Ensure transcription is complete
-    if (transcriptionIntervalRef.current) {
-      clearInterval(transcriptionIntervalRef.current);
-      transcriptionIntervalRef.current = null;
-    }
-    setTranscribedText(SPANISH_TEXT);
-    
-    setIsPlayingListen(false);
-    stopWaveform();
-    
-    // Show translation and transition to response phase
-    setTimeout(() => {
-      setShowTranslation(true);
-      setTimeout(() => setPhase("response"), 800);
-    }, 400);
   };
 
   // MUST be called directly from onClick for iOS audio permission
-  const playResponse = async () => {
+  // No awaits before play() - preloaded audio plays instantly
+  const startDemo = () => {
+    const waiterAudio = waiterAudioRef.current;
+    if (!waiterAudio) return;
+    
+    setPhase("listening");
+    setIsPlayingListen(true);
+    startWaveform();
+    
+    waiterAudio.onended = () => {
+      // Ensure transcription is complete
+      if (transcriptionIntervalRef.current) {
+        clearInterval(transcriptionIntervalRef.current);
+        transcriptionIntervalRef.current = null;
+      }
+      setTranscribedText(SPANISH_TEXT);
+      
+      setIsPlayingListen(false);
+      stopWaveform();
+      
+      // Show translation and transition to response phase
+      setTimeout(() => {
+        setShowTranslation(true);
+        setTimeout(() => setPhase("response"), 800);
+      }, 400);
+    };
+    
+    waiterAudio.onerror = () => {
+      setIsPlayingListen(false);
+      stopWaveform();
+      setPhase("response");
+    };
+    
+    // Play immediately - no awaits, preloaded
+    waiterAudio.currentTime = 0;
+    waiterAudio.play();
+    
+    // Start typing after small delay to sync with iOS audio latency
+    // iOS has ~200-300ms delay between play() and audible sound
+    setTimeout(() => {
+      startTyping();
+    }, 250);
+  };
+
+  // MUST be called directly from onClick for iOS audio permission
+  // No awaits before play() - preloaded audio plays instantly
+  const playResponse = () => {
+    const responseAudio = responseAudioRef.current;
+    if (!responseAudio) return;
+    
     setIsPlayingResponse(true);
     startWaveform();
     
-    // Use prefetched audio if available, otherwise fetch
-    let responseBlobUrl = prefetchedResponseRef.current;
-    if (!responseBlobUrl) {
-      responseBlobUrl = await fetchTTS(RESPONSE_SPANISH, "daniel");
-    } else {
-      // Clear ref since we're about to use it
-      prefetchedResponseRef.current = null;
-    }
+    responseAudio.onended = () => {
+      setIsPlayingResponse(false);
+      stopWaveform();
+      setPhase("done");
+    };
     
-    if (responseBlobUrl) {
-      await playAudio(responseBlobUrl);
-    }
+    responseAudio.onerror = () => {
+      setIsPlayingResponse(false);
+      stopWaveform();
+      setPhase("done");
+    };
     
-    setIsPlayingResponse(false);
-    stopWaveform();
-    setPhase("done");
+    // Play immediately - no awaits, preloaded
+    responseAudio.currentTime = 0;
+    responseAudio.play();
   };
 
   const handleClose = () => {
     if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
     if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
+    if (waiterAudioRef.current) {
+      waiterAudioRef.current.pause();
+      waiterAudioRef.current = null;
+    }
+    if (responseAudioRef.current) {
+      responseAudioRef.current.pause();
+      responseAudioRef.current = null;
     }
     onClose();
   };
