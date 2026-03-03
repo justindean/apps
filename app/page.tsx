@@ -55,6 +55,10 @@ export default function Page() {
   const [showRescue, setShowRescue] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
   const [toast, setToast] = useState<ToastState>({ visible: false, text: "" });
+  
+  // Demo audio preloading
+  const [demoWaiterAudio, setDemoWaiterAudio] = useState<HTMLAudioElement | null>(null);
+  const [demoResponseAudio, setDemoResponseAudio] = useState<HTMLAudioElement | null>(null);
 
   // Persist preferred tone to localStorage
   useEffect(() => {
@@ -498,7 +502,20 @@ export default function Page() {
 
             {/* Try Demo button */}
             <button
-              onClick={() => setShowDemo(true)}
+              onClick={() => {
+                // Preload audio immediately when user clicks Try Demo
+                const waiter = new Audio("/demo/waiter-es.mp3");
+                waiter.preload = "auto";
+                waiter.load();
+                setDemoWaiterAudio(waiter);
+                
+                const response = new Audio("/demo/response-es.mp3");
+                response.preload = "auto";
+                response.load();
+                setDemoResponseAudio(response);
+                
+                setShowDemo(true);
+              }}
               className="mt-3 text-[12px] font-semibold text-[#B5332A]/70 transition-colors hover:text-[#B5332A] active:scale-[0.98]"
             >
               Try Demo
@@ -571,7 +588,23 @@ export default function Page() {
       )}
 
       {/* Demo Modal */}
-      <DemoModal open={showDemo} onClose={() => setShowDemo(false)} />
+      <DemoModal 
+        open={showDemo} 
+        onClose={() => {
+          setShowDemo(false);
+          // Cleanup audio on close
+          if (demoWaiterAudio) {
+            demoWaiterAudio.pause();
+            setDemoWaiterAudio(null);
+          }
+          if (demoResponseAudio) {
+            demoResponseAudio.pause();
+            setDemoResponseAudio(null);
+          }
+        }}
+        waiterAudio={demoWaiterAudio}
+        responseAudio={demoResponseAudio}
+      />
     </div>
   );
 }
