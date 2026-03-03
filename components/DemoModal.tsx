@@ -22,12 +22,32 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const [isPlayingListen, setIsPlayingListen] = useState(false);
   const [isPlayingResponse, setIsPlayingResponse] = useState(false);
   const [waveformBars, setWaveformBars] = useState<number[]>(Array(12).fill(0.15));
+  const [audioLoaded, setAudioLoaded] = useState(false);
   
   const transcriptionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const waiterAudioRef = useRef<HTMLAudioElement | null>(null);
+  const responseAudioRef = useRef<HTMLAudioElement | null>(null);
+  const waiterBlobUrlRef = useRef<string | null>(null);
+  const responseBlobUrlRef = useRef<string | null>(null);
 
-  // Reset when modal opens/closes
+  // Fetch TTS from API
+  const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  };
+
+  // Preload audio when modal opens
   useEffect(() => {
     if (open) {
       setPhase("start");
@@ -36,13 +56,52 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setIsPlayingListen(false);
       setIsPlayingResponse(false);
       setWaveformBars(Array(12).fill(0.15));
+      setAudioLoaded(false);
+      
+      // Preload both audio files in parallel
+      const preloadAudio = async () => {
+        const [waiterUrl, responseUrl] = await Promise.all([
+          fetchTTS(SPANISH_TEXT, "mila"),
+          fetchTTS(RESPONSE_SPANISH, "daniel"),
+        ]);
+        
+        if (waiterUrl) {
+          waiterBlobUrlRef.current = waiterUrl;
+          const audio = new Audio(waiterUrl);
+          audio.preload = "auto";
+          waiterAudioRef.current = audio;
+        }
+        
+        if (responseUrl) {
+          responseBlobUrlRef.current = responseUrl;
+          const audio = new Audio(responseUrl);
+          audio.preload = "auto";
+          responseAudioRef.current = audio;
+        }
+        
+        setAudioLoaded(true);
+      };
+      
+      preloadAudio();
     } else {
       // Cleanup on close
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+      if (waiterAudioRef.current) {
+        waiterAudioRef.current.pause();
+        waiterAudioRef.current = null;
+      }
+      if (responseAudioRef.current) {
+        responseAudioRef.current.pause();
+        responseAudioRef.current = null;
+      }
+      if (waiterBlobUrlRef.current) {
+        URL.revokeObjectURL(waiterBlobUrlRef.current);
+        waiterBlobUrlRef.current = null;
+      }
+      if (responseBlobUrlRef.current) {
+        URL.revokeObjectURL(responseBlobUrlRef.current);
+        responseBlobUrlRef.current = null;
       }
     }
   }, [open]);
@@ -52,9 +111,10 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     return () => {
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+      if (waiterAudioRef.current) waiterAudioRef.current.pause();
+      if (responseAudioRef.current) responseAudioRef.current.pause();
+      if (waiterBlobUrlRef.current) URL.revokeObjectURL(waiterBlobUrlRef.current);
+      if (responseBlobUrlRef.current) URL.revokeObjectURL(responseBlobUrlRef.current);
     };
   }, []);
 
@@ -89,51 +149,24 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     }, CHAR_DELAY);
   };
 
-  // Fetch TTS from API
-  const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
-    try {
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice }),
-      });
-      if (!response.ok) return null;
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
-    } catch {
-      return null;
-    }
-  };
-
-  // Start demo - called from button click
-  const startDemo = async () => {
+  // Start demo - plays preloaded audio instantly
+  const startDemo = () => {
+    const audio = waiterAudioRef.current;
+    if (!audio) return;
+    
     setPhase("listening");
     setIsPlayingListen(true);
     startWaveform();
-    startTyping();
-
-    // Fetch and play waiter audio
-    const blobUrl = await fetchTTS(SPANISH_TEXT, "mila");
     
-    if (blobUrl) {
-      const audio = new Audio(blobUrl);
-      audioRef.current = audio;
-      
-      audio.onended = () => {
-        URL.revokeObjectURL(blobUrl);
-        finishListening();
-      };
-      
-      audio.onerror = () => {
-        URL.revokeObjectURL(blobUrl);
-        finishListening();
-      };
-      
-      audio.play().catch(() => finishListening());
-    } else {
-      // If TTS fails, just wait for typing to finish
-      setTimeout(finishListening, SPANISH_TEXT.length * CHAR_DELAY + 500);
-    }
+    audio.onended = () => finishListening();
+    audio.onerror = () => finishListening();
+    
+    // Play audio and start typing together for sync
+    audio.currentTime = 0;
+    audio.play().catch(() => finishListening());
+    
+    // Small delay to sync with iOS audio latency
+    setTimeout(startTyping, 150);
   };
 
   const finishListening = () => {
@@ -151,31 +184,19 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
     }, 400);
   };
 
-  // Play response - called from button click
-  const playResponse = async () => {
+  // Play response - plays preloaded audio instantly
+  const playResponse = () => {
+    const audio = responseAudioRef.current;
+    if (!audio) return;
+    
     setIsPlayingResponse(true);
     startWaveform();
-
-    const blobUrl = await fetchTTS(RESPONSE_SPANISH, "daniel");
     
-    if (blobUrl) {
-      const audio = new Audio(blobUrl);
-      audioRef.current = audio;
-      
-      audio.onended = () => {
-        URL.revokeObjectURL(blobUrl);
-        finishResponse();
-      };
-      
-      audio.onerror = () => {
-        URL.revokeObjectURL(blobUrl);
-        finishResponse();
-      };
-      
-      audio.play().catch(() => finishResponse());
-    } else {
-      setTimeout(finishResponse, 2000);
-    }
+    audio.onended = () => finishResponse();
+    audio.onerror = () => finishResponse();
+    
+    audio.currentTime = 0;
+    audio.play().catch(() => finishResponse());
   };
 
   const finishResponse = () => {
@@ -187,10 +208,8 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const handleClose = () => {
     if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
     if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
+    if (waiterAudioRef.current) waiterAudioRef.current.pause();
+    if (responseAudioRef.current) responseAudioRef.current.pause();
     onClose();
   };
 
@@ -230,12 +249,27 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
             </p>
             <button
               onClick={startDemo}
-              className="mt-6 flex items-center gap-2 rounded-[10px] bg-[#B5332A] px-7 py-3.5 text-[15px] font-bold text-white transition-all active:scale-[0.97]"
+              disabled={!audioLoaded}
+              className={`mt-6 flex items-center gap-2 rounded-[10px] px-7 py-3.5 text-[15px] font-bold text-white transition-all active:scale-[0.97] ${
+                audioLoaded ? "bg-[#B5332A]" : "bg-[#B5332A]/50 cursor-wait"
+              }`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-              </svg>
-              Start Demo
+              {audioLoaded ? (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-5 w-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                  </svg>
+                  Start Demo
+                </>
+              ) : (
+                <>
+                  <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Loading Audio...
+                </>
+              )}
             </button>
           </div>
         )}
