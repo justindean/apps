@@ -29,7 +29,23 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const waiterAudioRef = useRef<HTMLAudioElement | null>(null);
   const responseAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Preload static audio files when modal opens
+  // Fetch TTS from API as fallback when static files don't exist
+  const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  };
+
+  // Preload audio when modal opens - try static files, fall back to TTS API
   useEffect(() => {
     if (open) {
       setPhase("start");
@@ -40,46 +56,48 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setWaveformBars(Array(12).fill(0.15));
       setAudioLoaded(false);
       
-      // Create audio elements for static files
-      const waiterAudio = new Audio("/demo/waiter-es.mp3");
-      const responseAudio = new Audio("/demo/response-es.mp3");
-      
-      waiterAudio.preload = "auto";
-      responseAudio.preload = "auto";
-      
-      waiterAudioRef.current = waiterAudio;
-      responseAudioRef.current = responseAudio;
-      
-      // Wait for both to be ready
-      let waiterReady = false;
-      let responseReady = false;
-      
-      const checkReady = () => {
-        if (waiterReady && responseReady) {
+      const loadAudio = async () => {
+        // Check if static files exist
+        let useStaticFiles = false;
+        try {
+          const [waiterCheck, responseCheck] = await Promise.all([
+            fetch("/demo/waiter-es.mp3", { method: "HEAD" }),
+            fetch("/demo/response-es.mp3", { method: "HEAD" }),
+          ]);
+          useStaticFiles = waiterCheck.ok && responseCheck.ok;
+        } catch {
+          useStaticFiles = false;
+        }
+        
+        if (useStaticFiles) {
+          // Use static files (instant playback)
+          const waiterAudio = new Audio("/demo/waiter-es.mp3");
+          const responseAudio = new Audio("/demo/response-es.mp3");
+          waiterAudio.preload = "auto";
+          responseAudio.preload = "auto";
+          waiterAudioRef.current = waiterAudio;
+          responseAudioRef.current = responseAudio;
+          
+          let ready = 0;
+          const checkReady = () => { if (++ready >= 2) setAudioLoaded(true); };
+          waiterAudio.addEventListener("canplaythrough", checkReady);
+          responseAudio.addEventListener("canplaythrough", checkReady);
+          waiterAudio.load();
+          responseAudio.load();
+          setTimeout(() => setAudioLoaded(true), 1500); // Fallback
+        } else {
+          // Fall back to TTS API
+          const [waiterUrl, responseUrl] = await Promise.all([
+            fetchTTS(SPANISH_TEXT, "mila"),
+            fetchTTS(RESPONSE_SPANISH, "daniel"),
+          ]);
+          if (waiterUrl) waiterAudioRef.current = new Audio(waiterUrl);
+          if (responseUrl) responseAudioRef.current = new Audio(responseUrl);
           setAudioLoaded(true);
         }
       };
       
-      waiterAudio.addEventListener("canplaythrough", () => {
-        waiterReady = true;
-        checkReady();
-      });
-      
-      responseAudio.addEventListener("canplaythrough", () => {
-        responseReady = true;
-        checkReady();
-      });
-      
-      // Force load
-      waiterAudio.load();
-      responseAudio.load();
-      
-      // Fallback timeout - mark ready after 1s even if events don't fire
-      setTimeout(() => {
-        if (!waiterReady || !responseReady) {
-          setAudioLoaded(true);
-        }
-      }, 1000);
+      loadAudio();
     } else {
       // Cleanup on close
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);

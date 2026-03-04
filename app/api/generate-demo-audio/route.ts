@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { NextRequest, NextResponse } from "next/server";
 
 const SPANISH_TEXT = "Buenas tardes, ¿qué van a tomar? Tenemos especial hoy, pasta con camarones o pollo asado. ¿Les traigo algo de beber?";
 const RESPONSE_SPANISH = "Quiero una cerveza y la pasta con camarones, por favor.";
 
 async function generateTTS(text: string, voiceId: string): Promise<ArrayBuffer | null> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.error("[generate-demo-audio] No ELEVENLABS_API_KEY");
+    return null;
+  }
 
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: "POST",
@@ -25,37 +26,44 @@ async function generateTTS(text: string, voiceId: string): Promise<ArrayBuffer |
     }),
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    console.error("[generate-demo-audio] ElevenLabs error:", response.status, await response.text());
+    return null;
+  }
   return response.arrayBuffer();
 }
 
-export async function GET() {
+// GET /api/generate-demo-audio?file=waiter or ?file=response
+// Returns the audio file directly for download
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const file = searchParams.get("file") || "waiter";
+    
     const milaVoiceId = process.env.ELEVENLABS_VOICE_ID_MILA || "EXAVITQu4vr4xnSDxMaL";
     const danielVoiceId = process.env.ELEVENLABS_VOICE_ID_DANIEL || "onwK4e9ZLuTAKqWW03F9";
 
-    // Generate both audio files
-    const [waiterAudio, responseAudio] = await Promise.all([
-      generateTTS(SPANISH_TEXT, milaVoiceId),
-      generateTTS(RESPONSE_SPANISH, danielVoiceId),
-    ]);
+    let audio: ArrayBuffer | null;
+    let filename: string;
+    
+    if (file === "response") {
+      audio = await generateTTS(RESPONSE_SPANISH, danielVoiceId);
+      filename = "response-es.mp3";
+    } else {
+      audio = await generateTTS(SPANISH_TEXT, milaVoiceId);
+      filename = "waiter-es.mp3";
+    }
 
-    if (!waiterAudio || !responseAudio) {
+    if (!audio) {
       return NextResponse.json({ error: "Failed to generate audio" }, { status: 500 });
     }
 
-    // Ensure directory exists
-    const publicDir = join(process.cwd(), "public", "demo");
-    await mkdir(publicDir, { recursive: true });
-
-    // Write files
-    await writeFile(join(publicDir, "waiter-es.mp3"), Buffer.from(waiterAudio));
-    await writeFile(join(publicDir, "response-es.mp3"), Buffer.from(responseAudio));
-
-    return NextResponse.json({ 
-      success: true, 
-      message: "Audio files generated successfully",
-      files: ["/demo/waiter-es.mp3", "/demo/response-es.mp3"]
+    // Return the audio file directly for download
+    return new NextResponse(audio, {
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
     });
   } catch (error) {
     console.error("[generate-demo-audio] Error:", error);
