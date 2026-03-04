@@ -28,26 +28,8 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waiterAudioRef = useRef<HTMLAudioElement | null>(null);
   const responseAudioRef = useRef<HTMLAudioElement | null>(null);
-  const waiterBlobUrlRef = useRef<string | null>(null);
-  const responseBlobUrlRef = useRef<string | null>(null);
 
-  // Fetch TTS from API
-  const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
-    try {
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice }),
-      });
-      if (!response.ok) return null;
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
-    } catch {
-      return null;
-    }
-  };
-
-  // Preload audio when modal opens
+  // Preload static audio files when modal opens
   useEffect(() => {
     if (open) {
       setPhase("start");
@@ -58,31 +40,46 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       setWaveformBars(Array(12).fill(0.15));
       setAudioLoaded(false);
       
-      // Preload both audio files in parallel
-      const preloadAudio = async () => {
-        const [waiterUrl, responseUrl] = await Promise.all([
-          fetchTTS(SPANISH_TEXT, "mila"),
-          fetchTTS(RESPONSE_SPANISH, "daniel"),
-        ]);
-        
-        if (waiterUrl) {
-          waiterBlobUrlRef.current = waiterUrl;
-          const audio = new Audio(waiterUrl);
-          audio.preload = "auto";
-          waiterAudioRef.current = audio;
+      // Create audio elements for static files
+      const waiterAudio = new Audio("/demo/waiter-es.mp3");
+      const responseAudio = new Audio("/demo/response-es.mp3");
+      
+      waiterAudio.preload = "auto";
+      responseAudio.preload = "auto";
+      
+      waiterAudioRef.current = waiterAudio;
+      responseAudioRef.current = responseAudio;
+      
+      // Wait for both to be ready
+      let waiterReady = false;
+      let responseReady = false;
+      
+      const checkReady = () => {
+        if (waiterReady && responseReady) {
+          setAudioLoaded(true);
         }
-        
-        if (responseUrl) {
-          responseBlobUrlRef.current = responseUrl;
-          const audio = new Audio(responseUrl);
-          audio.preload = "auto";
-          responseAudioRef.current = audio;
-        }
-        
-        setAudioLoaded(true);
       };
       
-      preloadAudio();
+      waiterAudio.addEventListener("canplaythrough", () => {
+        waiterReady = true;
+        checkReady();
+      });
+      
+      responseAudio.addEventListener("canplaythrough", () => {
+        responseReady = true;
+        checkReady();
+      });
+      
+      // Force load
+      waiterAudio.load();
+      responseAudio.load();
+      
+      // Fallback timeout - mark ready after 1s even if events don't fire
+      setTimeout(() => {
+        if (!waiterReady || !responseReady) {
+          setAudioLoaded(true);
+        }
+      }, 1000);
     } else {
       // Cleanup on close
       if (transcriptionIntervalRef.current) clearInterval(transcriptionIntervalRef.current);
@@ -95,14 +92,6 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
         responseAudioRef.current.pause();
         responseAudioRef.current = null;
       }
-      if (waiterBlobUrlRef.current) {
-        URL.revokeObjectURL(waiterBlobUrlRef.current);
-        waiterBlobUrlRef.current = null;
-      }
-      if (responseBlobUrlRef.current) {
-        URL.revokeObjectURL(responseBlobUrlRef.current);
-        responseBlobUrlRef.current = null;
-      }
     }
   }, [open]);
 
@@ -113,8 +102,6 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
       if (waiterAudioRef.current) waiterAudioRef.current.pause();
       if (responseAudioRef.current) responseAudioRef.current.pause();
-      if (waiterBlobUrlRef.current) URL.revokeObjectURL(waiterBlobUrlRef.current);
-      if (responseBlobUrlRef.current) URL.revokeObjectURL(responseBlobUrlRef.current);
     };
   }, []);
 
