@@ -4,14 +4,70 @@ import { validateAndBuildFromLLM, normalizeTranscript } from "@/data/restaurantI
 import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaurantIntents";
 import { getContextSystemPrompt, labelToContextKey, type ContextKey } from "@/data/contextPrompts";
 
-/* ── TTS helper ── */
-function speakPhrase(text: string) {
-  if ("speechSynthesis" in window) {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "es-MX";
-    u.rate = 0.85;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+/* ── TTS helper using ElevenLabs ── */
+// Track current audio to allow cancellation
+let currentAudio: HTMLAudioElement | null = null;
+let currentBlobUrl: string | null = null;
+
+async function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
+  // Cancel any currently playing audio
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl);
+    currentBlobUrl = null;
+  }
+
+  try {
+    const response = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+    });
+
+    if (!response.ok) {
+      // Fall back to browser TTS if ElevenLabs fails
+      if ("speechSynthesis" in window) {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = "es-MX";
+        u.rate = 0.85;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+      }
+      return;
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    currentBlobUrl = blobUrl;
+
+    const audio = new Audio(blobUrl);
+    currentAudio = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(blobUrl);
+      currentBlobUrl = null;
+      currentAudio = null;
+    };
+
+    audio.onerror = () => {
+      URL.revokeObjectURL(blobUrl);
+      currentBlobUrl = null;
+      currentAudio = null;
+    };
+
+    await audio.play();
+  } catch {
+    // Fall back to browser TTS on network error
+    if ("speechSynthesis" in window) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "es-MX";
+      u.rate = 0.85;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    }
   }
 }
 
