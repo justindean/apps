@@ -216,14 +216,23 @@ export default function Page() {
     setSayResult(null);
   };
 
-  // Speak TTS
-  const speakText = (text: string) => {
-    if ("speechSynthesis" in window) {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "es-MX";
-      u.rate = 0.85;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
+  // Speak TTS using ElevenLabs only
+  const speakText = async (text: string, voice: "daniel" | "mila" = "daniel") => {
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (!response.ok) return;
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const audio = new Audio(blobUrl);
+      audio.onended = () => URL.revokeObjectURL(blobUrl);
+      await audio.play();
+    } catch {
+      // ElevenLabs failed - silently fail, no browser TTS fallback
     }
   };
 

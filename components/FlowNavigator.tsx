@@ -44,14 +44,34 @@ function getSectionColor(key: string) {
   return sectionColors[key] ?? sectionColors.exit;
 }
 
-/* ── TTS helper ── */
-function speakPhrase(text: string) {
-  if ("speechSynthesis" in window) {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "es-MX";
-    u.rate = 0.85;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+/* ── TTS helper using ElevenLabs only ── */
+let flowCurrentAudio: HTMLAudioElement | null = null;
+async function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel"): Promise<void> {
+  // Stop any currently playing audio
+  if (flowCurrentAudio) {
+    flowCurrentAudio.pause();
+    flowCurrentAudio = null;
+  }
+  
+  try {
+    const response = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+    });
+    if (!response.ok) return;
+    
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const audio = new Audio(blobUrl);
+    flowCurrentAudio = audio;
+    audio.onended = () => {
+      URL.revokeObjectURL(blobUrl);
+      flowCurrentAudio = null;
+    };
+    await audio.play();
+  } catch {
+    // ElevenLabs failed - silently fail, no browser TTS fallback
   }
 }
 

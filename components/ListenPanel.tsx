@@ -59,35 +59,44 @@ function getCachedAudio(text: string, voice: "daniel" | "mila" = "daniel"): HTML
   return entry?.status === "ready" ? entry.audio ?? null : null;
 }
 
-// Play audio - uses cached Audio element for iOS compatibility
-function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
+// Play audio - uses cached Audio element, or fetches from ElevenLabs if not cached
+// NO browser TTS fallback - ElevenLabs only
+async function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel"): Promise<void> {
   // Stop any currently playing audio
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.currentTime = 0;
   }
-  window.speechSynthesis?.cancel();
   
   const cachedAudio = getCachedAudio(text, voice);
   if (cachedAudio) {
     // Use pre-created Audio element - just call play()
     currentAudio = cachedAudio;
     cachedAudio.currentTime = 0;
-    cachedAudio.play().catch(() => browserTTS(text));
+    await cachedAudio.play().catch(() => {});
   } else {
-    // Not cached - use browser TTS and prefetch for next time
-    browserTTS(text);
-    prefetchTTS(text, voice);
-  }
-}
-
-function browserTTS(text: string) {
-  if ("speechSynthesis" in window) {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "es-MX";
-    u.rate = 0.85;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+    // Not cached - fetch from ElevenLabs, cache, and play
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (!response.ok) return;
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const audio = new Audio(blobUrl);
+      
+      // Cache it for next time
+      const cacheKey = `${voice}:${text}`;
+      ttsCache.set(cacheKey, { status: "ready", audio, blobUrl });
+      
+      currentAudio = audio;
+      await audio.play().catch(() => {});
+    } catch {
+      // ElevenLabs failed - silently fail, no browser TTS
+    }
   }
 }
 
