@@ -4,8 +4,84 @@ import { validateAndBuildFromLLM, normalizeTranscript } from "@/data/restaurantI
 import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaurantIntents";
 import { getContextSystemPrompt, labelToContextKey, type ContextKey } from "@/data/contextPrompts";
 
-/* ── TTS helper ── */
-function speakPhrase(text: string) {
+/* ── TTS Cache & Prefetch ── */
+type AudioStatus = "idle" | "loading" | "ready" | "error";
+interface AudioCacheEntry {
+  status: AudioStatus;
+  blobUrl?: string;
+  promise?: Promise<string | null>;
+}
+const ttsCache = new Map<string, AudioCacheEntry>();
+
+// Prefetch audio for a phrase - returns immediately, loads in background
+function prefetchTTS(text: string, voice: "daniel" | "mila" = "daniel"): void {
+  const cacheKey = `${voice}:${text}`;
+  if (ttsCache.has(cacheKey)) return; // Already cached or loading
+  
+  const entry: AudioCacheEntry = { status: "loading" };
+  const fetchPromise = fetch("/api/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voice }),
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error("TTS failed");
+      return res.blob();
+    })
+    .then((blob) => {
+      const blobUrl = URL.createObjectURL(blob);
+      entry.status = "ready";
+      entry.blobUrl = blobUrl;
+      return blobUrl;
+    })
+    .catch(() => {
+      entry.status = "error";
+      return null;
+    });
+  
+  entry.promise = fetchPromise;
+  ttsCache.set(cacheKey, entry);
+}
+
+// Get current status of TTS for a phrase
+function getTTSStatus(text: string, voice: "daniel" | "mila" = "daniel"): AudioStatus {
+  const cacheKey = `${voice}:${text}`;
+  return ttsCache.get(cacheKey)?.status ?? "idle";
+}
+
+// Get blob URL if ready
+function getTTSBlobUrl(text: string, voice: "daniel" | "mila" = "daniel"): string | null {
+  const cacheKey = `${voice}:${text}`;
+  const entry = ttsCache.get(cacheKey);
+  return entry?.status === "ready" ? entry.blobUrl ?? null : null;
+}
+
+// Play audio - uses cached blob if available, otherwise browser TTS fallback
+let currentAudio: HTMLAudioElement | null = null;
+function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
+  // Stop any currently playing audio
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  window.speechSynthesis?.cancel();
+  
+  const blobUrl = getTTSBlobUrl(text, voice);
+  if (blobUrl) {
+    const audio = new Audio(blobUrl);
+    currentAudio = audio;
+    audio.play().catch(() => {
+      // Fallback to browser TTS if play fails
+      browserTTS(text);
+    });
+  } else {
+    // No cached audio - use browser TTS and trigger prefetch for next time
+    browserTTS(text);
+    prefetchTTS(text, voice);
+  }
+}
+
+function browserTTS(text: string) {
   if ("speechSynthesis" in window) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "es-MX";
@@ -443,6 +519,10 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
   const [micStatus, setMicStatus] = useState<MicStatus>(_micStatus);
   const [showMicPreFrame, setShowMicPreFrame] = useState(false);
   const [micJustGranted, setMicJustGranted] = useState(false);
+  
+  // Audio prefetch state - tracks readiness for UI updates
+  const [mainAudioStatus, setMainAudioStatus] = useState<AudioStatus>("idle");
+  const [altAudioStatuses, setAltAudioStatuses] = useState<Map<string, AudioStatus>>(new Map());
 
   // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
@@ -478,6 +558,47 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
   useEffect(() => {
     probeMicPermission().then((s) => setMicStatus(s));
   }, []);
+
+  // Prefetch ElevenLabs audio when match changes
+  useEffect(() => {
+    if (!match?.bestReply) {
+      setMainAudioStatus("idle");
+      setAltAudioStatuses(new Map());
+      return;
+    }
+
+    // Get the Spanish text for current tone/mode
+    const mainText = getReplyForTone(match.bestReply, mode).spanish;
+    
+    // Check if already cached
+    const existingStatus = getTTSStatus(mainText, "daniel");
+    if (existingStatus === "ready") {
+      setMainAudioStatus("ready");
+    } else if (existingStatus === "loading") {
+      setMainAudioStatus("loading");
+    } else {
+      // Start prefetch
+      setMainAudioStatus("loading");
+      prefetchTTS(mainText, "daniel");
+    }
+
+    // Poll for completion (simple approach - could use event emitter for cleaner code)
+    const pollInterval = setInterval(() => {
+      const status = getTTSStatus(mainText, "daniel");
+      if (status === "ready" || status === "error") {
+        setMainAudioStatus(status);
+        clearInterval(pollInterval);
+      }
+    }, 100);
+
+    // Also prefetch alternates in background (don't block UI)
+    match.alternates.forEach((alt) => {
+      const altText = getReplyForTone(alt, mode).spanish;
+      prefetchTTS(altText, "daniel");
+    });
+
+    return () => clearInterval(pollInterval);
+  }, [match, mode]);
 
   /* ── Process transcript (shared by both modes) ──
    * Architecture: LLM-only. No deterministic classifier.
@@ -1101,7 +1222,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
   }, []);
 
   const handleReply = useCallback((reply: ListenReply) => {
-    speakPhrase(reply.spanish);
+    speakPhrase(reply.spanish, "daniel");
     onSpeak(replyToPhrase(reply));
   }, [onSpeak]);
 
@@ -1111,7 +1232,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
 
   /* ══════════════════════════���══��══════════════��════════════���═══����═════════
      RENDER
-     ��═════════════════════════════════════════════════════���════════════════ */
+     ��═════════════════════════════════════════════════════���═════════════���══ */
   return (
     <div className="flex flex-col gap-5">
 
@@ -1398,11 +1519,30 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
 
                 {/* Speak button -- speaks the tone-specific text */}
                 <button
-                  onClick={() => { speakPhrase(tonedBest.spanish); onSpeak(replyToPhrase(match.bestReply, mode)); }}
-                  className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-[8px] bg-[#B5332A] py-3.5 text-white shadow-md shadow-[#B5332A]/20 transition-all duration-75 active:scale-[0.97] active:shadow-sm"
+                  onClick={() => {
+                    if (mainAudioStatus === "loading") return; // Don't double-trigger
+                    speakPhrase(tonedBest.spanish, "daniel");
+                    onSpeak(replyToPhrase(match.bestReply, mode));
+                  }}
+                  disabled={mainAudioStatus === "loading"}
+                  className={`mt-4 flex w-full items-center justify-center gap-2.5 rounded-[8px] py-3.5 text-white shadow-md shadow-[#B5332A]/20 transition-all duration-75 active:scale-[0.97] active:shadow-sm ${
+                    mainAudioStatus === "loading" ? "bg-[#B5332A]/70 cursor-wait" : "bg-[#B5332A]"
+                  }`}
                 >
-                  <WaveformIcon size={16} />
-                  <span className="text-[15px] font-extrabold">Say it</span>
+                  {mainAudioStatus === "loading" ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span className="text-[15px] font-extrabold">Preparing audio...</span>
+                    </>
+                  ) : (
+                    <>
+                      <WaveformIcon size={16} />
+                      <span className="text-[15px] font-extrabold">Say it</span>
+                    </>
+                  )}
                 </button>
               </div>
             );
@@ -1417,10 +1557,11 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
               <div className="flex flex-col gap-1.5">
                 {match.alternates.map((reply, idx) => {
                   const tonedAlt = getReplyForTone(reply, mode);
+                  const altStatus = getTTSStatus(tonedAlt.spanish, "daniel");
                   return (
                     <button
                       key={tonedAlt.spanish + idx}
-                      onClick={() => { speakPhrase(tonedAlt.spanish); onSpeak(replyToPhrase(reply, mode)); }}
+                      onClick={() => { speakPhrase(tonedAlt.spanish, "daniel"); onSpeak(replyToPhrase(reply, mode)); }}
                       className="flex items-center justify-between gap-3 rounded-[6px] border border-black/8 bg-white px-4 py-2.5 text-left transition-all duration-75 active:scale-[0.98] active:bg-black/[0.02]"
                     >
                       <div className="flex min-w-0 flex-col">
