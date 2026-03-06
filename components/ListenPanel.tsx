@@ -8,18 +8,21 @@ import { getContextSystemPrompt, labelToContextKey, type ContextKey } from "@/da
 type AudioStatus = "idle" | "loading" | "ready" | "error";
 interface AudioCacheEntry {
   status: AudioStatus;
+  audio?: HTMLAudioElement; // Cache actual Audio element for iOS
   blobUrl?: string;
-  promise?: Promise<string | null>;
 }
 const ttsCache = new Map<string, AudioCacheEntry>();
+let currentAudio: HTMLAudioElement | null = null;
 
-// Prefetch audio for a phrase - returns immediately, loads in background
+// Prefetch audio for a phrase - creates and preloads Audio element
 function prefetchTTS(text: string, voice: "daniel" | "mila" = "daniel"): void {
   const cacheKey = `${voice}:${text}`;
-  if (ttsCache.has(cacheKey)) return; // Already cached or loading
+  if (ttsCache.has(cacheKey)) return;
   
   const entry: AudioCacheEntry = { status: "loading" };
-  const fetchPromise = fetch("/api/tts", {
+  ttsCache.set(cacheKey, entry);
+  
+  fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, voice }),
@@ -30,52 +33,49 @@ function prefetchTTS(text: string, voice: "daniel" | "mila" = "daniel"): void {
     })
     .then((blob) => {
       const blobUrl = URL.createObjectURL(blob);
+      // Create Audio element now and preload it
+      const audio = new Audio(blobUrl);
+      audio.preload = "auto";
+      audio.load(); // Force preload
       entry.status = "ready";
+      entry.audio = audio;
       entry.blobUrl = blobUrl;
-      return blobUrl;
     })
     .catch(() => {
       entry.status = "error";
-      return null;
     });
-  
-  entry.promise = fetchPromise;
-  ttsCache.set(cacheKey, entry);
 }
 
-// Get current status of TTS for a phrase
+// Get current status
 function getTTSStatus(text: string, voice: "daniel" | "mila" = "daniel"): AudioStatus {
   const cacheKey = `${voice}:${text}`;
   return ttsCache.get(cacheKey)?.status ?? "idle";
 }
 
-// Get blob URL if ready
-function getTTSBlobUrl(text: string, voice: "daniel" | "mila" = "daniel"): string | null {
+// Get cached Audio element
+function getCachedAudio(text: string, voice: "daniel" | "mila" = "daniel"): HTMLAudioElement | null {
   const cacheKey = `${voice}:${text}`;
   const entry = ttsCache.get(cacheKey);
-  return entry?.status === "ready" ? entry.blobUrl ?? null : null;
+  return entry?.status === "ready" ? entry.audio ?? null : null;
 }
 
-// Play audio - uses cached blob if available, otherwise browser TTS fallback
-let currentAudio: HTMLAudioElement | null = null;
+// Play audio - uses cached Audio element for iOS compatibility
 function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
   // Stop any currently playing audio
   if (currentAudio) {
     currentAudio.pause();
-    currentAudio = null;
+    currentAudio.currentTime = 0;
   }
   window.speechSynthesis?.cancel();
   
-  const blobUrl = getTTSBlobUrl(text, voice);
-  if (blobUrl) {
-    const audio = new Audio(blobUrl);
-    currentAudio = audio;
-    audio.play().catch(() => {
-      // Fallback to browser TTS if play fails
-      browserTTS(text);
-    });
+  const cachedAudio = getCachedAudio(text, voice);
+  if (cachedAudio) {
+    // Use pre-created Audio element - just call play()
+    currentAudio = cachedAudio;
+    cachedAudio.currentTime = 0;
+    cachedAudio.play().catch(() => browserTTS(text));
   } else {
-    // No cached audio - use browser TTS and trigger prefetch for next time
+    // Not cached - use browser TTS and prefetch for next time
     browserTTS(text);
     prefetchTTS(text, voice);
   }
@@ -1293,7 +1293,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
         </div>
       )}
 
-      {/* ═══════════����═════════════════��════════��══════��══════════════════
+      {/* ═══════════����═════════════════��════════��══════��═══��══════════════
          ACTIVE LISTENING -- full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {!showMicPreFrame && !micJustGranted && (state === "listening" || state === "recording") && (
