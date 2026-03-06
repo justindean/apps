@@ -5,69 +5,69 @@ import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaur
 import { getContextSystemPrompt, labelToContextKey, type ContextKey } from "@/data/contextPrompts";
 
 /* ── TTS helper using ElevenLabs ── */
-// Track current audio to allow cancellation
+// Cache for preloaded audio
+const audioCache = new Map<string, HTMLAudioElement>();
 let currentAudio: HTMLAudioElement | null = null;
-let currentBlobUrl: string | null = null;
 
-async function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
-  // Cancel any currently playing audio
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio = null;
-  }
-  if (currentBlobUrl) {
-    URL.revokeObjectURL(currentBlobUrl);
-    currentBlobUrl = null;
-  }
-
+// Preload audio for a phrase (call this when response is ready, not on click)
+async function preloadAudio(text: string, voice: "daniel" | "mila" = "daniel"): Promise<void> {
+  const cacheKey = `${voice}:${text}`;
+  if (audioCache.has(cacheKey)) return;
+  
   try {
     const response = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, voice }),
     });
-
-    if (!response.ok) {
-      // Fall back to browser TTS if ElevenLabs fails
-      if ("speechSynthesis" in window) {
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = "es-MX";
-        u.rate = 0.85;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
-      }
-      return;
-    }
-
+    if (!response.ok) return;
+    
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
-    currentBlobUrl = blobUrl;
-
     const audio = new Audio(blobUrl);
-    currentAudio = audio;
-
-    audio.onended = () => {
-      URL.revokeObjectURL(blobUrl);
-      currentBlobUrl = null;
-      currentAudio = null;
-    };
-
-    audio.onerror = () => {
-      URL.revokeObjectURL(blobUrl);
-      currentBlobUrl = null;
-      currentAudio = null;
-    };
-
-    await audio.play();
+    audio.preload = "auto";
+    audio.load();
+    audioCache.set(cacheKey, audio);
   } catch {
-    // Fall back to browser TTS on network error
-    if ("speechSynthesis" in window) {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "es-MX";
-      u.rate = 0.85;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    }
+    // Silently fail - will fall back to browser TTS
+  }
+}
+
+// Play audio - uses cached audio if available, otherwise falls back to browser TTS
+// MUST be called directly from onClick handler for iOS compatibility
+function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
+  // Stop any currently playing audio
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+  }
+  
+  const cacheKey = `${voice}:${text}`;
+  const cachedAudio = audioCache.get(cacheKey);
+  
+  if (cachedAudio) {
+    // Use preloaded audio - plays instantly on iOS
+    currentAudio = cachedAudio;
+    cachedAudio.currentTime = 0;
+    cachedAudio.play().catch(() => {
+      // Fall back to browser TTS if play fails
+      fallbackTTS(text);
+    });
+  } else {
+    // No cached audio - use browser TTS as fallback (works on iOS in user gesture)
+    fallbackTTS(text);
+    // Also start preloading for next time
+    preloadAudio(text, voice);
+  }
+}
+
+function fallbackTTS(text: string) {
+  if ("speechSynthesis" in window) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "es-MX";
+    u.rate = 0.85;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
   }
 }
 
@@ -534,6 +534,25 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
   useEffect(() => {
     probeMicPermission().then((s) => setMicStatus(s));
   }, []);
+
+  // Preload ElevenLabs audio when match changes (for instant iOS playback)
+  useEffect(() => {
+    if (match?.bestReply) {
+      // Preload all tone variants of the best reply
+      const tones = ["street", "neutral", "formal"] as const;
+      tones.forEach((tone) => {
+        const toned = getReplyForTone(match.bestReply, tone);
+        if (toned.spanish) preloadAudio(toned.spanish, "daniel");
+      });
+      // Also preload alternates
+      match.alternates.forEach((alt) => {
+        tones.forEach((tone) => {
+          const toned = getReplyForTone(alt, tone);
+          if (toned.spanish) preloadAudio(toned.spanish, "daniel");
+        });
+      });
+    }
+  }, [match]);
 
   /* ── Process transcript (shared by both modes) ──
    * Architecture: LLM-only. No deterministic classifier.
@@ -1216,7 +1235,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
 
       {/* ═════════════════════════════════════════════════════���══════════
          MIC JUST GRANTED -- brief success confirmation
-         ════════════════════════════════════════════════════════════════ */}
+         ══════���═════════════════════════════════════════════════════════ */}
       {micJustGranted && (
         <div className="flex flex-col items-center gap-3 py-10 animate-fade-in">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10">
