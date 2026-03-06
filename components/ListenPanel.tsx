@@ -5,35 +5,10 @@ import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaur
 import { getContextSystemPrompt, labelToContextKey, type ContextKey } from "@/data/contextPrompts";
 
 /* ── TTS helper using ElevenLabs ── */
-// Cache for preloaded audio blob URLs
-const audioBlobCache = new Map<string, string>();
 let currentAudio: HTMLAudioElement | null = null;
 
-// Preload audio for a phrase (call this when response is ready, not on click)
-async function preloadAudio(text: string, voice: "daniel" | "mila" = "daniel"): Promise<void> {
-  const cacheKey = `${voice}:${text}`;
-  if (audioBlobCache.has(cacheKey)) return;
-  
-  try {
-    const response = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice }),
-    });
-    if (!response.ok) return;
-    
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    audioBlobCache.set(cacheKey, blobUrl);
-    console.log("[v0] Preloaded audio for:", text.slice(0, 30));
-  } catch {
-    // Silently fail - will fall back to browser TTS
-  }
-}
-
-// Play audio - MUST be called directly from onClick for iOS
-// Creates Audio element synchronously in user gesture context
-function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
+// Fetch and play audio from ElevenLabs - returns promise that resolves when audio ends
+async function speakPhraseAsync(text: string, voice: "daniel" | "mila" = "daniel"): Promise<void> {
   // Stop any currently playing audio
   if (currentAudio) {
     currentAudio.pause();
@@ -42,34 +17,45 @@ function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
   }
   window.speechSynthesis?.cancel();
   
-  const cacheKey = `${voice}:${text}`;
-  const cachedBlobUrl = audioBlobCache.get(cacheKey);
-  
-  if (cachedBlobUrl) {
-    // Use preloaded blob URL - create Audio synchronously in gesture
-    console.log("[v0] Playing cached audio for:", text.slice(0, 30));
-    const audio = new Audio(cachedBlobUrl);
-    currentAudio = audio;
-    audio.play().catch((err) => {
-      console.log("[v0] Cached audio play failed:", err);
-      fallbackTTS(text);
+  try {
+    const response = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
     });
-  } else {
-    // No cached audio - use browser TTS immediately (works on iOS)
-    // Then start preloading for next time in background
-    console.log("[v0] No cache, using fallback TTS for:", text.slice(0, 30));
-    fallbackTTS(text);
-    preloadAudio(text, voice);
-  }
-}
-
-function fallbackTTS(text: string) {
-  if ("speechSynthesis" in window) {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "es-MX";
-    u.rate = 0.85;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+    
+    if (!response.ok) {
+      throw new Error("TTS API failed");
+    }
+    
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    
+    return new Promise((resolve) => {
+      const audio = new Audio(blobUrl);
+      currentAudio = audio;
+      
+      audio.onended = () => {
+        URL.revokeObjectURL(blobUrl);
+        currentAudio = null;
+        resolve();
+      };
+      
+      audio.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        currentAudio = null;
+        resolve();
+      };
+      
+      audio.play().catch(() => {
+        URL.revokeObjectURL(blobUrl);
+        currentAudio = null;
+        resolve();
+      });
+    });
+  } catch {
+    // ElevenLabs failed - don't fall back to browser TTS, just resolve
+    return;
   }
 }
 
@@ -501,6 +487,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
   const [micStatus, setMicStatus] = useState<MicStatus>(_micStatus);
   const [showMicPreFrame, setShowMicPreFrame] = useState(false);
   const [micJustGranted, setMicJustGranted] = useState(false);
+  const [speakingText, setSpeakingText] = useState<string | null>(null); // Track which phrase is being spoken
 
   // Mode detection
   const [captureMode] = useState(() => !hasSpeechRecognition());
@@ -536,25 +523,6 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
   useEffect(() => {
     probeMicPermission().then((s) => setMicStatus(s));
   }, []);
-
-  // Preload ElevenLabs audio when match changes (for instant iOS playback)
-  useEffect(() => {
-    if (match?.bestReply) {
-      // Preload all tone variants of the best reply
-      const tones = ["street", "neutral", "formal"] as const;
-      tones.forEach((tone) => {
-        const toned = getReplyForTone(match.bestReply, tone);
-        if (toned.spanish) preloadAudio(toned.spanish, "daniel");
-      });
-      // Also preload alternates
-      match.alternates.forEach((alt) => {
-        tones.forEach((tone) => {
-          const toned = getReplyForTone(alt, tone);
-          if (toned.spanish) preloadAudio(toned.spanish, "daniel");
-        });
-      });
-    }
-  }, [match]);
 
   /* ── Process transcript (shared by both modes) ──
    * Architecture: LLM-only. No deterministic classifier.
@@ -1177,10 +1145,13 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
     };
   }, []);
 
-  const handleReply = useCallback((reply: ListenReply) => {
-    speakPhrase(reply.spanish);
+  const handleReply = useCallback(async (reply: ListenReply) => {
+    if (speakingText) return;
+    setSpeakingText(reply.spanish);
     onSpeak(replyToPhrase(reply));
-  }, [onSpeak]);
+    await speakPhraseAsync(reply.spanish);
+    setSpeakingText(null);
+  }, [onSpeak, speakingText]);
 
   const displayText = finalText || interimText;
   const isInterim = !finalText && !!interimText;
@@ -1475,11 +1446,32 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
 
                 {/* Speak button -- speaks the tone-specific text */}
                 <button
-                  onClick={() => { speakPhrase(tonedBest.spanish); onSpeak(replyToPhrase(match.bestReply, mode)); }}
-                  className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-[8px] bg-[#B5332A] py-3.5 text-white shadow-md shadow-[#B5332A]/20 transition-all duration-75 active:scale-[0.97] active:shadow-sm"
+                  onClick={async () => {
+                    if (speakingText) return;
+                    setSpeakingText(tonedBest.spanish);
+                    onSpeak(replyToPhrase(match.bestReply, mode));
+                    await speakPhraseAsync(tonedBest.spanish);
+                    setSpeakingText(null);
+                  }}
+                  disabled={speakingText !== null}
+                  className={`mt-4 flex w-full items-center justify-center gap-2.5 rounded-[8px] py-3.5 text-white shadow-md shadow-[#B5332A]/20 transition-all duration-75 active:scale-[0.97] active:shadow-sm ${
+                    speakingText === tonedBest.spanish ? "bg-[#B5332A]/70" : "bg-[#B5332A]"
+                  }`}
                 >
-                  <WaveformIcon size={16} />
-                  <span className="text-[15px] font-extrabold">Say it</span>
+                  {speakingText === tonedBest.spanish ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span className="text-[15px] font-extrabold">Speaking...</span>
+                    </>
+                  ) : (
+                    <>
+                      <WaveformIcon size={16} />
+                      <span className="text-[15px] font-extrabold">Say it</span>
+                    </>
+                  )}
                 </button>
               </div>
             );
@@ -1494,11 +1486,21 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
               <div className="flex flex-col gap-1.5">
                 {match.alternates.map((reply, idx) => {
                   const tonedAlt = getReplyForTone(reply, mode);
+                  const isThisSpeaking = speakingText === tonedAlt.spanish;
                   return (
                     <button
                       key={tonedAlt.spanish + idx}
-                      onClick={() => { speakPhrase(tonedAlt.spanish); onSpeak(replyToPhrase(reply, mode)); }}
-                      className="flex items-center justify-between gap-3 rounded-[6px] border border-black/8 bg-white px-4 py-2.5 text-left transition-all duration-75 active:scale-[0.98] active:bg-black/[0.02]"
+                      onClick={async () => {
+                        if (speakingText) return;
+                        setSpeakingText(tonedAlt.spanish);
+                        onSpeak(replyToPhrase(reply, mode));
+                        await speakPhraseAsync(tonedAlt.spanish);
+                        setSpeakingText(null);
+                      }}
+                      disabled={speakingText !== null}
+                      className={`flex items-center justify-between gap-3 rounded-[6px] border border-black/8 px-4 py-2.5 text-left transition-all duration-75 active:scale-[0.98] ${
+                        isThisSpeaking ? "bg-black/5" : "bg-white active:bg-black/[0.02]"
+                      }`}
                     >
                       <div className="flex min-w-0 flex-col">
                         <p className="text-[14px] font-bold leading-tight text-black">
@@ -1511,7 +1513,14 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
                         )}
                       </div>
                       <div className="flex shrink-0 items-center gap-1 text-black/30">
-                        <VolumeIcon size={12} />
+                        {isThisSpeaking ? (
+                          <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                        ) : (
+                          <VolumeIcon size={12} />
+                        )}
                       </div>
                     </button>
                   );
