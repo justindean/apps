@@ -5,14 +5,14 @@ import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaur
 import { getContextSystemPrompt, labelToContextKey, type ContextKey } from "@/data/contextPrompts";
 
 /* ── TTS helper using ElevenLabs ── */
-// Cache for preloaded audio
-const audioCache = new Map<string, HTMLAudioElement>();
+// Cache for preloaded audio blob URLs
+const audioBlobCache = new Map<string, string>();
 let currentAudio: HTMLAudioElement | null = null;
 
 // Preload audio for a phrase (call this when response is ready, not on click)
 async function preloadAudio(text: string, voice: "daniel" | "mila" = "daniel"): Promise<void> {
   const cacheKey = `${voice}:${text}`;
-  if (audioCache.has(cacheKey)) return;
+  if (audioBlobCache.has(cacheKey)) return;
   
   try {
     const response = await fetch("/api/tts", {
@@ -24,39 +24,41 @@ async function preloadAudio(text: string, voice: "daniel" | "mila" = "daniel"): 
     
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
-    const audio = new Audio(blobUrl);
-    audio.preload = "auto";
-    audio.load();
-    audioCache.set(cacheKey, audio);
+    audioBlobCache.set(cacheKey, blobUrl);
+    console.log("[v0] Preloaded audio for:", text.slice(0, 30));
   } catch {
     // Silently fail - will fall back to browser TTS
   }
 }
 
-// Play audio - uses cached audio if available, otherwise falls back to browser TTS
-// MUST be called directly from onClick handler for iOS compatibility
+// Play audio - MUST be called directly from onClick for iOS
+// Creates Audio element synchronously in user gesture context
 function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel") {
   // Stop any currently playing audio
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.currentTime = 0;
+    currentAudio = null;
   }
+  window.speechSynthesis?.cancel();
   
   const cacheKey = `${voice}:${text}`;
-  const cachedAudio = audioCache.get(cacheKey);
+  const cachedBlobUrl = audioBlobCache.get(cacheKey);
   
-  if (cachedAudio) {
-    // Use preloaded audio - plays instantly on iOS
-    currentAudio = cachedAudio;
-    cachedAudio.currentTime = 0;
-    cachedAudio.play().catch(() => {
-      // Fall back to browser TTS if play fails
+  if (cachedBlobUrl) {
+    // Use preloaded blob URL - create Audio synchronously in gesture
+    console.log("[v0] Playing cached audio for:", text.slice(0, 30));
+    const audio = new Audio(cachedBlobUrl);
+    currentAudio = audio;
+    audio.play().catch((err) => {
+      console.log("[v0] Cached audio play failed:", err);
       fallbackTTS(text);
     });
   } else {
-    // No cached audio - use browser TTS as fallback (works on iOS in user gesture)
+    // No cached audio - use browser TTS immediately (works on iOS)
+    // Then start preloading for next time in background
+    console.log("[v0] No cache, using fallback TTS for:", text.slice(0, 30));
     fallbackTTS(text);
-    // Also start preloading for next time
     preloadAudio(text, voice);
   }
 }
