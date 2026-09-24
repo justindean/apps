@@ -3,6 +3,7 @@ import type { Phrase, SpeechMode } from "@/data/phrases";
 import { validateAndBuildFromLLM, normalizeTranscript } from "@/data/restaurantIntents";
 import type { ListenMatch, ListenReply, LLMListenResponse } from "@/data/restaurantIntents";
 import { getContextSystemPrompt, labelToContextKey, type ContextKey } from "@/data/contextPrompts";
+import { diag, diagTimer } from "@/lib/diag";
 
 /* ── TTS Cache & Prefetch ── */
 type AudioStatus = "idle" | "loading" | "ready" | "error";
@@ -62,6 +63,7 @@ function getCachedAudio(text: string, voice: "daniel" | "mila" = "daniel"): HTML
 // Play audio - uses cached Audio element, or fetches from ElevenLabs if not cached
 // NO browser TTS fallback - ElevenLabs only
 async function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel"): Promise<void> {
+  diag("HEAR", "TTS tap", `voice=${voice} (alias)`);
   // Stop any currently playing audio
   if (currentAudio) {
     currentAudio.pause();
@@ -71,17 +73,21 @@ async function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel"): P
   const cachedAudio = getCachedAudio(text, voice);
   if (cachedAudio) {
     // Use pre-created Audio element - just call play()
+    diag("HEAR", "TTS play", "cache hit");
     currentAudio = cachedAudio;
     cachedAudio.currentTime = 0;
-    await cachedAudio.play().catch(() => {});
+    await cachedAudio.play().then(() => diag("HEAR", "audio playback started", "cached")).catch((e) => diag("HEAR", "audio playback error", e instanceof Error ? e.name : "play failed"));
   } else {
     // Not cached - fetch from ElevenLabs, cache, and play
+    diag("HEAR", "TTS play", "no cache");
+    const done = diagTimer("HEAR", "/api/tts");
     try {
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voice }),
       });
+      done(`status ${response.status}`);
       if (!response.ok) return;
       
       const blob = await response.blob();
@@ -93,9 +99,10 @@ async function speakPhrase(text: string, voice: "daniel" | "mila" = "daniel"): P
       ttsCache.set(cacheKey, { status: "ready", audio, blobUrl });
       
       currentAudio = audio;
-      await audio.play().catch(() => {});
+      await audio.play().then(() => diag("HEAR", "audio playback started", "fetched")).catch((e) => diag("HEAR", "audio playback error", e instanceof Error ? e.name : "play failed"));
     } catch {
       // ElevenLabs failed - silently fail, no browser TTS
+      done("network error");
     }
   }
 }
@@ -455,13 +462,16 @@ async function ensureMicStream(constraints: MediaStreamConstraints): Promise<Med
   if (_cachedStream) {
     const tracks = _cachedStream.getAudioTracks();
     if (tracks.length > 0 && tracks[0].readyState === "live") {
+      diag("HEAR", "mic stream reused", "cached live");
       return _cachedStream;
     }
     // Stream died, clear it
     _cachedStream = null;
   }
   // Request new stream (will trigger permission prompt only if not yet granted)
+  diag("HEAR", "getUserMedia requested", "ensureMicStream");
   const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  diag("HEAR", "getUserMedia success", "ensureMicStream");
   _micStatus = "granted";
   _cachedStream = stream;
   rememberMicGrant();
@@ -725,11 +735,14 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       }
 
       addLog("info", "[CACHE] exact=" + exactKey.slice(CP.length) + " sig=" + signature + " result=" + cacheResult);
-      if (cacheResult !== "miss") return; // cache served the result
+      diag("HEAR", "cache lookup", cacheResult === "miss" ? "no cache" : cacheResult === "exact" ? "exact hit" : "fuzzy hit");
+      if (cacheResult !== "miss") { diag("HEAR", "response rendered", `cache ${cacheResult}`); return; } // cache served the result
 
       // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
       console.log("[v0] LLM call starting, contextKey:", contextKey, "context prop:", context);
+      diag("HEAR", "classify context sent", contextKey);
+      const doneClassify = diagTimer("HEAR", "/api/classify");
 
       (async () => {
         try {
@@ -744,6 +757,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
               systemPromptOverride: getContextSystemPrompt(contextKey === "general" ? null : contextKey as ContextKey),
             }),
           });
+          doneClassify(`status ${resp.status}`);
 
           if (!resp.ok) {
             const errText = await resp.text();
@@ -765,12 +779,14 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
               section: "Clarify",
               debug: { rejectedReason: `API error: ${resp.status}` },
             });
+            diag("HEAR", "response rendered", "api-error fallback");
             return;
           }
 
           const data: LLMListenResponse = await resp.json();
           console.log("[v0] LLM response received:", JSON.stringify(data).slice(0, 200));
           addLog("intent", `[LLM] ${data.intent} conf=${data.confidence} reply=${data.best_reply}`);
+          diag("HEAR", "classify confidence", String(data.confidence));
 
           // Store in cache under both exact key and signature key
           try {
@@ -800,10 +816,12 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
 
           if (llmMatch.debug?.rejectedReason) {
             addLog("error", `[LLM REJECTED] ${llmMatch.debug.rejectedReason}`);
+            diag("HEAR", "response rendered", "rejected by guardrail");
             return;
           }
 
           setMatch(llmMatch);
+          diag("HEAR", "response rendered", `intent=${llmMatch.intent}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "LLM failed";
           addLog("error", `LLM: ${msg}`);
@@ -901,7 +919,9 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
             form.append("language", "es");
             form.append("prompt", "Conversacion en restaurante mexicano: menu, cerveza, cuenta, propina, adentro, afuera, mesa, tarjeta, efectivo, algo mas, nada mas, todo bien.");
 
+            const doneTx = diagTimer("HEAR", "/api/transcribe", `attempt ${attempt}`);
             const resp = await fetch("/api/transcribe", { method: "POST", body: form });
+            doneTx(`status ${resp.status}`);
 
             if (resp.status === 429 && attempt < MAX_RETRIES) {
               const wait = attempt * 2000;
@@ -924,6 +944,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
 
             const transcript = data.transcript || data.text || "";
             addLog("final", `Whisper: "${transcript}"`);
+            diag("HEAR", "transcript received", `words=${transcript.trim() ? transcript.trim().split(/\s+/).length : 0}`);
             setFinalText(transcript);
             setInterimText("");
             processTranscript(transcript);
@@ -943,10 +964,13 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       recorder.start(250);
       setState("recording");
       addLog("capture", "Recording started (12s max)");
+      diag("HEAR", "capture path selected", "MediaRecorder -> /api/transcribe");
+      diag("HEAR", "recording started", mimeType);
 
       captureTimerRef.current = setTimeout(() => {
         if (mediaRecorderRef.current?.state === "recording") {
           addLog("capture", "Auto-stop (12s limit)");
+          diag("HEAR", "recording stopped", "auto-stop 12s");
           mediaRecorderRef.current.stop();
         }
       }, 12000);
@@ -988,8 +1012,10 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       setError("Speech recognition not supported. Try Chrome.");
+      diag("HEAR", "capture path selected", "webkitSpeechRecognition unavailable");
       return;
     }
+    diag("HEAR", "capture path selected", "webkitSpeechRecognition");
 
     try {
       const stream = await ensureMicStream({
@@ -1050,12 +1076,14 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       lastTranscriptAtRef.current = Date.now();
       if (!speechStartedRef.current && (final || interim)) {
         speechStartedRef.current = true;
+        diag("HEAR", "first speech result", final ? "final" : "interim");
       }
 
       if (final) {
         finalTextRef.current = final;
         setFinalText(final);
         setInterimText("");
+        diag("HEAR", "transcript received", `words=${final.trim() ? final.trim().split(/\s+/).length : 0}`);
         const corrected = correctSpanish(final);
         setCorrectedText(corrected);
         setInstantEnglish(quickTranslate(corrected));
@@ -1082,6 +1110,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
     };
 
     recognition.onend = () => {
+      diag("HEAR", "recognition ended", finalTextRef.current.trim() ? "had final" : "no final");
       if (silenceTimerRef.current) {
         clearInterval(silenceTimerRef.current);
         silenceTimerRef.current = null;
@@ -1107,6 +1136,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       recognition.start();
       setState("listening");
       addLog("info", "Listening (es-MX, auto-stop 2.2s silence)");
+      diag("HEAR", "recognition started", "es-MX");
 
       if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
       silenceTimerRef.current = setInterval(() => {
@@ -1116,6 +1146,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
           Date.now() - lastTranscriptAtRef.current > 2200
         ) {
           addLog("info", "Auto-stopping (2.2s silence)");
+          diag("HEAR", "recognition stopped", "auto-stop 2.2s silence");
           setInterimText("Auto-stopping...");
           if (recognitionRef.current) {
             recognitionRef.current.stop();
@@ -1138,6 +1169,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       silenceTimerRef.current = null;
     }
     if (recognitionRef.current) {
+      diag("HEAR", "recognition stopped", "user stop");
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
@@ -1154,6 +1186,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       _micStatus = "granted";
       setMicStatus("granted");
       rememberMicGrant();
+      diag("HEAR", "mic stream", "reused pre-acquired stream");
     }
   }, [externalMicStream]);
 
@@ -1302,7 +1335,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
         </div>
       )}
 
-      {/* ═══════════����═════════════════��════════��══════��═══��══════════════
+      {/* ═══════════����═══���═════════════��════════��══════��═══��══════════════
          ACTIVE LISTENING -- full-focus screen
          ════════════════════════════════════════════════════════════════ */}
       {!showMicPreFrame && !micJustGranted && (state === "listening" || state === "recording") && (

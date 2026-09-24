@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { diagTimer } from "@/lib/diag";
 
 interface DemoModalProps {
   open: boolean;
@@ -32,11 +33,13 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   // Fetch TTS from API as fallback when static files don't exist
   const fetchTTS = async (text: string, voice: "mila" | "daniel"): Promise<string | null> => {
     try {
+      const doneTts = diagTimer("DEMO", "/api/tts", voice);
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voice }),
       });
+      doneTts(`status ${response.status}`);
       if (!response.ok) return null;
       const blob = await response.blob();
       return URL.createObjectURL(blob);
