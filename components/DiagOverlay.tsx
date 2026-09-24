@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, useState } from "react";
+import { useSyncExternalStore, useState, useEffect } from "react";
 import {
   isDiagEnabled,
   subscribeDiag,
@@ -25,13 +25,20 @@ const channelStyle: Record<DiagChannel, string> = {
 };
 
 export function DiagOverlay() {
-  const enabled = isDiagEnabled();
+  // Defer the gate until after mount. The enabled check reads client-only
+  // state (URL / localStorage), so evaluating it during the first render would
+  // diverge from the server-rendered null and break hydration.
+  const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
 
   // Subscribe to the diag store; snapshot is a monotonic version number.
   useSyncExternalStore(subscribeDiag, getDiagVersion, () => 0);
 
-  if (!enabled) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || !isDiagEnabled()) return null;
 
   const events = getDiagEvents();
 
