@@ -18,6 +18,8 @@ import { FlowNavigator } from "@/components/FlowNavigator";
 import RescueModal from "@/components/RescueModal";
 import { ListenPanel } from "@/components/ListenPanel";
 import { DemoModal } from "@/components/DemoModal";
+import { DiagOverlay } from "@/components/DiagOverlay";
+import { diag, diagTimer } from "@/lib/diag";
 
 const intentKeys = Object.keys(intentMeta) as IntentKey[];
 
@@ -94,9 +96,10 @@ export default function Page() {
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);
+    diag("DRAWER", "drag end", sheetDragY > 80 ? `dismiss (${Math.round(sheetDragY)}px)` : `snap back (${Math.round(sheetDragY)}px)`);
     if (sheetDragY > 80) {
       // Commit close -- threshold met
-      closeDrawer();
+      closeDrawer("drag");
     }
     setSheetDragY(0);
   }, [sheetDragY]);
@@ -144,7 +147,8 @@ export default function Page() {
     };
   }, [activeDrawer]);
 
-  const closeDrawer = () => {
+  const closeDrawer = (reason: string = "programmatic") => {
+    diag("DRAWER", "drawer closed", reason);
     setActiveDrawer(null);
     setAutoStartListen(false);
     // Reset SAY state on close so reopening is fresh
@@ -155,15 +159,20 @@ export default function Page() {
   };
 
   const openListen = async () => {
+    diag("HEAR", "mic tap (Listen)");
+    diag("DRAWER", "drawer opened", "listen");
     // Acquire mic IMMEDIATELY in the tap handler -- Safari requires getUserMedia
     // to be called within the synchronous user-gesture call stack.
     try {
+      diag("HEAR", "getUserMedia requested");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, sampleRate: { ideal: 48000 }, noiseSuppression: true, echoCancellation: true },
       });
+      diag("HEAR", "getUserMedia success", `tracks=${stream.getAudioTracks().length}`);
       setMicStream(stream);
-    } catch {
+    } catch (err) {
       // Permission denied or error -- still open the drawer, ListenPanel will handle
+      diag("HEAR", "getUserMedia failed", err instanceof Error ? err.name : "unknown");
       setMicStream(null);
     }
     setAutoStartListen(true);
@@ -171,6 +180,7 @@ export default function Page() {
   };
 
   const openSay = () => {
+    diag("DRAWER", "drawer opened", "say");
     setActiveDrawer("say");
   };
 
@@ -186,8 +196,10 @@ export default function Page() {
   const doTranslate = useCallback(async (text: string) => {
     if (!text.trim()) { setSayResult(null); return; }
     setSayLoading(true);
+    const toneMap: Record<SpeechMode, string> = { street: "casual", neutral: "neutral", formal: "formal" };
+    diag("SAY", "context+tone", `tone=${toneMap[mode]} context=${activeContextData?.label ?? "none"} chars=${text.trim().length}`);
+    const done = diagTimer("SAY", "/api/translate");
     try {
-      const toneMap: Record<SpeechMode, string> = { street: "casual", neutral: "neutral", formal: "formal" };
       const resp = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -197,16 +209,21 @@ export default function Page() {
           context: activeContextData?.label,
         }),
       });
+      done(`status ${resp.status}`);
       if (resp.ok) {
         const data = await resp.json();
         setSayResult(data);
+        diag("SAY", "translate result render");
       }
-    } catch { /* silent */ }
+    } catch (err) {
+      done(err instanceof Error ? err.name : "network error");
+    }
     setSayLoading(false);
   }, [mode, activeContextData]);
 
   // Explicit submit only -- no debounce, no auto-translate on typing
   const handleSaySubmit = () => {
+    diag("SAY", "submit");
     doTranslate(sayInput);
   };
 
@@ -218,21 +235,33 @@ export default function Page() {
 
   // Speak TTS using ElevenLabs only
   const speakText = async (text: string, voice: "daniel" | "mila" = "daniel") => {
+    diag("SAY", "TTS tap", `voice=${voice} (alias)`);
+    const done = diagTimer("SAY", "/api/tts");
+    let response: Response;
     try {
-      const response = await fetch("/api/tts", {
+      response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voice }),
       });
-      if (!response.ok) return;
-      
+    } catch (err) {
+      done(err instanceof Error ? err.name : "network error");
+      return;
+    }
+    done(`status ${response.status}`);
+    if (!response.ok) return;
+
+    try {
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
       const audio = new Audio(blobUrl);
       audio.onended = () => URL.revokeObjectURL(blobUrl);
+      audio.onerror = () => diag("SAY", "audio playback error", "element error");
       await audio.play();
-    } catch {
+      diag("SAY", "audio playback started");
+    } catch (err) {
       // ElevenLabs failed - silently fail, no browser TTS fallback
+      diag("SAY", "audio playback error", err instanceof Error ? err.name : "unknown");
     }
   };
 
@@ -265,6 +294,8 @@ export default function Page() {
   return (
     <div className="min-h-dvh bg-white text-black">
 
+      <DiagOverlay />
+
       {/* ══════════════════════════════════════════════════════════════
          BOTTOM SHEET -- LISTEN
          ══════════════════════════════════════════════════════════════ */}
@@ -272,7 +303,7 @@ export default function Page() {
         <>
           <div
             className="fixed inset-0 z-40 bg-black/50 animate-fade-in"
-            onClick={closeDrawer}
+            onClick={() => closeDrawer("overlay")}
             aria-hidden="true"
           />
           <div
@@ -302,7 +333,7 @@ export default function Page() {
                 )}
               </div>
               <button
-                onClick={closeDrawer}
+                onClick={() => closeDrawer("close-button")}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-black/40 transition hover:bg-black/10 hover:text-black active:scale-90"
                 aria-label="Close"
               >
@@ -335,7 +366,7 @@ export default function Page() {
         <>
           <div
             className="fixed inset-0 z-40 bg-black/50 animate-fade-in"
-            onClick={closeDrawer}
+            onClick={() => closeDrawer("overlay")}
             aria-hidden="true"
           />
           <div
@@ -356,7 +387,7 @@ export default function Page() {
             <div className="flex items-center justify-between px-4 pb-2">
               <span className="text-[14px] font-extrabold text-black">Say</span>
               <button
-                onClick={closeDrawer}
+                onClick={() => closeDrawer("close-button")}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-black/40 transition hover:bg-black/10 hover:text-black active:scale-90"
                 aria-label="Close"
               >
