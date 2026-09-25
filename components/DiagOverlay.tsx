@@ -22,6 +22,7 @@ const channelStyle: Record<DiagChannel, string> = {
   DEMO: "bg-amber-500/20 text-amber-200",
   DRAWER: "bg-fuchsia-500/20 text-fuchsia-200",
   SYS: "bg-stone-500/25 text-stone-200",
+  MEANING: "bg-violet-500/20 text-violet-200",
 };
 
 export function DiagOverlay() {

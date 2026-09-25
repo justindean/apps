@@ -531,7 +531,9 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
   const [correctedText, setCorrectedText] = useState("");
-  const [instantEnglish, setInstantEnglish] = useState("");
+  // PR B: fast-meaning lane — streamed English understanding from /api/meaning (parallel to classify)
+  const [liveMeaning, setLiveMeaning] = useState("");
+  const meaningAbortRef = useRef<AbortController | null>(null);
   const [match, setMatch] = useState<ListenMatch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [llmClassifying, setLlmClassifying] = useState(false);
@@ -625,6 +627,63 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
    * 2. LLM responds (~800ms) with intent, translation, and reply options
    * 3. If LLM fails, show error -- no wrong-guess fallback
    */
+  /**
+   * PR B — Fast-Meaning lane. Streams a trustworthy English understanding from
+   * /api/meaning (gpt-6-luna, reasoning none) in PARALLEL with /api/classify.
+   * Purely additive: it never gates or alters the classify response pipeline.
+   */
+  const fetchMeaning = useCallback((spanish: string, contextLabel: string) => {
+    // A newer utterance supersedes any in-flight meaning stream.
+    meaningAbortRef.current?.abort();
+    const controller = new AbortController();
+    meaningAbortRef.current = controller;
+
+    setLiveMeaning("");
+    diag("MEANING", "request", spanish.slice(0, 40));
+    const doneFirst = diagTimer("MEANING", "final→first-english");
+    const doneAll = diagTimer("MEANING", "final→complete");
+
+    (async () => {
+      try {
+        const resp = await fetch("/api/meaning", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ spanish, context: contextLabel }),
+          signal: controller.signal,
+        });
+        if (!resp.ok || !resp.body) {
+          const detail = await resp.text().catch(() => "");
+          diag("MEANING", "error", `status ${resp.status} ${detail.slice(0, 80)}`);
+          return;
+        }
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let acc = "";
+        let firstSeen = false;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          if (!chunk) continue;
+          if (!firstSeen) {
+            firstSeen = true;
+            doneFirst(`"${chunk.slice(0, 24)}"`);
+          }
+          acc += chunk;
+          setLiveMeaning(acc);
+        }
+        doneAll(`${acc.length} chars`);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          diag("MEANING", "aborted", "superseded by newer utterance");
+          return;
+        }
+        const msg = err instanceof Error ? err.message : "meaning failed";
+        diag("MEANING", "error", msg);
+      }
+    })();
+  }, []);
+
   const processTranscript = useCallback(
     (rawText: string) => {
       if (!rawText.trim()) return;
@@ -633,7 +692,6 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
 
       const corrected = correctSpanish(rawText);
       setCorrectedText(corrected);
-      setInstantEnglish(quickTranslate(corrected));
       if (corrected !== rawText) addLog("corrected", `"${rawText}" -> "${corrected}"`);
 
       // ── Cache helpers (sessionStorage primary, localStorage fallback) ──
@@ -738,6 +796,9 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
       diag("HEAR", "cache lookup", cacheResult === "miss" ? "no cache" : cacheResult === "exact" ? "exact hit" : "fuzzy hit");
       if (cacheResult !== "miss") { diag("HEAR", "response rendered", `cache ${cacheResult}`); return; } // cache served the result
 
+      // PR B: fire the fast-meaning lane in parallel with classify (cache miss only — hits are already instant)
+      fetchMeaning(corrected, contextKey);
+
       // Fire LLM -- the UI shows loading placeholder while this runs
       setLlmClassifying(true);
       console.log("[v0] LLM call starting, contextKey:", contextKey, "context prop:", context);
@@ -765,7 +826,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
             // Even on API error, show a fallback result with the instant translation
             setMatch({
               intent: "api_error",
-              english: instantEnglish || "Translation unavailable",
+              english: liveMeaning || quickTranslate(corrected) || "Translation unavailable",
               literalEnglish: "",
               confidence: 0,
               source: "none",
@@ -828,7 +889,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
           // Show fallback on exception
           setMatch({
             intent: "exception",
-            english: instantEnglish || "Translation unavailable",
+            english: liveMeaning || quickTranslate(corrected) || "Translation unavailable",
             literalEnglish: "",
             confidence: 0,
             source: "none",
@@ -859,7 +920,8 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
     setInterimText("");
     setFinalText("");
     setCorrectedText("");
-    setInstantEnglish("");
+    setLiveMeaning("");
+    meaningAbortRef.current?.abort();
     setMatch(null);
 
     addLog("capture", "Requesting mic (capture mode)...");
@@ -1005,7 +1067,8 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
     setInterimText("");
     setFinalText("");
     setCorrectedText("");
-    setInstantEnglish("");
+    setLiveMeaning("");
+    meaningAbortRef.current?.abort();
     setMatch(null);
     finalTextRef.current = "";
 
@@ -1086,7 +1149,6 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
         diag("HEAR", "transcript received", `words=${final.trim() ? final.trim().split(/\s+/).length : 0}`);
         const corrected = correctSpanish(final);
         setCorrectedText(corrected);
-        setInstantEnglish(quickTranslate(corrected));
         if (!processedFinalRef.current) {
           processedFinalRef.current = true;
           processTranscript(final);
@@ -1385,9 +1447,9 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
               </p>
               {/* Only show English translation AFTER transcription is finalized -- never partial */}
               {finalText ? (
-                instantEnglish && (
+                liveMeaning && (
                   <p className="mt-1 text-[13px] font-medium leading-snug text-black/45">
-                    {instantEnglish}
+                    {liveMeaning}
                   </p>
                 )
               ) : (
@@ -1463,7 +1525,7 @@ export function ListenPanel({ mode, onModeChange, onCopy, onSpeak, autoStart, on
             {correctedText || finalText}
           </p>
           {(() => {
-            const literalText = (match && !llmClassifying && match.literalEnglish) ? match.literalEnglish : instantEnglish;
+            const literalText = (match && !llmClassifying && match.literalEnglish) ? match.literalEnglish : liveMeaning;
             return literalText ? (
               <p className="mt-2 text-[15px] font-medium leading-snug text-black/50">
                 {literalText}

@@ -13,7 +13,7 @@
  * Only context, tone, status codes, timings, counts, and lengths are allowed.
  */
 
-export type DiagChannel = "HEAR" | "SAY" | "DEMO" | "DRAWER" | "SYS";
+export type DiagChannel = "HEAR" | "SAY" | "DEMO" | "DRAWER" | "SYS" | "MEANING";
 
 export interface DiagEvent {
   id: number;
